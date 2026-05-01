@@ -1,0 +1,204 @@
+Du bist ein autonomer Senior-Engineer und arbeitest selbstständig am Projekt ProzessPilot, bis so gut wie alle offenen Aufgaben erledigt sind. Du brauchst keine Bestätigung für einzelne Schritte — arbeite kontinuierlich durch, bis du fertig bist.
+
+================================================================================
+DEIN AUFTRAG
+================================================================================
+
+Arbeite dich durch ALLE offenen Aufgaben des Projekts ProzessPilot. Du hörst erst auf wenn:
+1. Alle Phase-2-Aufgaben erledigt sind
+2. Alle Phase-3-Aufgaben erledigt sind
+3. npm run build (backend + webapp) ohne Fehler durchläuft
+4. npm test (backend) ohne Fehler durchläuft
+
+================================================================================
+SCHRITT 1 — ORIENTIERUNG (ZUERST, BEVOR DU IRGENDETWAS BAUST)
+================================================================================
+
+Lies folgende Dateien in dieser Reihenfolge komplett durch:
+
+1. prozesspilot/webapp/src/data/tasks.ts
+   → Verschaffe dir einen Überblick welche Aufgaben done: true und welche done: false sind.
+
+2. Modulkonzept/Konzeptentwicklung/05_Roadmap.md
+3. Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md
+4. Modulkonzept/Konzeptentwicklung/modules/M08_Monatsreporting.md
+5. Modulkonzept/Konzeptentwicklung/modules/M03_Kategorisierung.md
+
+6. Schau dir die vorhandene Codestruktur an:
+   - backend/src/modules/ (welche Module existieren bereits?)
+   - backend/migrations/ (welche Migrationen existieren bereits?)
+   - n8n/workflows/ (welche Workflows existieren bereits?)
+   - webapp/src/pages/ (welche Pages existieren bereits?)
+
+Erstelle dir intern eine Liste was bereits fertig ist und was noch fehlt. Dann starte mit der Arbeit.
+
+================================================================================
+SCHRITT 2 — ARBEITE DIE AUFGABEN IN DIESER REIHENFOLGE AB
+================================================================================
+
+Halte diese Reihenfolge ein — spätere Aufgaben bauen auf früheren auf:
+
+------------------------------------------------------------
+BLOCK A — M05 Lexoffice Backend (Phase 2)
+------------------------------------------------------------
+
+A1. Erstelle backend/src/core/adapters/booking/lexoffice/ mit:
+    - lexoffice.client.ts: HTTP-Client mit API-Key Auth, Rate-Limit 2 req/s (Token-Bucket in-memory), Retry 3x exponential bei 5xx/429
+    - auth.ts: getApiKey(customerId) aus customer_credentials Tabelle
+    - voucher.builder.ts: buildLexofficeVoucher() laut Konzept M05 §7/§8
+    - category.mapper.ts: mapSkrToLexofficeCategoryId() + syncCategoriesFromLexoffice()
+    - types.ts: LexofficeVoucher, LexofficeVoucherItem, LexofficeCategory Interfaces
+
+A2. Erstelle backend/src/modules/m05-lexoffice/ mit:
+    - routes.ts: POST /api/v1/receipts/:receiptId/exports/lexoffice
+                 GET  /api/v1/customers/:customerId/exports/lexoffice
+                 POST /api/v1/integrations/lexoffice/test
+                 POST /api/v1/integrations/lexoffice/sync-categories
+    - handlers/push.handler.ts: kompletter Flow laut Konzept §7 (Idempotenz, Hooks, Fehlerklassen)
+    - tests/push.handler.test.ts: Erfolg, Idempotenz, 422-Fehler, M05-nicht-aktiviert
+    - In backend/src/app.ts registrieren
+
+A3. Erstelle n8n/workflows/WF-M05.json laut Konzept §6 (Execute Workflow Trigger → assert_status → Push Lexoffice → IF ok → Respond)
+
+A4. Ergänze n8n/workflows/WF-MASTER-RECEIPT.json:
+    Nach M02-Schritt: IF m05_lexoffice aktiviert → WF-M05 aufrufen
+
+A5. npm run build im backend/ — alle Fehler fixen bevor du weiter machst
+
+------------------------------------------------------------
+BLOCK B — M08 Monatsreporting Backend (Phase 2)
+------------------------------------------------------------
+
+B1. Prüfe ob puppeteer installiert ist (npm list puppeteer im backend/).
+    Falls nicht: npm install puppeteer --save im backend/ Verzeichnis.
+    Falls puppeteer nicht funktioniert: npm install pdfkit --save als Fallback.
+
+B2. Prüfe ob chartjs-node-canvas installiert ist.
+    Falls nicht: npm install chartjs-node-canvas --save im backend/.
+
+B3. Erstelle backend/src/modules/m08-reporting/ mit:
+    - routes.ts: POST .../reports/monthly/build
+                 POST .../reports/:reportId/deliver
+                 GET  .../reports
+                 GET  .../reports/:reportId/download
+    - services/aggregator.ts: computeMonthlyAggregates() mit exakten SQL-Queries laut Konzept §8
+      WICHTIG: Felder aus extracted_data JSONB lesen (invoice_date, total_amount) — Schema aus Migrationen prüfen!
+    - services/pdf-renderer.ts: fromHtml(html) → Buffer via puppeteer (oder pdfkit-Fallback)
+    - services/chart-builder.ts: buildCategoryBarChart() → base64 PNG via chartjs-node-canvas
+    - services/delivery-dispatcher.ts: dispatchEmail() + dispatchWhatsApp()
+      → SMTP_ENABLED=false überspringt Mail (Feature-Flag für Dev)
+      → WhatsApp-Service aus M07 wiederverwenden
+    - templates/default_de.html: vollständiges HTML-Template mit KPI-Karten, Diagramm, Lieferanten-Tabelle, Auffälligkeiten
+    - handlers/build.handler.ts: vollständiger Build-Flow laut Konzept §7.1
+    - handlers/deliver.handler.ts: Delivery-Flow laut §7.2
+    - tests/aggregator.test.ts: 10 Fixture-Receipts, totals, Kategorien-Sortierung, Vormonatsvergleich
+    - In backend/src/app.ts registrieren
+
+B4. Prüfe reports + report_deliveries Tabellen in Migrationen.
+    Falls Spalten fehlen oder Tabellen anders heißen: 010_reports_fix.sql erstellen.
+
+B5. Erstelle n8n/workflows/WF-M08.json (Cron 0 8 1 * * → alle M08-Kunden laden → Loop → build → deliver)
+
+B6. npm run build im backend/ — alle Fehler fixen
+
+------------------------------------------------------------
+BLOCK C — Webapp: Lexoffice + Reporting UI (Phase 2 + Phase 3 vorbereitung)
+------------------------------------------------------------
+
+C1. Ergänze webapp/src/pages/ReceiptDetailPage.tsx:
+    - Neuer Abschnitt "Exporte" (unter Kategorisierungs-Panel)
+    - Wenn receipt.lexoffice_export vorhanden: Badge "Lexoffice ✓" + Link zu external_url + exported_at
+    - Wenn kein Export und M05 aktiv: Button "Nach Lexoffice exportieren" → POST /receipts/:id/exports/lexoffice
+    - Loading-Spinner während Export läuft
+    - Fehler-Toast bei 422 (requires_review)
+
+C2. Erstelle webapp/src/pages/ReportsPage.tsx:
+    - Tabelle aller Monatsberichte (Zeitraum, Belege, Gesamtsumme, Status, Download-Link)
+    - Button "Bericht jetzt erstellen" → POST .../reports/monthly/build mit aktuellem Monat
+    - Download-Button → GET .../reports/:reportId/download → PDF öffnen
+    - Route in App.tsx hinzufügen: /customers/:customerId/reports
+
+C3. Erstelle webapp/src/pages/StatsPage.tsx (Phase 3 Aufgabe 404):
+    - Belege pro Monat: Liniendiagramm (nutze recharts — prüfe ob installiert, sonst npm install recharts im webapp/)
+    - Kategorien-Verteilung: Kuchendiagramm (recharts PieChart)
+    - Top 5 Lieferanten: Balkendiagramm (recharts BarChart)
+    - Exportrate nach Lexoffice: Zahl + Fortschrittsbalken
+    - Daten aus GET /api/v1/customers/:customerId/stats (neuen Endpoint erstellen falls nicht vorhanden)
+    - Route in App.tsx: /customers/:customerId/stats
+    - Navigation in Sidebar ergänzen
+
+C4. Ergänze webapp/src/api/ falls noch nicht vorhanden:
+    - api/reports.ts: buildReport(), deliverReport(), getReports(), downloadReport()
+    - api/stats.ts: getCustomerStats()
+
+C5. npm run build im webapp/ — alle Fehler fixen
+
+------------------------------------------------------------
+BLOCK D — Stats-API Backend (für StatsPage)
+------------------------------------------------------------
+
+D1. Erstelle backend/src/modules/stats/ mit:
+    - routes.ts: GET /api/v1/customers/:customerId/stats?from=&to=
+    - handlers/stats.handler.ts: SQL-Aggregationen zurückgeben:
+        receipts_by_month: [{ year, month, count, gross_sum }] (letzte 12 Monate)
+        by_category: [{ category_name, count, gross_sum }]
+        top_suppliers: [{ supplier_name, count, gross_sum }] (Top 10)
+        export_rate: { lexoffice: number, datev: number } (Prozent exportiert)
+        processing_times: { avg_ms, p95_ms } (aus processing_started_at / processing_completed_at)
+    - In backend/src/app.ts registrieren
+
+D2. npm run build im backend/ — alle Fehler fixen
+
+------------------------------------------------------------
+BLOCK E — tasks.ts aktualisieren
+------------------------------------------------------------
+
+Nach jedem erledigten Block: aktualisiere prozesspilot/webapp/src/data/tasks.ts.
+Setze done: true für alle Aufgaben die du abgeschlossen hast.
+Block A fertig → IDs 301, 302 auf done: true
+Block B fertig → ID 303 auf done: true
+Block C fertig → IDs 305 (falls noch offen), 404 auf done: true
+Block D fertig → ID 404 auf done: true (falls noch offen)
+
+------------------------------------------------------------
+BLOCK F — Abschluss: Build + Tests
+------------------------------------------------------------
+
+F1. cd backend && npm run build — muss 0 Fehler haben
+F2. cd backend && npm test — muss durchlaufen (Failures sind ok wenn Tests noch nicht implementiert)
+F3. cd webapp && npm run build — muss 0 Fehler haben
+F4. cd webapp && npm run typecheck (oder tsc --noEmit) — muss 0 TypeScript-Fehler haben
+
+Falls F1-F4 Fehler haben: fixen, nicht überspringen.
+
+================================================================================
+SCHRITT 3 — WAS DU NICHT BAUEN SOLLST
+================================================================================
+
+Baue NICHT (das ist Phase 3/4 und kommt später):
+- M04 DATEV-Export (ID 400)
+- M06 Steuerberater-Portal (ID 401)
+- M09 Lieferanten-Kommunikation (ID 402)
+- Plugin-System (ID 403)
+- Load Tests (ID 500)
+- Sentry/Grafana (ID 501)
+- Backup-Strategie (ID 502)
+- Security Review (ID 503)
+- DSGVO (ID 504)
+- CI/CD Pipeline (ID 505)
+- Runbook (ID 506)
+
+Und überspringe ID 203 (WhatsApp-Webhook mit Meta Portal) — das ist ein manueller Schritt, kein Code.
+
+================================================================================
+ARBEITSWEISE
+================================================================================
+
+- Lies die relevante Konzept-Datei BEVOR du ein Modul implementierst
+- Schaue dir vorhandene Module als Vorlage an (M03, M04 sind gut gebaut)
+- Nach jeder größeren Änderung: npm run build ausführen und Fehler sofort fixen
+- Wenn du auf ein Problem stößt das du nicht lösen kannst: dokumentiere es als Kommentar im Code und mach weiter mit dem nächsten Punkt
+- Mache keine Breaking Changes an bestehenden Interfaces ohne alle abhängigen Dateien zu aktualisieren
+- Wenn du dir bei einer Implementierungsdetail unsicher bist: schau zuerst in die Konzept-Datei, dann in ähnliche bestehende Implementierungen
+
+Los geht's — starte mit SCHRITT 1 (Orientierung) und arbeite dann Block für Block durch.

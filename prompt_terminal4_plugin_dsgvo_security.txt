@@ -1,0 +1,436 @@
+DU BIST EIN AUTONOMER KI-AGENT. Arbeite selbstständig durch alle Blöcke ohne Rückfragen. Führe nach jedem Block `npm run build` aus. Markiere tasks.ts am Ende.
+
+PROJEKT: ProzessPilot — Multi-Tenant Belegverarbeitungssystem
+ROOT: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/
+
+STACK:
+- Backend: Fastify + TypeScript + Zod + PostgreSQL
+- Frontend: React 18 + Vite + TailwindCSS dark-mode
+- Auth: HMAC-SHA256 (dev: PP_AUTH_DISABLED=1)
+- Pattern: tenant_id + customer_id in allen Queries
+
+DEINE AUFGABEN (in dieser Reihenfolge):
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Plugin-System: externe Module per API registrieren (Task 403)
+════════════════════════════════════════════════════════════════
+
+Ziel: Externe Entwickler können Plugins registrieren, die über das Hook-System aufgerufen werden.
+Plugins sind HTTP-Endpoints die ProzessPilot per POST benachrichtigt.
+
+BACKEND:
+
+1. Migration: /backend/migrations/015_plugin_registry.sql
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS plugin_registry (
+     plugin_id       TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+     tenant_id       TEXT NOT NULL,
+     name            TEXT NOT NULL,
+     version         TEXT NOT NULL DEFAULT '1.0.0',
+     description     TEXT,
+     webhook_url     TEXT NOT NULL,
+     webhook_secret  TEXT NOT NULL,           -- HMAC-Shared-Secret für Webhook-Calls
+     hook_events     TEXT[] NOT NULL,         -- z.B. ['after_categorization','after_export']
+     enabled         BOOLEAN NOT NULL DEFAULT true,
+     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+   );
+
+   CREATE TABLE IF NOT EXISTS plugin_executions (
+     execution_id    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+     plugin_id       TEXT NOT NULL REFERENCES plugin_registry(plugin_id),
+     hook_event      TEXT NOT NULL,
+     receipt_id      TEXT,
+     payload         JSONB,
+     response_status INT,
+     response_body   TEXT,
+     duration_ms     INT,
+     success         BOOLEAN NOT NULL,
+     error_message   TEXT,
+     executed_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+   );
+
+   CREATE INDEX idx_plugin_executions_plugin ON plugin_executions(plugin_id);
+   CREATE INDEX idx_plugin_executions_event  ON plugin_executions(hook_event);
+   ```
+
+2. Neues Modul: /backend/src/modules/plugin-system/
+   - routes.ts
+   - handlers/
+     - register.handler.ts   (POST /plugins — Plugin registrieren)
+     - list.handler.ts       (GET  /plugins — alle Plugins des Tenants)
+     - update.handler.ts     (PUT  /plugins/:pluginId — aktivieren/deaktivieren, URL ändern)
+     - delete.handler.ts     (DELETE /plugins/:pluginId)
+     - executions.handler.ts (GET  /plugins/:pluginId/executions — Ausführungshistorie)
+   - services/
+     - plugin-dispatcher.ts  (Kernlogik: sendet HTTP POST an Plugin-Webhook)
+     - plugin-runner.ts      (integriert sich in bestehendes Hook-System)
+
+   routes.ts registriert unter /api/v1/plugins/:
+   POST   /plugins                          → Plugin registrieren
+   GET    /plugins                          → Liste (nach tenant_id gefiltert)
+   PUT    /plugins/:pluginId                → Update
+   DELETE /plugins/:pluginId                → Löschen
+   GET    /plugins/:pluginId/executions     → Ausführungshistorie
+
+   register.handler.ts:
+   - Zod: { name, description?, webhook_url, webhook_secret, hook_events: string[] }
+   - Validiert webhook_url (muss https:// sein, außer localhost in dev)
+   - Generiert plugin_id, speichert in plugin_registry
+
+   plugin-dispatcher.ts:
+   ```ts
+   export async function dispatchToPlugin(
+     plugin: PluginRegistryRow,
+     hookEvent: string,
+     payload: unknown,
+   ): Promise<PluginExecutionResult> {
+     const start = Date.now();
+     const body = JSON.stringify({ event: hookEvent, data: payload, timestamp: new Date().toISOString() });
+     const sig = hmacSha256(plugin.webhook_secret, body); // nutze crypto.createHmac
+
+     try {
+       const res = await fetch(plugin.webhook_url, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'X-ProzessPilot-Signature': sig,
+           'X-ProzessPilot-Event': hookEvent,
+         },
+         body,
+         signal: AbortSignal.timeout(10_000), // 10s Timeout
+       });
+       const responseBody = await res.text().catch(() => '');
+       const duration = Date.now() - start;
+
+       // In plugin_executions speichern
+       await db.query(INSERT plugin_executions ...);
+
+       return { success: res.ok, status: res.status, duration };
+     } catch (err) {
+       // Fehler ebenfalls in plugin_executions speichern mit success=false
+       ...
+     }
+   }
+   ```
+
+   plugin-runner.ts:
+   - Exportiert Funktion runPluginsForEvent(tenantId, hookEvent, payload)
+   - Holt alle enabled Plugins für tenant_id WHERE hook_events contains hookEvent
+   - Ruft dispatchToPlugin für jeden auf (parallel mit Promise.allSettled)
+   - Fehler einzelner Plugins dürfen die Hauptverarbeitung NICHT unterbrechen
+
+3. Integration in bestehendes Hook-System:
+   Suche in /backend/src/core/ oder /backend/src/modules/_foundation/ nach HookRunner
+   Erweitere den HookRunner so, dass nach den internen Hooks auch runPluginsForEvent aufgerufen wird.
+   Falls HookRunner nicht gefunden: integriere plugin-runner.ts in die routes der bestehenden
+   after_categorization und after_export Events (suche wo diese Events emittiert werden).
+
+WEBAPP:
+
+4. Neue Seite /webapp/src/pages/PluginsPage.tsx:
+   - Liste installierter Plugins (Karte pro Plugin: Name, Status, Hook-Events als Badges, letzte Ausführung)
+   - Button "Plugin hinzufügen" → Inline-Formular: Name, Webhook-URL, Webhook-Secret, Events (Checkboxen)
+   - Toggle: enabled/disabled
+   - Click auf Plugin → zeigt Ausführungshistorie (Tabelle: Datum, Event, Status, Dauer)
+
+5. Route + NavLink: /plugins → "Plugins"
+6. API-Client: /webapp/src/api/plugins.ts
+
+NACH BLOCK A: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK B — DSGVO-Compliance: Lösch-API + PII-Inventar (Task 504)
+════════════════════════════════════════════════════════════════
+
+Ziel: DSGVO-Artikel 17 (Recht auf Vergessenwerden) implementieren. Kunden/Mandanten können
+alle ihre Daten löschen lassen. PII-Felder werden inventarisiert und dokumentiert.
+
+BACKEND:
+
+1. Migration: /backend/migrations/016_dsgvo.sql
+
+   ```sql
+   -- Löschanträge tracken
+   CREATE TABLE IF NOT EXISTS deletion_requests (
+     request_id    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+     customer_id   TEXT,           -- NULL wenn ganzer Tenant gelöscht werden soll
+     tenant_id     TEXT NOT NULL,
+     requested_by  TEXT,           -- E-Mail oder User-ID
+     reason        TEXT,
+     status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed')),
+     processed_at  TIMESTAMPTZ,
+     deleted_tables JSONB,         -- {"receipts": 42, "communications": 5, ...}
+     error_message  TEXT,
+     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+   );
+   ```
+
+2. Neues Modul: /backend/src/modules/dsgvo/
+   - routes.ts
+   - handlers/
+     - request-deletion.handler.ts   (POST /dsgvo/delete-request)
+     - deletion-status.handler.ts    (GET  /dsgvo/delete-request/:id)
+     - data-export.handler.ts        (GET  /dsgvo/export-data — Datenkopie für Kunden)
+     - pii-inventory.handler.ts      (GET  /dsgvo/pii-inventory — Übersicht aller PII-Felder)
+
+   routes.ts registriert unter /api/v1/dsgvo/:
+   POST /dsgvo/delete-request          → Löschantrag stellen
+   GET  /dsgvo/delete-request/:id      → Status abfragen
+   POST /dsgvo/delete-request/:id/execute  → Löschung tatsächlich ausführen (Admin-only)
+   GET  /dsgvo/export-data             → JSON-Export aller Kundendaten
+   GET  /dsgvo/pii-inventory           → Liste aller Tabellen+Felder mit PII
+
+   request-deletion.handler.ts:
+   - Zod: { customer_id?: string, reason?: string, requested_by: string }
+   - Erstellt deletion_request mit status='pending'
+   - Sendet Bestätigungsmail (nur loggen wenn kein SMTP)
+
+   execute-deletion (intern, vom Admin-Execute-Endpoint aufgerufen):
+   - Status → 'processing'
+   - Löscht in dieser Reihenfolge (Fremdschlüssel beachten):
+     1. plugin_executions (für customer_id Plugins)
+     2. communications (WHERE customer_id)
+     3. bulk_approvals (WHERE tenant_id oder customer_id)
+     4. receipt_files (S3-Objekte: nur DB-Einträge löschen, optional S3 call)
+     5. receipts (WHERE customer_id)
+     6. customer_profiles (WHERE customer_id)
+     7. Zähle gelöschte Zeilen pro Tabelle
+   - Status → 'completed', deleted_tables = { receipts: N, ... }
+   - Falls Error: status → 'failed', error_message setzen
+
+   data-export.handler.ts:
+   - Holt alle Daten des Kunden aus allen relevanten Tabellen
+   - Gibt JSON-Objekt zurück: { customer: {...}, receipts: [...], communications: [...] }
+   - Für Produktion wäre das ein asynchroner Job, für MVP kann es synchron sein mit Timeout-Hinweis
+
+   pii-inventory.handler.ts:
+   - Gibt eine hardcodierte Liste zurück (kein DB-Scan nötig):
+   ```ts
+   const PII_INVENTORY = [
+     { table: 'customer_profiles', fields: ['legal_name', 'vat_id', 'address', 'email', 'phone'], encrypted: ['vat_id'] },
+     { table: 'receipts', fields: ['supplier_name', 'supplier_vat_id'], encrypted: [] },
+     { table: 'communications', fields: ['to_address', 'from_address', 'subject', 'body_text'], encrypted: [] },
+     { table: 'supplier_contacts', fields: ['contact_email', 'contact_phone'], encrypted: [] },
+     { table: 'users', fields: ['email', 'name'], encrypted: [] },
+   ];
+   ```
+
+WEBAPP:
+
+3. In SettingsPage.tsx (existiert bereits) neuen Tab oder Section "DSGVO / Datenschutz" hinzufügen:
+   - Abschnitt "Datenkopie anfordern" → Button → ruft GET /dsgvo/export-data auf → JSON-Download
+   - Abschnitt "Datenlöschung beantragen" → Formular (Grund-Feld) → POST /dsgvo/delete-request
+     Mit Warnung: "Dieser Vorgang löscht ALLE Belege und Daten unwiderruflich."
+   - Abschnitt "PII-Inventar" → lädt GET /dsgvo/pii-inventory → zeigt Tabelle der PII-Felder
+
+4. API-Client: /webapp/src/api/dsgvo.ts
+
+NACH BLOCK B: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK C — Backup-Strategie: pg_dump + S3-Backup-Skripte (Task 502)
+════════════════════════════════════════════════════════════════
+
+Ziel: Automatische tägliche Backups von Datenbank und S3-Archiv.
+
+ERSTELLE FOLGENDE DATEIEN (keine neuen npm packages nötig, reine Shell/Python-Skripte):
+
+1. /infra/backup/backup-postgres.sh
+   ```bash
+   #!/bin/bash
+   # ProzessPilot PostgreSQL Backup
+   # Cron: 0 2 * * * /infra/backup/backup-postgres.sh >> /var/log/pp-backup.log 2>&1
+
+   set -euo pipefail
+   DATE=$(date +%Y%m%d_%H%M%S)
+   BACKUP_DIR="${BACKUP_DIR:-/backups/postgres}"
+   DB_URL="${DATABASE_URL:-postgresql://localhost:5432/prozesspilot}"
+   RETENTION_DAYS="${RETENTION_DAYS:-90}"
+
+   mkdir -p "$BACKUP_DIR"
+   FILENAME="prozesspilot_${DATE}.sql.gz"
+
+   echo "[$(date -Is)] Starting backup: $FILENAME"
+   pg_dump "$DB_URL" | gzip > "$BACKUP_DIR/$FILENAME"
+   echo "[$(date -Is)] Backup complete: $(du -h "$BACKUP_DIR/$FILENAME" | cut -f1)"
+
+   # Alte Backups löschen (älter als RETENTION_DAYS)
+   find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete
+   echo "[$(date -Is)] Cleanup done. Files remaining: $(ls "$BACKUP_DIR" | wc -l)"
+
+   # Optional: S3-Upload (wenn AWS_BACKUP_BUCKET gesetzt)
+   if [ -n "${AWS_BACKUP_BUCKET:-}" ]; then
+     aws s3 cp "$BACKUP_DIR/$FILENAME" "s3://$AWS_BACKUP_BUCKET/postgres/$FILENAME"
+     echo "[$(date -Is)] Uploaded to S3: s3://$AWS_BACKUP_BUCKET/postgres/$FILENAME"
+   fi
+   ```
+
+2. /infra/backup/backup-s3.sh
+   ```bash
+   #!/bin/bash
+   # ProzessPilot S3/MinIO Archiv-Backup (Sync zu Backup-Bucket)
+   # Cron: 0 3 * * * /infra/backup/backup-s3.sh >> /var/log/pp-backup.log 2>&1
+
+   set -euo pipefail
+   SOURCE_BUCKET="${PP_S3_BUCKET:-prozesspilot-receipts}"
+   BACKUP_BUCKET="${AWS_BACKUP_BUCKET:-prozesspilot-backup}"
+   S3_ENDPOINT="${PP_S3_ENDPOINT:-}"  # leer = AWS, sonst MinIO
+
+   ENDPOINT_FLAG=""
+   if [ -n "$S3_ENDPOINT" ]; then
+     ENDPOINT_FLAG="--endpoint-url $S3_ENDPOINT"
+   fi
+
+   echo "[$(date -Is)] Starting S3 sync: $SOURCE_BUCKET → $BACKUP_BUCKET/s3-archive/"
+   aws s3 sync $ENDPOINT_FLAG "s3://$SOURCE_BUCKET" "s3://$BACKUP_BUCKET/s3-archive/" --storage-class STANDARD_IA
+   echo "[$(date -Is)] S3 sync complete"
+   ```
+
+3. /infra/backup/restore-test.sh
+   ```bash
+   #!/bin/bash
+   # Monatlicher Restore-Test (letztes Backup in Test-DB laden)
+   # Cron: 0 4 1 * * /infra/backup/restore-test.sh >> /var/log/pp-restore-test.log 2>&1
+
+   set -euo pipefail
+   BACKUP_DIR="${BACKUP_DIR:-/backups/postgres}"
+   TEST_DB_URL="${TEST_DB_URL:-postgresql://localhost:5432/prozesspilot_restore_test}"
+
+   LATEST=$(ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | head -1)
+   if [ -z "$LATEST" ]; then
+     echo "[$(date -Is)] ERROR: Kein Backup gefunden in $BACKUP_DIR"
+     exit 1
+   fi
+
+   echo "[$(date -Is)] Restore-Test mit: $LATEST"
+   # Test-DB neu erstellen
+   psql "${TEST_DB_URL%/*}" -c "DROP DATABASE IF EXISTS prozesspilot_restore_test;" 2>/dev/null || true
+   psql "${TEST_DB_URL%/*}" -c "CREATE DATABASE prozesspilot_restore_test;"
+   gunzip -c "$LATEST" | psql "$TEST_DB_URL"
+
+   # Einfacher Sanity-Check
+   COUNT=$(psql "$TEST_DB_URL" -tAc "SELECT COUNT(*) FROM receipts;" 2>/dev/null || echo "ERROR")
+   echo "[$(date -Is)] Restore-Test OK. Receipts in Backup: $COUNT"
+   ```
+
+4. /infra/backup/README.md
+   Kurze Dokumentation:
+   - Voraussetzungen (pg_dump, aws cli, Env-Variablen)
+   - Cron-Setup Anleitung
+   - Restore-Anleitung (Schritt für Schritt)
+   - S3 Versioning aktivieren (Hinweis: muss in AWS Console / MinIO config gemacht werden)
+   - Retention-Policy: 90 Tage für DB-Backups, S3-Archiv wird per Versioning behalten
+
+NACH BLOCK C: echo "Backup-Skripte erstellt, kein Build nötig"
+
+════════════════════════════════════════════════════════════════
+BLOCK D — Security Review & Hardening (Task 503)
+════════════════════════════════════════════════════════════════
+
+Ziel: OWASP Top 10 durchgehen und Schwachstellen beheben.
+
+1. Lies die Backend-Codebase: /backend/src/
+   Prüfe konkret diese Punkte und BEHEBE gefundene Probleme direkt im Code:
+
+   A) SQL Injection:
+   - Stelle sicher, dass ALLE DB-Queries parametrisierte Queries nutzen (kein String-Concat mit User-Input)
+   - Suche nach Pattern wie: `query("... WHERE id = '" + variable`
+   - Falls gefunden: ersetze mit $1, $2 Parameter-Syntax
+
+   B) Rate Limiting:
+   - Prüfe ob fastify-rate-limit bereits installiert ist
+   - Falls ja: stelle sicher dass alle öffentlichen Endpunkte (besonders /api/v1/receipts POST) Rate-Limits haben
+   - Falls nein: installiere (`npm install @fastify/rate-limit`) und konfiguriere in server.ts oder app.ts:
+     ```ts
+     await app.register(import('@fastify/rate-limit'), {
+       global: true,
+       max: 100,
+       timeWindow: '1 minute',
+       keyGenerator: (req) => req.headers['x-tenant-id'] as string || req.ip,
+     });
+     ```
+
+   C) Secrets Handling:
+   - Stelle sicher dass keine Secrets hardcodiert sind (grep nach 'password', 'secret', 'apikey' in src/)
+   - Alle ENV-Variablen sollten in /backend/.env.example dokumentiert sein
+   - Erstelle /backend/.env.example falls nicht vorhanden mit allen benötigten Variablen (keine echten Werte!)
+   - Stelle sicher dass .env in .gitignore ist
+
+   D) Input Validation:
+   - Prüfe ob alle Route-Handler Zod-Schemas für Body, Params, Query nutzen
+   - Fehlende Validierungen ergänzen (besonders bei PATCH/PUT Routen)
+
+   E) HMAC-Stärke:
+   - Prüfe HMAC-Implementation: muss SHA256 oder stärker sein
+   - Timing-sichere Vergleiche: crypto.timingSafeEqual() statt ===
+
+   F) Error Responses:
+   - Stelle sicher dass Error-Responses keine Stack-Traces oder DB-Fehlermeldungen nach außen leaken
+   - In Fastify: setErrorHandler, der in Produktion nur { error: 'Internal Server Error' } zurückgibt
+
+2. Erstelle /infra/security/security-checklist.md:
+   Eine ausgefüllte OWASP-Checkliste mit:
+   - ✅ GEPRÜFT: Was bereits implementiert ist
+   - ⚠️ VERBESSERT: Was du in diesem Schritt verbessert hast
+   - 🔲 TODO: Was manuell geprüft werden muss (Pen-Test, Abhängigkeits-Audit)
+
+   Mindest-Inhalte:
+   - A01 Broken Access Control → tenant isolation in allen Queries
+   - A02 Cryptographic Failures → pgcrypto PII-Verschlüsselung, HMAC-SHA256
+   - A03 Injection → parametrisierte Queries
+   - A04 Insecure Design → Receipt-Status-Validierung
+   - A05 Security Misconfiguration → ENV-Variablen, Rate Limiting
+   - A06 Vulnerable Components → Hinweis auf `npm audit` regelmäßig ausführen
+   - A07 Auth Failures → HMAC-Timing-sicherer Vergleich
+   - A09 Security Logging → Audit-Log Tabelle
+   - A10 SSRF → Plugin-Webhooks: Loopback-Adressen blockieren (außer dev)
+
+3. Plugin-Dispatcher SSRF-Schutz (ergänzt Block A):
+   In /backend/src/modules/plugin-system/services/plugin-dispatcher.ts:
+   Vor dem fetch-Call: prüfe ob webhook_url auf private IP-Ranges zeigt (in Produktion blocken):
+   ```ts
+   function isPrivateUrl(url: string): boolean {
+     const hostname = new URL(url).hostname;
+     // Einfache Prüfung: 127.x, 10.x, 192.168.x, 172.16-31.x
+     return /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname) ||
+            hostname === 'localhost';
+   }
+   if (process.env.NODE_ENV === 'production' && isPrivateUrl(plugin.webhook_url)) {
+     throw new Error('SSRF: Private URLs sind in Produktion nicht erlaubt');
+   }
+   ```
+
+NACH BLOCK D: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK E — tasks.ts aktualisieren
+════════════════════════════════════════════════════════════════
+
+Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Setze folgende Tasks auf done: true:
+- id: 403  (Plugin-System)
+- id: 502  (Backup-Strategie)
+- id: 503  (Security Review)
+- id: 504  (DSGVO-Compliance)
+
+════════════════════════════════════════════════════════════════
+ABSCHLUSS
+════════════════════════════════════════════════════════════════
+
+Finaler Build-Check:
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp && npm run build
+
+Wenn Fehler: beheben.
+
+NICHT ANFASSEN:
+- /backend/src/modules/m05-lexoffice/
+- /backend/src/modules/m06-sevdesk/
+- /backend/src/modules/m08-reporting/
+- /backend/src/modules/m04-datev/
+- /backend/migrations/001_* bis 014_*  (nur lesen, nicht ändern)
+- /webapp/src/pages/AdvisorPortalPage.tsx (Terminal 3 arbeitet daran)
+- /webapp/src/pages/CommunicationsPage.tsx (Terminal 3 arbeitet daran)

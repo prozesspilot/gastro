@@ -1,0 +1,14 @@
+{
+  "name": "Duplikat-Beleg (gleiche USt-ID + Belegnummer wie fixture_01)",
+  "raw_text": "Metro AG\nUSt-IdNr: DE123456789\nRechnung Nr. RE-2026-1042\nDatum: 2026-04-28\n\nNetto                                       120.04\nMwSt 19 %                                    19.00\nMwSt 7 %                                      1.40\nGesamt                                      142.85 EUR",
+  "expected_fields": {
+    "supplier_vat_id": "DE123456789",
+    "document_number": "RE-2026-1042",
+    "document_date":   "2026-04-28",
+    "total_gross":     142.85
+  },
+  "expected_status": "requires_review",
+  "expected_confidence_range": [0.85, 1.0],
+  "ocr_confidence": 0.93,
+  "expected_validation_issue": "DUPLICATE_RECEIPT"
+}

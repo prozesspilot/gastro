@@ -1,0 +1,208 @@
+{
+  "name": "WF-PLUGIN-DISPATCHER",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000001",
+      "name": "Cron 08:00 / stuendlich",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/plugins",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $env.PP_TENANT_ID }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "GET /plugins",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000003",
+      "name": "Loop ueber Plugins",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/plugins/{{ $json.id ?? $json.plugin_id }}/executions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $env.PP_TENANT_ID }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "success",
+              "value": "false"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000004",
+      "name": "GET Executions (24h, success=false)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($json.data ?? []).length }}",
+              "operation": "largerEqual",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000005",
+      "name": "IF Fehler vorhanden",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "subject": "ProzessPilot Plugin-Fehler: {{ $('Loop ueber Plugins').item.json.name }}",
+        "message": "Das Plugin \"{{ $('Loop ueber Plugins').item.json.name }}\" hat {{ ($json.data ?? []).length }} fehlgeschlagene Ausfuehrungen in den letzten 24h.\n\nPlugin-URL: {{ $('Loop ueber Plugins').item.json.webhook_url }}\nPlugin-ID: {{ $('Loop ueber Plugins').item.json.plugin_id ?? $('Loop ueber Plugins').item.json.id }}\n\nBitte pruefen Sie die Plugin-Konfiguration.",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000006",
+      "name": "Notify Operator",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1500, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron 08:00 / stuendlich": {
+      "main": [
+        [
+          {
+            "node": "GET /plugins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /plugins": {
+      "main": [
+        [
+          {
+            "node": "Loop ueber Plugins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop ueber Plugins": {
+      "main": [
+        [
+          {
+            "node": "GET Executions (24h, success=false)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Executions (24h, success=false)": {
+      "main": [
+        [
+          {
+            "node": "IF Fehler vorhanden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Fehler vorhanden": {
+      "main": [
+        [
+          {
+            "node": "Notify Operator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "id": "wf-plugin-dispatcher",
+  "tags": [
+    {
+      "createdAt": "2026-05-01T00:00:00.000Z",
+      "updatedAt": "2026-05-01T00:00:00.000Z",
+      "id": "tag-plugins",
+      "name": "Plugins"
+    }
+  ]
+}

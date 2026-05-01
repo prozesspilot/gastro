@@ -1,0 +1,227 @@
+DU BIST EIN AUTONOMER KI-AGENT. Arbeite selbstständig durch alle Blöcke ohne Rückfragen. Führe nach jedem Block `npm run build` im Backend aus. Markiere tasks.ts am Ende.
+
+PROJEKT: ProzessPilot — Multi-Tenant Belegverarbeitungssystem
+ROOT: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/
+
+STACK:
+- Backend: Fastify + TypeScript + Zod + PostgreSQL
+- Frontend: React 18 + Vite + TailwindCSS dark-mode
+- Auth: HMAC-SHA256 (dev: PP_AUTH_DISABLED=1)
+- Pattern: tenant_id in allen DB-Queries, X-Tenant-ID Header
+
+DEINE AUFGABEN (in dieser Reihenfolge):
+
+════════════════════════════════════════════════════════════════
+BLOCK A — M06 Steuerberater-Portal Multi-Tenant-Ansicht (Task 401)
+════════════════════════════════════════════════════════════════
+
+Ziel: Ein separates Portal-View für Steuerberater, die mehrere Mandanten (Kunden) auf einmal
+verwalten können. NICHT zu verwechseln mit dem bestehenden m06-sevdesk Modul — das ist ein
+anderer M06-Concept-Name (Konzeptdatei nennt es M06 Steuerberater-Portal).
+
+BACKEND:
+
+1. Neue Migration anlegen: /backend/migrations/013_tax_advisor_portal.sql
+   Inhalte:
+   ```sql
+   -- Tax Advisor Rollen
+   CREATE TABLE IF NOT EXISTS tax_advisor_users (
+     advisor_id    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+     tenant_id     TEXT NOT NULL REFERENCES tenants(tenant_id),
+     email         TEXT NOT NULL UNIQUE,
+     name          TEXT NOT NULL,
+     role          TEXT NOT NULL CHECK (role IN ('admin','viewer')),
+     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+   );
+
+   -- Welche Kunden darf der Steuerberater sehen?
+   CREATE TABLE IF NOT EXISTS advisor_customer_access (
+     advisor_id    TEXT NOT NULL REFERENCES tax_advisor_users(advisor_id),
+     customer_id   TEXT NOT NULL,
+     granted_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+     PRIMARY KEY (advisor_id, customer_id)
+   );
+
+   -- Bulk-Approve: Steuerberater kann mehrere Belege auf einmal freigeben
+   CREATE TABLE IF NOT EXISTS bulk_approvals (
+     approval_id   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+     advisor_id    TEXT NOT NULL,
+     tenant_id     TEXT NOT NULL,
+     receipt_ids   TEXT[] NOT NULL,
+     comment       TEXT,
+     approved_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+   );
+   ```
+
+2. Neues Backend-Modul: /backend/src/modules/m06-advisor-portal/
+   Struktur:
+   - routes.ts
+   - handlers/
+     - customers-overview.handler.ts  (GET alle Kunden + Beleg-Zusammenfassung)
+     - receipts-review.handler.ts     (GET ausstehende Belege über alle Kunden)
+     - bulk-approve.handler.ts        (POST bulk approve)
+     - comments.handler.ts            (POST Kommentar zu Beleg)
+
+   routes.ts registriert unter /api/v1/advisor/:
+
+   GET  /advisor/overview           → alle zugänglichen Kunden mit KPIs
+   GET  /advisor/receipts/pending   → Belege mit Status requires_review über alle Kunden
+   POST /advisor/receipts/bulk-approve  → mehrere Belege gleichzeitig genehmigen
+   POST /advisor/receipts/:id/comment  → Kommentar hinterlassen
+
+   customers-overview.handler.ts:
+   - Liest advisor_customer_access für den anfragenden Advisor
+   - Aggregiert pro customer_id: Anzahl Belege gesamt, davon requires_review, exported
+   - Gibt zurück: Array von { customer_id, name, receipt_count, pending_count, exported_count }
+
+   receipts-review.handler.ts:
+   - Liest alle Belege mit status='requires_review' über alle zugänglichen Kunden
+   - Paginierung: ?limit=50&offset=0
+   - Optional Filter: ?customer_id=xxx
+
+   bulk-approve.handler.ts:
+   - Akzeptiert: { receipt_ids: string[], comment?: string }
+   - Setzt alle genannten Belege von requires_review → categorized
+   - Schreibt bulk_approvals Eintrag
+   - Emittiert pp.receipt.approved Event pro Beleg
+
+   Zod-Schemas für alle Request Bodies.
+
+3. In /backend/src/routes/index.ts (oder server.ts) das neue Modul registrieren.
+
+FRONTEND:
+
+4. Neue Page: /webapp/src/pages/AdvisorPortalPage.tsx
+
+   Tab 1: "Mandantenübersicht"
+   - Grid von Kunden-Cards: Name, Anzahl Belege, davon "ausstehend" (badge rot wenn > 0), davon "exportiert"
+   - Click auf Karte → filtert Tab 2 auf diesen Kunden
+
+   Tab 2: "Zur Prüfung" (requires_review Belege)
+   - Tabelle: Kunde | Datum | Lieferant | Betrag | Grund (LOW_QUALITY etc.) | Aktionen
+   - Checkbox je Zeile für Mehrfachauswahl
+   - Button "Ausgewählte genehmigen" → POST bulk-approve → Zeilen verschwinden
+   - Button "Kommentar" → Inline-Input → POST comment
+
+   Design: Gleicher dark-mode wie alle anderen Pages. Tailwind. Keine neuen Dependencies.
+
+5. Route in /webapp/src/App.tsx ergänzen: /advisor → AdvisorPortalPage
+   In Layout.tsx NavLink ergänzen: "Steuerberater-Portal" (nur wenn user.role === 'advisor' oder immer sichtbar für Demo)
+
+6. API-Client in /webapp/src/api/ erweitern:
+   advisor.ts mit Funktionen: getAdvisorOverview(), getPendingReceipts(), bulkApprove(), addComment()
+
+NACH BLOCK A: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK B — M09 Lieferanten-Kommunikation: Auto-Antworten (Task 402)
+════════════════════════════════════════════════════════════════
+
+Konzept-Spec: /Users/donandrejo/Documents/ProzessPilot/Modulkonzept/Konzeptentwicklung/modules/M09_Lieferanten_Kommunikation.md
+LIES DIESE DATEI VOLLSTÄNDIG BEVOR DU ANFÄNGST.
+
+BACKEND:
+
+1. Migration: /backend/migrations/014_m09_supplier_comm.sql
+   Tabellen wie in Spec Section 10 + Section 9:
+   - communications (communication_id, customer_id, receipt_id, expected_id, channel, direction, template, to_address, from_address, subject, reference_id, body_text, body_html, status, external_id, created_at)
+   - supplier_contacts (contact_id, customer_id, supplier_name, contact_email, contact_phone, active, created_at)
+   - expected_receipts (expected_id, customer_id, supplier_name, cadence, expected_day, amount_min, amount_max, remind_after_days, active)
+
+2. Neues Modul: /backend/src/modules/m09-supplier-comm/
+   Struktur wie in Spec Section 14:
+   - routes.ts
+   - handlers/build.handler.ts
+   - handlers/send.handler.ts
+   - handlers/inbound.handler.ts
+   - services/template-renderer.ts    (Handlebars-ähnlich — nutze einfache string replace)
+   - services/reference-resolver.ts   (PP-REF-xxxx aus Subject extrahieren)
+   - services/expected-checker.ts     (Cron-Logik für fehlende Belege)
+   - templates/low_quality_de_v1.ts   (als TypeScript Template-String, kein echtes .hbs nötig)
+   - templates/missing_invoice_de_v2.ts
+   - templates/confirmation_received_de_v1.ts
+   - templates/reminder_overdue_de_v1.ts
+
+   routes.ts registriert unter /api/v1/communications/:
+   POST /communications/build     → CommDraft oder { skip: true }
+   POST /communications/send      → sendet & persistiert
+   POST /webhooks/email/inbound   → Inbound-Webhook (Mailgun/Postmark-Format)
+   GET  /communications           → Liste mit Filter ?customer_id=&receipt_id=
+
+3. build.handler.ts:
+   - Implementiert buildCommunication() wie in Spec Section 7.1
+   - Prüft customer profile integrations.supplier_communication?.enabled
+   - Lookup supplier_contacts nach supplier_name
+   - Wenn kein contact_email: speichert operator_task (falls Tabelle existiert, sonst nur log)
+   - Anti-Spam: max 1 Mail/Tag pro (customer_id, supplier_email) — prüft communications Tabelle
+   - Reference-ID Format: PP-REF-{receipt_id.slice(-12)}
+   - Nutzt Template-Renderer
+
+4. send.handler.ts:
+   - SMTP-Versand: nutze nodemailer (npm install nodemailer @types/nodemailer im backend)
+   - ENV: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+   - Wenn ENV fehlen → Mock-Mode: logge Mail statt senden (damit Build nicht bricht)
+   - Persistiert Communication mit status='sent' oder 'mock_sent'
+   - Emittiert pp.communication.sent Event
+
+5. template-renderer.ts:
+   - Einfacher String-Replace: {{variable}} → Wert
+   - Gibt { subject, body_text, body_html } zurück
+   - body_html = body_text in <pre> gewrappt (keine echte HTML-Template nötig für MVP)
+
+6. inbound.handler.ts:
+   - Mailgun/Postmark Webhook Format akzeptieren
+   - Extrahiert PP-REF-xxxx aus Subject
+   - Mappt auf Receipt via reference_id in communications Tabelle
+   - Speichert eingehende Mail als inbound communication
+   - Emittiert pp.communication.replied
+
+7. expected-checker.ts:
+   - Exportiert Funktion checkExpectedReceipts(customerId: string)
+   - Holt expected_receipts Einträge (active=true)
+   - Für jeden: prüfe ob im aktuellen Zeitraum Beleg von diesem Lieferant eingegangen
+   - Falls nicht und today >= expected_day + remind_after_days → buildCommunication + send
+
+WEBAPP (minimal):
+
+8. Neue Seite /webapp/src/pages/CommunicationsPage.tsx (simpel):
+   - Tabelle aller Communications für den Kunden
+   - Spalten: Datum | Typ | Lieferant | Betreff | Status
+   - Filter: Richtung (inbound/outbound), Status
+
+9. Route + NavLink: /communications → "Lieferanten-Komm."
+
+10. API Client: /webapp/src/api/communications.ts
+
+NACH BLOCK B: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK C — tasks.ts aktualisieren
+════════════════════════════════════════════════════════════════
+
+Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Setze folgende Tasks auf done: true:
+- id: 401  (M06 Steuerberater-Portal)
+- id: 402  (M09 Lieferanten-Kommunikation)
+
+Die Datei hat das Format:
+  { id: 401, text: '...', ..., done: false, ... }
+Ändere done: false → done: true für diese beiden IDs.
+
+════════════════════════════════════════════════════════════════
+ABSCHLUSS
+════════════════════════════════════════════════════════════════
+
+Finaler Build-Check:
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp && npm run build
+
+Wenn Build-Fehler: beheben und nochmal bauen.
+
+NICHT ANFASSEN:
+- /backend/src/modules/m06-sevdesk/  (anderes Modul, fertig)
+- /backend/src/modules/m04-datev/
+- /backend/src/modules/m05-lexoffice/
+- /backend/src/modules/m08-reporting/
+- /backend/migrations/001_* bis 012_*

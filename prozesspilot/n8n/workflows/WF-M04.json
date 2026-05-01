@@ -1,0 +1,242 @@
+{
+  "id": "wf-m04-000000000001-0001-000000000004",
+  "name": "WF-M04",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "n1-cron",
+      "name": "Cron: 5. des Monats 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 400],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 5 * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n2-get-customers",
+      "name": "HTTP: Kunden mit DATEV laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/customers?modules=m04_datev",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-trace-id", "value": "={{ 'trc_m04_cron_' + new Date().toISOString().slice(0,10) }}" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "n3-split-customers",
+      "name": "Split: Kunden",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 400],
+      "parameters": {
+        "fieldToSplitOut": "data.customers",
+        "options": {}
+      }
+    },
+    {
+      "id": "n4-calc-period",
+      "name": "Code: Vormonat berechnen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 400],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const customer = $json;\nconst now = new Date();\n// Vormonat\nconst prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();\nconst prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();\n\nreturn [{\n  json: {\n    customer_id: customer.id || customer.customer_id,\n    customer_name: customer.name,\n    year: prevYear,\n    month: prevMonth,\n    trace_id: 'trc_m04_' + (customer.id || customer.customer_id) + '_' + prevYear + '_' + String(prevMonth).padStart(2,'0')\n  }\n}];"
+      }
+    },
+    {
+      "id": "n5-build",
+      "name": "HTTP: DATEV Build",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$json.customer_id}}/datev/build",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",  "value": "application/json" },
+            { "name": "x-customer-id", "value": "={{$json.customer_id}}" },
+            { "name": "x-trace-id",    "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"year\": {{$json.year}},\n  \"month\": {{$json.month}},\n  \"delta_only\": false,\n  \"include_pdfs\": false\n}",
+        "options": {
+          "timeout": 120000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "n6-if-ok",
+      "name": "IF: Build OK und Belege vorhanden",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-ok",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            },
+            {
+              "id": "has-receipts",
+              "leftValue": "={{$json.data && $json.data.skipped !== true}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n7-send",
+      "name": "HTTP: DATEV Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 280],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$('Code: Vormonat berechnen').item.json.customer_id}}/datev/{{$json.data.datev_export_id}}/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",  "value": "application/json" },
+            { "name": "x-customer-id", "value": "={{$('Code: Vormonat berechnen').item.json.customer_id}}" },
+            { "name": "x-trace-id",    "value": "={{$('Code: Vormonat berechnen').item.json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "n8-if-error",
+      "name": "IF: Fehler → Error-Handler",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 520],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-error",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": false,
+              "operator": { "type": "boolean", "operation": "false" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n9-error-handler",
+      "name": "HTTP: WF-ERROR-HANDLER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook') + '/error-handler' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-trace-id",   "value": "={{$('Code: Vormonat berechnen').item.json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customerId\": \"{{$('Code: Vormonat berechnen').item.json.customer_id}}\",\n  \"stage\": \"M04\",\n  \"errorType\": \"EXPORT_FAILED\",\n  \"error\": \"{{ String(($json.error && $json.error.message) || 'DATEV export failed').slice(0,500) }}\",\n  \"traceId\": \"{{$('Code: Vormonat berechnen').item.json.trace_id}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n10-log-skip",
+      "name": "Set: Log Skip",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1680, 400],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"skipped\": true,\n  \"customer_id\": \"{{$('Code: Vormonat berechnen').item.json.customer_id}}\",\n  \"reason\": \"no_receipts_or_uncategorized\"\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cron: 5. des Monats 07:00": {
+      "main": [[{ "node": "HTTP: Kunden mit DATEV laden", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Kunden mit DATEV laden": {
+      "main": [[{ "node": "Split: Kunden", "type": "main", "index": 0 }]]
+    },
+    "Split: Kunden": {
+      "main": [[{ "node": "Code: Vormonat berechnen", "type": "main", "index": 0 }]]
+    },
+    "Code: Vormonat berechnen": {
+      "main": [[{ "node": "HTTP: DATEV Build", "type": "main", "index": 0 }]]
+    },
+    "HTTP: DATEV Build": {
+      "main": [[{ "node": "IF: Build OK und Belege vorhanden", "type": "main", "index": 0 }]]
+    },
+    "IF: Build OK und Belege vorhanden": {
+      "main": [
+        [{ "node": "HTTP: DATEV Send", "type": "main", "index": 0 }],
+        [{ "node": "IF: Fehler → Error-Handler", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF: Fehler → Error-Handler": {
+      "main": [
+        [{ "node": "Set: Log Skip", "type": "main", "index": 0 }],
+        [{ "node": "HTTP: WF-ERROR-HANDLER", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {}
+}

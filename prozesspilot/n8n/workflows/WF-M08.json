@@ -1,0 +1,182 @@
+{
+  "id": "wf-m08-000000000003-0003-000000000008",
+  "name": "WF-M08",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "n1-cron",
+      "name": "Schedule: 1. um 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 1 * *" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n2-list-customers",
+      "name": "HTTP: List Active Customers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/customers",
+        "qs": {
+          "active": "true",
+          "package": "standard,pro"
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "active",  "value": "true" },
+            { "name": "package", "value": "standard,pro" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "n3-split",
+      "name": "Split: Customers",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "n4-build",
+      "name": "HTTP: Backend build report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$json.id || $json.customer_id}}/reports/monthly/build",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-customer-id", "value": "={{$json.id || $json.customer_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_name\": \"{{$json.display_name || $json.company_name || $json.name || ''}}\"\n}",
+        "options": {
+          "timeout": 120000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 1, "waitBetweenRetries": 5000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n5-wait",
+      "name": "Wait: 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1200, 300],
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "n6-if-done",
+      "name": "IF: status=done",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            { "id": "is-done", "leftValue": "={{$json.data && $json.data.status}}", "rightValue": "done", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n7-deliver",
+      "name": "HTTP: Backend deliver report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$('Split: Customers').item.json.id || $('Split: Customers').item.json.customer_id}}/reports/monthly/deliver",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"period\": \"{{$json.data && $json.data.period}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n8-skip",
+      "name": "Set: Skipped",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1680, 400],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"skipped\": true,\n  \"customer_id\": \"{{$('Split: Customers').item.json.id || $('Split: Customers').item.json.customer_id}}\",\n  \"reason\": \"build_not_done\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n9-summary",
+      "name": "Set: Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1920, 300],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"processed\": {{$('Split: Customers').all().length}},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Schedule: 1. um 08:00": { "main": [[{ "node": "HTTP: List Active Customers", "type": "main", "index": 0 }]] },
+    "HTTP: List Active Customers": { "main": [[{ "node": "Split: Customers", "type": "main", "index": 0 }]] },
+    "Split: Customers": { "main": [[{ "node": "HTTP: Backend build report", "type": "main", "index": 0 }]] },
+    "HTTP: Backend build report": { "main": [[{ "node": "Wait: 5s", "type": "main", "index": 0 }]] },
+    "Wait: 5s": { "main": [[{ "node": "IF: status=done", "type": "main", "index": 0 }]] },
+    "IF: status=done": {
+      "main": [
+        [{ "node": "HTTP: Backend deliver report", "type": "main", "index": 0 }],
+        [{ "node": "Set: Skipped", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP: Backend deliver report": { "main": [[{ "node": "Set: Summary", "type": "main", "index": 0 }]] },
+    "Set: Skipped": { "main": [[{ "node": "Set: Summary", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {}
+}

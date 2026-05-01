@@ -1,0 +1,13 @@
+{
+  "raw_text": "EDEKA Supermarkt GmbH\nMusterstr. 1\n80000 München\nUSt-ID: DE123456789\nDatum: 28.04.2026\nBeleg-Nr: 2026-1042\nMilch 2L        2x 1.99  =  3.98\nBrot            1x 2.49  =  2.49\nNetto:           5.79\nMwSt 7%:         0.41\nBrutto:          6.20",
+  "expected_fields": {
+    "supplier_name": "EDEKA Supermarkt GmbH",
+    "supplier_vat_id": "DE123456789",
+    "document_number": "2026-1042",
+    "document_date": "2026-04-28",
+    "total_gross": 6.20,
+    "total_net": 5.79
+  },
+  "expected_status": "extracted",
+  "expected_confidence_range": [0.80, 1.00]
+}

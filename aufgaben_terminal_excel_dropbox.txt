@@ -1,0 +1,187 @@
+════════════════════════════════════════════════════════════════
+AUFGABEN: EXCEL/ONEDRIVE ADAPTER + DROPBOX ADAPTER
+════════════════════════════════════════════════════════════════
+
+Zwei Adapter-Stubs die vollständig implementiert werden müssen.
+Lies die bestehende Interface-Datei VOR dem Implementieren.
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Excel/OneDrive Adapter (M07 §9.3)
+════════════════════════════════════════════════════════════════
+
+Interface:   /backend/src/core/adapters/spreadsheet/adapter.interface.ts
+Stub-Datei:  /backend/src/core/adapters/spreadsheet/excel-onedrive.adapter.ts
+Spec:        /Modulkonzept/Konzeptentwicklung/modules/M07_Excel_Sheets_Export.md §9.3
+Vergleich:   /backend/src/core/adapters/spreadsheet/google-sheets.adapter.ts (als Referenz)
+
+LIES beide Dateien vollständig bevor du anfängst.
+
+IMPLEMENTIERUNG:
+
+Ersetze den Stub komplett mit einer echten MS Graph API Implementierung.
+
+1. npm install @microsoft/microsoft-graph-client @azure/identity --save
+   (im backend-Verzeichnis)
+
+2. Credential-Loading:
+   Ähnlich wie google-sheets.adapter.ts — lade OAuth-Credential aus customer_credentials
+   mit kind='msgraph_oauth' oder 'onedrive_oauth'.
+   Nutze @azure/identity ConfidentialClientApplication oder einfacher:
+   Plain fetch mit dem gespeicherten access_token + refresh via
+   POST https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token
+
+   Erstelle Hilfsfunktion loadMsGraphClient(ctx, customerId):
+   - Holt Credential aus DB (kind='msgraph_oauth')
+   - Refresh wenn nötig (expires_at < now + 5min)
+   - Gibt { accessToken, baseUrl: 'https://graph.microsoft.com/v1.0' } zurück
+
+3. ensureTabExists(ctx, customerId, sheetId, tab):
+   - GET /drives/me/items/{sheetId}/workbook/worksheets
+   - Prüfe ob worksheet mit name===tab existiert
+   - Falls nicht: POST /...worksheets mit { name: tab }
+   sheetId ist die OneDrive item-ID der Excel-Datei.
+
+4. ensureHeader(ctx, customerId, sheetId, tab, columns):
+   - GET /...worksheets/{tab}/range(address='A1:Z1')
+   - Prüfe ob erste Zeile die erwarteten Headers hat
+   - Falls leer: PUT/PATCH range A1 mit header-Werten
+   - Falls abweichend: throw HeaderConflictError (wie Google Sheets Adapter)
+
+5. findRowByReceiptId(ctx, customerId, sheetId, tab, receiptId):
+   - Prüfe spreadsheet_row_index Tabelle in DB zuerst (Cache)
+   - Falls nicht im Cache: GET range A:O für die gesamte Tabelle, suche in
+     Spalte O (Receipt-ID) nach receiptId
+   - Wenn gefunden: Cache in spreadsheet_row_index speichern, return { row_index }
+   - Wenn nicht: return null
+
+6. appendRow(ctx, customerId, sheetId, tab, receiptId, row):
+   - POST /...worksheets/{tab}/tables/{table-id}/rows/add
+     mit { values: [row] }
+   - Falls keine Tabelle existiert: fallback auf
+     POST /...worksheets/{tab}/range(address='A1')/insert
+   - Row-Index aus response ermitteln
+   - In spreadsheet_row_index cachen
+   - Return { row_index, url: oneDriveUrl }
+
+   oneDriveUrl = https://onedrive.live.com/edit.aspx?resid={sheetId}
+
+7. updateRow(ctx, customerId, sheetId, tab, receiptId, rowIndex, row):
+   - PATCH /...worksheets/{tab}/range(address='A{rowIndex}:{lastCol}{rowIndex}')
+   - Return { row_index: rowIndex, url: oneDriveUrl }
+
+ENV-Variablen (in .env.example ergänzen):
+  MSGRAPH_CLIENT_ID=...
+  MSGRAPH_CLIENT_SECRET=...
+  MSGRAPH_TENANT_ID=...
+
+NACH IMPLEMENTIERUNG: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+3. Erstelle Tests: /backend/src/core/adapters/spreadsheet/tests/excel-onedrive.adapter.test.ts
+   - Mock: fetch (nutze vi.spyOn(global, 'fetch'))
+   - Test ensureTabExists: tab existiert → kein POST
+   - Test ensureTabExists: tab fehlt → POST wird aufgerufen
+   - Test findRowByReceiptId: DB-Cache trifft → kein API-Call
+   - Test findRowByReceiptId: kein Cache → API-Scan → Cache-Write
+   - Test appendRow: row wird hinzugefügt, Cache aktualisiert
+   - Test updateRow: PATCH auf korrekten Range
+
+════════════════════════════════════════════════════════════════
+BLOCK B — Dropbox Archive Adapter (M02)
+════════════════════════════════════════════════════════════════
+
+Interface:   /backend/src/core/adapters/archive-storage/adapter.interface.ts
+Stub-Datei:  /backend/src/core/adapters/archive-storage/dropbox.adapter.ts
+Vergleich:   /backend/src/core/adapters/archive-storage/google-drive.adapter.ts (als Referenz)
+
+LIES beide Dateien vollständig.
+
+IMPLEMENTIERUNG:
+
+Ersetze den Stub mit Dropbox API v2 Implementierung.
+
+1. npm install dropbox --save
+   (im backend-Verzeichnis)
+
+2. Credential-Loading:
+   Erstelle /backend/src/core/adapters/archive-storage/dropbox-credentials.ts
+   analog zu drive-credentials.ts:
+   - Holt Credential aus customer_credentials (kind='dropbox_oauth')
+   - Dekryptiert mit pgcrypto (gleicher Mechanismus wie Google Drive)
+   - Gibt { accessToken, refreshToken?, accountId } zurück
+   - Refresh via POST https://api.dropboxapi.com/oauth2/token wenn nötig
+
+3. exists(path, customerId):
+   - POST https://api.dropboxapi.com/2/files/get_metadata
+     body: { path: path }
+   - Return true wenn 200, false wenn 409 (not_found)
+
+4. upload(input: UploadInput):
+   - POST https://content.dropboxapi.com/2/files/upload
+   - Header: Dropbox-API-Arg: { path, mode: 'overwrite', autorename: false }
+   - Body: file bytes
+   - Return { externalId: result.id, path: result.path_display, url: shareLink }
+   - Erstelle Share-Link: POST .../sharing/create_shared_link_with_settings
+
+5. delete(externalId, customerId):
+   - POST https://api.dropboxapi.com/2/files/delete_v2
+     body: { path: externalId }
+
+6. download(externalId, customerId):
+   - POST https://content.dropboxapi.com/2/files/download
+   - Header: Dropbox-API-Arg: { path: externalId }
+   - Return Buffer der heruntergeladenen Bytes
+
+Rate-Limit: Dropbox erlaubt 1000 Calls/Minute. Kein extra Throttling nötig.
+
+ENV in .env.example ergänzen:
+  DROPBOX_APP_KEY=...
+  DROPBOX_APP_SECRET=...
+
+NACH IMPLEMENTIERUNG: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+7. Tests: /backend/src/core/adapters/archive-storage/tests/dropbox.adapter.test.ts
+   - Mock: fetch
+   - Test exists: Datei vorhanden → true
+   - Test exists: 409 → false
+   - Test upload: Bytes → korrekte Headers + Body
+   - Test delete: path korrekt übergeben
+   - Test download: Buffer zurückgegeben
+
+════════════════════════════════════════════════════════════════
+BLOCK C — Build + tasks.ts
+════════════════════════════════════════════════════════════════
+
+Finaler Build:
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+Falls Tests laufen:
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm test
+
+tasks.ts: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Diese Aufgaben stehen nicht in tasks.ts (waren als Concept-Extras), daher:
+Füge am Ende der Phase-2-Sektion ZWEI neue Tasks ein:
+  {
+    id: 310,
+    text: 'Excel/OneDrive Adapter implementieren',
+    meta: 'MS Graph API · ensureTab · appendRow · Idempotenz-Cache · Tests',
+    priority: 'medium',
+    done: true,
+    phase: 'phase2',
+    category: 'Backend',
+  },
+  {
+    id: 311,
+    text: 'Dropbox Archive Adapter implementieren',
+    meta: 'Dropbox API v2 · upload · download · delete · OAuth-Refresh',
+    priority: 'medium',
+    done: true,
+    phase: 'phase2',
+    category: 'Backend',
+  },
+
+NICHT ANFASSEN:
+- google-sheets.adapter.ts (fertig, nur als Referenz lesen)
+- google-drive.adapter.ts (fertig, nur als Referenz lesen)
+- Alles unter /webapp/
+- /backend/migrations/

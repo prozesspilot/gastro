@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e6edf3; padding: 16px; font-size: 12px; }
+  h1 { font-size: 15px; font-weight: 700; color: #58a6ff; margin-bottom: 3px; }
+  .sub { font-size: 11px; color: #8892a4; margin-bottom: 14px; }
+
+  .phase { border-radius: 10px; margin-bottom: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); }
+  .phase-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
+  .phase-header:hover { filter: brightness(1.1); }
+  .phase-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; white-space: nowrap; }
+  .phase-title { flex: 1; font-weight: 600; font-size: 13px; }
+  .phase-weeks { font-size: 10px; color: #8892a4; }
+  .phase-goal { font-size: 10px; font-style: italic; margin-left: auto; color: #c9d1d9; }
+  .phase-body { padding: 0 14px 12px; display: none; }
+  .phase-body.open { display: block; }
+
+  /* Phase colors */
+  .p0 { background: rgba(88,166,255,0.05); }
+  .p0 .phase-header { background: rgba(88,166,255,0.1); }
+  .p0 .phase-tag { background: rgba(88,166,255,0.2); color: #58a6ff; }
+  .p1 { background: rgba(52,211,153,0.05); }
+  .p1 .phase-header { background: rgba(52,211,153,0.1); }
+  .p1 .phase-tag { background: rgba(52,211,153,0.2); color: #34d399; }
+  .p2 { background: rgba(167,139,250,0.05); }
+  .p2 .phase-header { background: rgba(167,139,250,0.1); }
+  .p2 .phase-tag { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .p3 { background: rgba(251,146,60,0.05); }
+  .p3 .phase-header { background: rgba(251,146,60,0.1); }
+  .p3 .phase-tag { background: rgba(251,146,60,0.2); color: #fb923c; }
+  .p4 { background: rgba(248,113,113,0.05); }
+  .p4 .phase-header { background: rgba(248,113,113,0.1); }
+  .p4 .phase-tag { background: rgba(248,113,113,0.2); color: #f87171; }
+
+  .modules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .module { border-radius: 6px; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.06); }
+  .module-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .module-id { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+  .module-name { font-size: 11px; font-weight: 600; }
+  .module-desc { font-size: 10px; color: #8892a4; }
+  .status { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; margin-left: auto; }
+  .s-done { background: rgba(52,211,153,0.15); color: #34d399; }
+  .s-partial { background: rgba(251,146,60,0.15); color: #fb923c; }
+  .s-missing { background: rgba(248,113,113,0.15); color: #f87171; }
+  .s-planned { background: rgba(136,146,164,0.15); color: #8892a4; }
+
+  .deliverables { margin-top: 10px; }
+  .del { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .del:last-child { border-bottom: none; }
+  .del-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 8px; }
+  .dd-done { background: rgba(52,211,153,0.2); color: #34d399; }
+  .dd-part { background: rgba(251,146,60,0.2); color: #fb923c; }
+  .dd-miss { background: rgba(248,113,113,0.2); color: #f87171; }
+  .del-label { flex: 1; color: #c9d1d9; font-size: 11px; }
+  .del-note { font-size: 10px; color: #8892a4; }
+
+  .progress-outer { background: #161b22; border-radius: 4px; height: 4px; margin-top: 6px; overflow: hidden; }
+  .progress-inner { height: 100%; border-radius: 4px; }
+
+  .legend { display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #8892a4; }
+  .leg-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .arrow { text-align: center; color: #58a6ff; font-size: 18px; margin: 4px 0; }
+  .critical-path { background: rgba(88,166,255,0.05); border: 1px solid rgba(88,166,255,0.2); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 11px; }
+  .cp-title { font-size: 10px; font-weight: 700; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .cp-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; color: #c9d1d9; }
+  .cp-node { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+  .cn-done { background: rgba(52,211,153,0.2); color: #34d399; }
+  .cn-miss { background: rgba(248,113,113,0.2); color: #f87171; }
+  .cp-arrow { color: #58a6ff; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>ProzessPilot — Gesamtkonzept (16 Wochen)</h1>
+<p class="sub">Klicke auf eine Phase um Details zu sehen · Grün = fertig · Orange = teilweise · Rot = fehlt</p>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#34d399"></div> Fertig</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#fb923c"></div> Teilweise / Stub</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#f87171"></div> Fehlt</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#8892a4"></div> Geplant (spätere Phase)</div>
+</div>
+
+<div class="critical-path">
+  <div class="cp-title">🔴 Kritischer Pfad (MVP)</div>
+  <div class="cp-row">
+    <span class="cp-node cn-done">Phase 0</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-done">M10</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-done">M01</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-done">M02</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-done">M07</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-miss">WF-MASTER vollst.</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-miss">E2E-Test</span><span class="cp-arrow">→</span>
+    <span class="cp-node cn-miss">★ MVP fertig</span>
+  </div>
+</div>
+
+<!-- PHASE 0 -->
+<div class="phase p0">
+  <div class="phase-header" onclick="toggle('p0')">
+    <span class="phase-tag">PHASE 0</span>
+    <span class="phase-title">Foundation</span>
+    <span class="phase-weeks">Woche 1–2</span>
+    <span class="phase-goal">Stabiles Fundament · ~85% fertig</span>
+    <span style="color:#34d399;margin-left:8px">▼</span>
+  </div>
+  <div class="phase-body open" id="p0">
+    <div class="progress-outer"><div class="progress-inner" style="width:85%;background:#34d399"></div></div>
+    <div class="deliverables">
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D1 Repo-Setup, Docker-Compose, Backend-Skeleton</span></div>
+      <div class="del"><div class="del-dot dd-part">~</div><span class="del-label">D2 PostgreSQL Migrations + RLS</span><span class="del-note">Nur 1 von ~10 Migrations vorhanden</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D3 HMAC-Auth + Validierungs-Middleware</span></div>
+      <div class="del"><div class="del-dot dd-part">~</div><span class="del-label">D4 Receipt + CustomerProfile Zod-Schemas</span><span class="del-note">Schemas existieren, nicht 100% Konzept-konform</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D5 Customer-Profile-API (CRUD)</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D6 Event-Bus (Redis Streams)</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D7 n8n-Setup + WF-MASTER Skeleton</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D8 Storage-Service (MinIO)</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D9 Routing-Service (/routing/plan)</span></div>
+      <div class="del"><div class="del-dot dd-done">✓</div><span class="del-label">D10 Logging/Tracing (Pino + Trace-IDs)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 1 -->
+<div class="phase p1">
+  <div class="phase-header" onclick="toggle('p1')">
+    <span class="phase-tag">PHASE 1</span>
+    <span class="phase-title">MVP Basic ★ Erster Kunde verkaufbar</span>
+    <span class="phase-weeks">Woche 3–6</span>
+    <span class="phase-goal">~75% fertig</span>
+    <span style="color:#34d399;margin-left:8px">▼</span>
+  </div>
+  <div class="phase-body open" id="p1">
+    <div class="progress-outer"><div class="progress-inner" style="width:75%;background:#34d399"></div></div>
+    <div class="modules-grid">
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(52,211,153,0.2);color:#34d399">M10</span><span class="module-name">WhatsApp Eingang</span><span class="status s-done">✓ Fertig</span></div>
+        <div class="module-desc">verify, resolve, media, send-template — alle 4 Handler + Tests</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(52,211,153,0.2);color:#34d399">M01</span><span class="module-name">Belegerfassung & OCR</span><span class="status s-done">✓ Fertig</span></div>
+        <div class="module-desc">Field-Extractor, Validator, Claude-Fallback, Google Vision</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(52,211,153,0.2);color:#34d399">M02</span><span class="module-name">Archivierung (GoBD)</span><span class="status s-done">✓ Fertig</span></div>
+        <div class="module-desc">Google Drive Adapter, Image→PDF, Path-Template, Kollision</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(52,211,153,0.2);color:#34d399">M07</span><span class="module-name">Google Sheets Export</span><span class="status s-done">✓ Fertig</span></div>
+        <div class="module-desc">16-Spalten-Schema, Row-Builder, Tab-Rotation, Idempotenz</div>
+      </div>
+      <div class="module" style="grid-column:1/-1">
+        <div class="module-head"><span class="module-id" style="background:rgba(251,146,60,0.2);color:#fb923c">WF</span><span class="module-name">WF-MASTER-RECEIPT + E2E-Test</span><span class="status s-partial">⚠ Teilweise</span></div>
+        <div class="module-desc">WF-MASTER existiert — aber M03-Step fehlt, E2E-Testfile fehlt, WhatsApp-Konfiguration offen</div>
+      </div>
+      <div class="module" style="grid-column:1/-1">
+        <div class="module-head"><span class="module-id" style="background:rgba(251,146,60,0.2);color:#fb923c">APP</span><span class="module-name">Web-App Onboarding (Operator)</span><span class="status s-partial">⚠ Teilweise</span></div>
+        <div class="module-desc">Basis-UI fertig. Fehlt: echter Onboarding-Flow, Credentials-Formulare, ReceiptDetailPage</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 2 -->
+<div class="phase p2">
+  <div class="phase-header" onclick="toggle('p2')">
+    <span class="phase-tag">PHASE 2</span>
+    <span class="phase-title">Standard-Erweiterungen ★ Standard-Paket verkaufbar</span>
+    <span class="phase-weeks">Woche 7–10</span>
+    <span class="phase-goal">~20% fertig</span>
+    <span style="color:#a78bfa;margin-left:8px">▼</span>
+  </div>
+  <div class="phase-body open" id="p2">
+    <div class="progress-outer"><div class="progress-inner" style="width:20%;background:#a78bfa"></div></div>
+    <div class="modules-grid">
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(52,211,153,0.2);color:#34d399">M03</span><span class="module-name">KI-Kategorisierung</span><span class="status s-done">✓ Fertig</span></div>
+        <div class="module-desc">Claude Tool-Use, SKR-Mapping, Override, Stammdaten, Cache — neu in dieser Session</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(248,113,113,0.2);color:#f87171">M05</span><span class="module-name">Lexoffice-Integration</span><span class="status s-missing">✗ Fehlt</span></div>
+        <div class="module-desc">Booking-Adapter, Voucher-Builder, Rate-Limiter — komplett offen</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(248,113,113,0.2);color:#f87171">M06</span><span class="module-name">sevDesk-Integration</span><span class="status s-missing">✗ Fehlt</span></div>
+        <div class="module-desc">Baut auf M05-Adapter-Pattern auf</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(248,113,113,0.2);color:#f87171">M08</span><span class="module-name">Monatsreporting</span><span class="status s-missing">✗ Fehlt</span></div>
+        <div class="module-desc">Aggregation, PDF-Report, Mail/WhatsApp-Versand, Cron-Workflow</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(248,113,113,0.2);color:#f87171">HOOK</span><span class="module-name">Hook-System (Backend)</span><span class="status s-partial">⚠ Stub</span></div>
+        <div class="module-desc">Interface existiert, gibt Receipt unverändert zurück — keine DB-Abfrage, kein HTTP-Webhook</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(248,113,113,0.2);color:#f87171">APP</span><span class="module-name">Web-App: Beleg-Übersicht + Re-Run</span><span class="status s-missing">✗ Fehlt</span></div>
+        <div class="module-desc">ReceiptDetailPage, Kategorie-Ansicht, manueller Re-Run-Button</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 3 -->
+<div class="phase p3">
+  <div class="phase-header" onclick="toggle('p3')">
+    <span class="phase-tag">PHASE 3</span>
+    <span class="phase-title">Pro-Features ★ Pro-Paket verkaufbar</span>
+    <span class="phase-weeks">Woche 11–14</span>
+    <span class="phase-goal">0% — noch nicht begonnen</span>
+    <span style="color:#fb923c;margin-left:8px">►</span>
+  </div>
+  <div class="phase-body" id="p3">
+    <div class="progress-outer"><div class="progress-inner" style="width:0%;background:#fb923c"></div></div>
+    <div class="modules-grid">
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(136,146,164,0.2);color:#8892a4">M04</span><span class="module-name">DATEV-Export</span><span class="status s-planned">— Geplant</span></div>
+        <div class="module-desc">DATEV-CSV Format v2, monatlich, mit allen Beleg-PDFs</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(136,146,164,0.2);color:#8892a4">M09</span><span class="module-name">Lieferanten-Kommunikation</span><span class="status s-planned">— Geplant</span></div>
+        <div class="module-desc">Automatische E-Mail-Anfragen bei unklaren Belegen</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(136,146,164,0.2);color:#8892a4">PLG</span><span class="module-name">Plugin-System</span><span class="status s-planned">— Geplant</span></div>
+        <div class="module-desc">Versionierte Custom-Module, Plugin-Loader, Manifest</div>
+      </div>
+      <div class="module">
+        <div class="module-head"><span class="module-id" style="background:rgba(136,146,164,0.2);color:#8892a4">APP</span><span class="module-name">Web-App: Hook-Sandbox</span><span class="status s-planned">— Geplant</span></div>
+        <div class="module-desc">Sicheres Testen von Custom-Hooks vor Aktivierung</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 4 -->
+<div class="phase p4">
+  <div class="phase-header" onclick="toggle('p4')">
+    <span class="phase-tag">PHASE 4</span>
+    <span class="phase-title">Hardening & Skalierung ★ Production-Ready (50+ Kunden)</span>
+    <span class="phase-weeks">Woche 15–16</span>
+    <span class="phase-goal">0% — noch nicht begonnen</span>
+    <span style="color:#f87171;margin-left:8px">►</span>
+  </div>
+  <div class="phase-body" id="p4">
+    <div class="progress-outer"><div class="progress-inner" style="width:0%;background:#f87171"></div></div>
+    <div class="deliverables">
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Load-Test (Locust): 1000 Belege/h</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Sentry + Grafana + Alert-Routing</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Backup-Strategie (Postgres + MinIO)</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Disaster-Recovery-Drill</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Security-Review (HMAC, Encryption)</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">DSGVO Lösch-Workflow (Customer-Offboarding)</span></div>
+      <div class="del"><div class="del-dot dd-miss">✗</div><span class="del-label">Operator-Runbook (Dokumentation)</span></div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:12px;background:#0d1117;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px 12px;">
+  <div style="font-size:11px;font-weight:700;color:#c9d1d9;margin-bottom:6px;">📊 Gesamtfortschritt nach Phase</div>
+  <div style="display:grid;grid-template-columns:60px 1fr 40px;gap:4px;align-items:center;font-size:10px;">
+    <span style="color:#8892a4">Phase 0</span><div class="progress-outer" style="margin:0"><div class="progress-inner" style="width:85%;background:#34d399"></div></div><span style="color:#34d399;text-align:right">85%</span>
+    <span style="color:#8892a4">Phase 1</span><div class="progress-outer" style="margin:0"><div class="progress-inner" style="width:75%;background:#34d399"></div></div><span style="color:#34d399;text-align:right">75%</span>
+    <span style="color:#8892a4">Phase 2</span><div class="progress-outer" style="margin:0"><div class="progress-inner" style="width:20%;background:#a78bfa"></div></div><span style="color:#a78bfa;text-align:right">20%</span>
+    <span style="color:#8892a4">Phase 3</span><div class="progress-outer" style="margin:0"><div class="progress-inner" style="width:0%;background:#fb923c"></div></div><span style="color:#8892a4;text-align:right">0%</span>
+    <span style="color:#8892a4">Phase 4</span><div class="progress-outer" style="margin:0"><div class="progress-inner" style="width:0%;background:#f87171"></div></div><span style="color:#8892a4;text-align:right">0%</span>
+  </div>
+  <div style="margin-top:8px;font-size:10px;color:#8892a4">Nächstes Ziel: <span style="color:#34d399">Phase 1 auf 100% bringen</span> → MVP fertig → erster Kunde verkaufbar</div>
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  body.style.display = isOpen ? 'none' : 'block';
+}
+// Init: p3 und p4 collapsed
+document.getElementById('p3').style.display = 'none';
+document.getElementById('p4').style.display = 'none';
+</script>
+</body>
+</html>

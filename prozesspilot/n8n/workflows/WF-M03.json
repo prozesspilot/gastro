@@ -1,0 +1,128 @@
+{
+  "id": "wf-m03-000000000003-0003-000000000003",
+  "name": "WF-M03",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "n1-trigger",
+      "name": "Trigger: Sub-Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "events": "workflow",
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "n2-assert",
+      "name": "Function: Assert Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// M03 entry contract — caller (WF-MASTER-RECEIPT) must hand us:\n//   { trace_id, idempotency_key, receipt:{ receipt_id, customer_id, status, ... }, customer_profile }\nconst input    = $json;\nconst receipt  = input.receipt || {};\nconst profile  = input.customer_profile || {};\nif (!receipt.receipt_id || !receipt.customer_id) {\n  throw new Error('M03 input invalid — missing receipt.receipt_id / customer_id');\n}\nif (receipt.status !== 'extracted') {\n  // Spec §3: M03 akzeptiert nur 'extracted'.\n  return [{\n    json: {\n      ok: false,\n      module: 'M03',\n      skipped: true,\n      reason: 'wrong_status',\n      status_in: receipt.status\n    }\n  }];\n}\nreturn [{\n  json: {\n    receipt,\n    customer_profile: profile,\n    trace_id:        input.trace_id || ('trc_' + Math.random().toString(36).slice(2, 12)),\n    idempotency_key: input.idempotency_key || ('ik_M03_' + receipt.receipt_id)\n  }\n}];"
+      }
+    },
+    {
+      "id": "n3-categorize",
+      "name": "HTTP: Backend Categorize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$json.receipt.receipt_id}}/categorize",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "={{$json.idempotency_key}}" },
+            { "name": "x-customer-id",   "value": "={{$json.receipt.customer_id}}" },
+            { "name": "x-trace-id",      "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_profile\": {{JSON.stringify($json.customer_profile)}},\n  \"trace_id\":         \"{{$json.trace_id}}\"\n}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 2, "waitBetweenRetries": 2000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n4-if-ok",
+      "name": "IF: response.ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-ok",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n5-build-ok",
+      "name": "Set: Build OK Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1180, 200],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\":     true,\n  \"module\": \"M03\",\n  \"receipt_patch\": {{JSON.stringify(($json.data && $json.data.receipt_patch) || {})}},\n  \"events_to_emit\": {{JSON.stringify(($json.data && $json.data.events_to_emit) || [])}}\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n6-build-err",
+      "name": "Set: Build Error Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1180, 400],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\":     false,\n  \"module\": \"M03\",\n  \"error\": {\n    \"code\":    \"{{ ($json.error && $json.error.code)    || 'EXTERNAL_API_FAILED' }}\",\n    \"message\": \"{{ ($json.error && $json.error.message) || 'M03 categorize failed' }}\",\n    \"details\": {{JSON.stringify(($json.error && $json.error.details) || {})}}\n  }\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Trigger: Sub-Workflow": {
+      "main": [[{ "node": "Function: Assert Status", "type": "main", "index": 0 }]]
+    },
+    "Function: Assert Status": {
+      "main": [[{ "node": "HTTP: Backend Categorize", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Backend Categorize": {
+      "main": [[{ "node": "IF: response.ok", "type": "main", "index": 0 }]]
+    },
+    "IF: response.ok": {
+      "main": [
+        [{ "node": "Set: Build OK Result",    "type": "main", "index": 0 }],
+        [{ "node": "Set: Build Error Result", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {}
+}

@@ -1,0 +1,8 @@
+{
+  "name": "prozesspilot-load-tests",
+  "scripts": {
+    "test:upload":  "k6 run scenarios/upload-receipts.js",
+    "test:api":     "k6 run scenarios/api-endpoints.js",
+    "test:stress":  "k6 run --vus 200 --duration 60s scenarios/upload-receipts.js"
+  }
+}

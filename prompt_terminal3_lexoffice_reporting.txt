@@ -1,0 +1,307 @@
+Du bist ein Senior TypeScript/Node.js Engineer und arbeitest am Projekt ProzessPilot — ein multi-tenant Belegverarbeitungs-System für Steuerberater.
+
+STACK: Fastify + TypeScript + Zod · PostgreSQL mit pgcrypto · n8n Workflows · HMAC-SHA256 Auth
+
+ARBEITSVERZEICHNIS: Du bist in prozesspilot/ — das Monorepo-Root.
+
+BEVOR DU ANFÄNGST: Lies folgende Konzept-Dateien komplett durch:
+- Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md
+- Modulkonzept/Konzeptentwicklung/modules/M08_Monatsreporting.md
+- backend/src/modules/ (Struktur der bereits vorhandenen Module anschauen — M03, M04 als Vorlage nutzen)
+- backend/src/core/adapters/ (falls vorhanden)
+- backend/migrations/ (alle vorhandenen Migrationen lesen — 006_lexoffice.sql und 007_monthly_reports.sql sollten bereits da sein)
+
+================================================================================
+AUFGABE 1 — M05 LEXOFFICE: ADAPTER + CLIENT (Priorität: KRITISCH)
+================================================================================
+
+Erstelle die vollständige Lexoffice-Integration unter:
+  backend/src/core/adapters/booking/lexoffice/
+
+Dateien:
+  lexoffice.client.ts
+  auth.ts
+  voucher.builder.ts
+  category.mapper.ts
+  tests/lexoffice.client.test.ts
+
+lexoffice.client.ts muss:
+- Auth via API-Key (aus customer_credentials Tabelle, verschlüsselt) — kein OAuth2 nötig in Phase 2
+- Basis-URL aus ENV: LEXOFFICE_API_BASE=https://api.lexoffice.io
+- Timeout aus ENV: LEXOFFICE_DEFAULT_TIMEOUT_MS=15000
+- Rate-Limiter: max. 2 Requests/Sekunde pro Mandant (Token-Bucket, in-memory für Phase 2, kein Redis)
+- Retry: 3x exponential bei 5xx oder 429 (Retry-After-Header beachten)
+- Methoden:
+    createVoucher(payload: LexofficeVoucher): Promise<{ id: string }>
+    uploadVoucherFile(voucherId: string, fileBytes: Buffer, fileName: string): Promise<void>
+    getCategories(): Promise<LexofficeCategory[]>
+    testConnection(): Promise<{ ok: boolean; organizationName?: string }>
+
+auth.ts:
+- getApiKey(customerId: string): Promise<string>
+  → liest aus customer_credentials Tabelle WHERE customer_id = ? AND kind = 'lexoffice_api_key'
+  → entschlüsselt mit pgcrypto (oder Backend-eigenem decrypt-Util — schaue wie andere Credentials gespeichert sind)
+
+voucher.builder.ts muss exakt die Funktion buildLexofficeVoucher aus dem Konzept M05 §8 implementieren:
+- type immer 'expense' für eingehende Rechnungen
+- voucherNumber aus extracted_data.invoice_number
+- voucherDate aus extracted_data.invoice_date (Format YYYY-MM-DD)
+- totalGrossAmount aus extracted_data.total_amount
+- totalTaxAmount aus extracted_data.tax_amount
+- taxType: 'gross'
+- voucherItems[0].categoryId: aus category.mapper.ts ermitteln
+- memo: "ProzessPilot Receipt {receipt_id}"
+- useCollectiveContact: true (Sammel-Kreditor — Kontaktauflösung ist Phase 3)
+
+category.mapper.ts:
+- mapSkrToLexofficeCategoryId(skrKonto: string, tenantId: string): Promise<string>
+  → liest aus lexoffice_category_map Tabelle
+  → Fallback: hardcoded default Lexoffice-Kategorie-ID für 'Sonstiges'
+- syncCategoriesFromLexoffice(tenantId: string, customerId: string): Promise<void>
+  → GET /v1/categories von Lexoffice API
+  → Schreibt in lexoffice_category_map (upsert)
+
+Typen (erstelle backend/src/core/adapters/booking/lexoffice/types.ts):
+  interface LexofficeVoucher {
+    type: 'expense';
+    voucherNumber?: string;
+    voucherDate: string;
+    totalGrossAmount: number;
+    totalTaxAmount: number;
+    taxType: 'gross' | 'net';
+    useCollectiveContact: boolean;
+    contactId?: string;
+    voucherItems: LexofficeVoucherItem[];
+    memo?: string;
+  }
+  interface LexofficeVoucherItem {
+    amount: number;
+    taxAmount: number;
+    taxRatePercent: number;
+    categoryId: string;
+  }
+  interface LexofficeCategory {
+    id: string;
+    name: string;
+    type: string;
+  }
+
+================================================================================
+AUFGABE 2 — M05 LEXOFFICE: BACKEND-MODUL (Priorität: KRITISCH)
+================================================================================
+
+Erstelle das Modul unter backend/src/modules/m05-lexoffice/ nach diesem Schema:
+  routes.ts
+  handlers/push.handler.ts
+  services/voucher-builder.ts  (importiert aus core/adapters/booking/lexoffice/)
+  services/contact-resolver.ts
+  services/category-mapper.ts  (importiert aus core/adapters/booking/lexoffice/)
+  tests/push.handler.test.ts
+
+routes.ts — registriere folgende Endpoints (alle mit HMAC-Auth-Middleware):
+  POST /api/v1/receipts/:receiptId/exports/lexoffice
+    → push.handler.ts aufrufen
+    → Response: { ok: true, external_id, external_url, pushed_at }
+
+  GET /api/v1/customers/:customerId/exports/lexoffice
+    → Liste alle Lexoffice-Exporte dieses Kunden (aus lexoffice_exports Tabelle)
+
+  POST /api/v1/integrations/lexoffice/test
+    → Body: { customerId }
+    → Ruft lexofficeClient.testConnection() auf
+    → Response: { ok: boolean, organizationName? }
+
+  POST /api/v1/integrations/lexoffice/sync-categories
+    → Body: { customerId }
+    → Ruft syncCategoriesFromLexoffice() auf
+
+push.handler.ts muss exakt den Flow aus Konzept M05 §7 implementieren:
+1. Receipt aus DB laden, Status prüfen: muss 'archived' oder 'categorized' sein
+2. Idempotenz: prüfen ob bereits ein Export mit target='lexoffice' und status='pushed' existiert → wenn ja, existing zurückgeben
+3. buildLexofficeVoucher() aufrufen
+4. Hook before_export.lexoffice feuern (über hook-runner.ts)
+5. createVoucher() aufrufen
+6. PDF-Anhang: erst archive_path versuchen, dann original_path als Fallback
+7. uploadVoucherFile() aufrufen
+8. Receipt updaten: exports Array um neuen Eintrag ergänzen, status = 'exported'
+9. Hook after_export.lexoffice feuern
+10. Eintrag in lexoffice_exports Tabelle schreiben
+11. Response zurückgeben
+
+Fehlerbehandlung laut Konzept M05 §12:
+- 401/403 → Operator-Alert (erstmal: Error-Log + response mit klarem Fehlercode)
+- 429 → Retry mit Retry-After
+- 422 → receipt status = requires_review, requires_review_reason setzen
+- Duplicate → requires_review mit reason 'DUPLICATE_AT_TARGET'
+
+tests/push.handler.test.ts:
+- Erfolg: Voucher erstellt + Anhang hochgeladen + Receipt auf 'exported'
+- Idempotenz: zweiter Push → kein neuer Voucher, existing zurückgegeben
+- 422 von Lexoffice → receipt auf requires_review
+- customer_profile hat M05 nicht aktiviert → 400 Fehler
+
+Registriere die Routes in backend/src/app.ts.
+
+================================================================================
+AUFGABE 3 — WF-M05 n8n Workflow (Priorität: HOCH)
+================================================================================
+
+Erstelle n8n/workflows/WF-M05.json als vollständigen n8n-Workflow laut Konzept M05 §6:
+
+Nodes:
+1. Execute Workflow Trigger (wird von WF-MASTER-RECEIPT aufgerufen)
+2. Code Node: assert_status — prüft dass receipt.status in ['archived', 'categorized']
+3. HTTP Request: POST /api/v1/receipts/{receiptId}/exports/lexoffice
+4. IF: ok === true
+5. Set Node: Build Result (erfolgreiche Antwort strukturieren)
+6. Respond to Workflow
+
+Fehler-Pfad:
+- IF ok === false: → Respond mit error Payload → WF-MASTER-RECEIPT handelt Fehler
+
+Baue WF-M05 in das gleiche JSON-Format wie die anderen Workflows (schaue WF-M03 oder WF-M04 als Vorlage).
+
+Ergänze WF-MASTER-RECEIPT.json:
+- Nach dem M02-Archivierungs-Step: IF customer_profile.enabled_modules.m05_lexoffice === true
+  → Execute Workflow: WF-M05 aufrufen
+  → Bei Fehler: nicht den ganzen Master-Workflow stoppen, nur WF-ERROR-HANDLER benachrichtigen
+
+================================================================================
+AUFGABE 4 — M08 MONATSREPORTING: AGGREGATIONEN + PDF (Priorität: HOCH)
+================================================================================
+
+Erstelle das Modul unter backend/src/modules/m08-reporting/ laut Konzept M08:
+
+  routes.ts
+  handlers/build.handler.ts
+  handlers/deliver.handler.ts
+  services/aggregator.ts
+  services/pdf-renderer.ts
+  services/chart-builder.ts
+  services/delivery-dispatcher.ts
+  templates/default_de.html    (HTML-Template, kein Handlebars — einfaches String-Template mit ${variable})
+  tests/aggregator.test.ts
+
+aggregator.ts — implementiere computeMonthlyAggregates(customerId, dateFrom, dateTo):
+Führe exakt die SQL-Queries aus Konzept M08 §8 aus:
+  1. Totals: COUNT, SUM gross, SUM net
+  2. By Category: GROUP BY category, ORDER BY gross_sum DESC
+  3. Top Suppliers: GROUP BY supplier_name, LIMIT 10, ORDER BY gross_sum DESC
+  4. Vergleich Vormonat: selbe Queries für (year, month-1)
+  5. Anomalies: Belege > 1000 EUR, neue Lieferanten (nicht im Vormonat), fehlende Kategorisierung
+  Return-Typ: MonthlyAggregates { totals, by_category[], by_supplier[], comparison, anomalies[] }
+
+WICHTIG: Die Daten liegen in receipts.extracted_data (JSONB). Felder:
+  extracted_data->>'total_amount' für Brutto
+  extracted_data->>'invoice_date' für Datum
+  categorization->>'category_name' für Kategorie (als JSONB-Spalte)
+  Passe die Queries an das tatsächliche Schema an — lies die Migrations-Dateien!
+
+pdf-renderer.ts:
+- Nutze puppeteer oder playwright (prüfe zuerst: ist puppeteer schon installiert? → npm list puppeteer)
+- Falls nicht: npm install puppeteer --save (nicht global)
+- Methode: fromHtml(html: string): Promise<Buffer>
+  → Startet headless browser, lädt HTML, exportiert als PDF (A4, margin 20mm)
+- Fallback falls puppeteer nicht installierbar: einfaches PDF mit pdfkit (npm install pdfkit)
+
+chart-builder.ts:
+- Nutze chartjs-node-canvas (prüfe ob installiert, sonst: npm install chartjs-node-canvas)
+- Methode: buildCategoryBarChart(data: CategoryData[]): Promise<string> (base64 PNG)
+- Chart: horizontaler Balkendiagramm, Kategorien auf Y-Achse, Summen auf X-Achse
+
+templates/default_de.html:
+Erstelle ein sauberes HTML-Template mit:
+  - Kopf: ProzessPilot Logo (Text), Kundenname, Berichtszeitraum
+  - KPI-Karten: Gesamt-Brutto, Anzahl Belege, größte Einzelausgabe, Veränderung zum Vormonat
+  - Balkendiagramm: img Tag mit ${categoryChartBase64}
+  - Tabelle: Top 10 Lieferanten (Name, Anzahl, Summe)
+  - Tabelle: Auffälligkeiten (Belege > 1000 EUR, neue Lieferanten)
+  - Fußzeile: Erstellt am ${date} von ProzessPilot
+
+build.handler.ts:
+POST /api/v1/customers/:customerId/reports/monthly/build
+  Body: { year: number, month: number }
+  1. CustomerProfile laden, prüfen ob M08 aktiviert
+  2. computeMonthlyAggregates() aufrufen
+  3. Hook before_report.monthly feuern
+  4. buildCategoryBarChart() für das Diagramm
+  5. HTML-Template befüllen
+  6. fromHtml() → PDF-Buffer
+  7. PDF in MinIO/Storage speichern (objectKey: {customerId}/reports/{year}-{month}/monthly.pdf)
+  8. In reports Tabelle speichern
+  9. Hook after_report.monthly feuern
+  Return: { report_id, period, totals, pdf_object_key }
+
+deliver.handler.ts:
+POST /api/v1/customers/:customerId/reports/:reportId/deliver
+  1. Report aus DB laden
+  2. CustomerProfile laden → notification-Einstellungen
+  3. Delivery-Dispatcher aufrufen für jeden konfigurierten Kanal
+  4. In report_deliveries Tabelle schreiben
+
+delivery-dispatcher.ts:
+  dispatchEmail(report, recipient, pdfBuffer): Promise<void>
+    → Nutze nodemailer (prüfe ob installiert, sonst npm install nodemailer)
+    → SMTP aus ENV: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+    → Betreff: "Ihr Monatsbericht {month}/{year} — ProzessPilot"
+    → Body: kurze Textzusammenfassung, PDF als Anhang
+  dispatchWhatsApp(report, phoneNumber): Promise<void>
+    → Nutze den bestehenden WhatsApp-Service aus M07 (schaue wie M07 implementiert ist)
+    → Nachricht: "Ihr Monatsbericht für {month}/{year} ist fertig. Belege: {count}, Gesamt: {sum}€"
+
+routes.ts — registriere:
+  POST /api/v1/customers/:customerId/reports/monthly/build
+  POST /api/v1/customers/:customerId/reports/:reportId/deliver
+  GET /api/v1/customers/:customerId/reports (Liste aller Berichte)
+  GET /api/v1/customers/:customerId/reports/:reportId/download (PDF herunterladen)
+
+tests/aggregator.test.ts:
+- Erstelle Fixture-Daten: 10 Test-Receipts in verschiedenen Kategorien
+- Prüfe totals.receipts_count === 10
+- Prüfe by_category ist sortiert nach gross_sum DESC
+- Prüfe Vormonats-Vergleich gibt korrekten Prozentwert
+- Prüfe Anomalie-Erkennung bei Beleg > 1000 EUR
+
+Registriere die Routes in backend/src/app.ts.
+
+================================================================================
+AUFGABE 5 — WF-M08 n8n Cron-Workflow (Priorität: MITTEL)
+================================================================================
+
+Erstelle n8n/workflows/WF-M08.json laut Konzept M08 §6:
+
+Nodes:
+1. Cron Trigger: "0 8 1 * *" (1. des Monats, 08:00 Uhr)
+2. HTTP Request: GET /api/v1/customers?modules=m08_reporting (alle Kunden mit M08 aktiv)
+3. Loop Over Items: für jeden Kunden
+4.   Code: berechne vorherigen Monat (year/month)
+5.   HTTP Request: POST /api/v1/customers/{id}/reports/monthly/build
+6.   IF: ok === true
+7.   HTTP Request: POST /api/v1/customers/{id}/reports/{report_id}/deliver
+8.   IF: Fehler → HTTP Request an WF-ERROR-HANDLER
+9. End Loop
+
+Gleicher JSON-Aufbau wie die anderen Workflows.
+
+================================================================================
+AUFGABE 6 — MIGRATIONEN ERGÄNZEN FALLS NÖTIG
+================================================================================
+
+Prüfe ob folgende Tabellen bereits existieren (aus 007_monthly_reports.sql und 006_lexoffice.sql):
+- reports (laut Konzept M08 §10: report_id TEXT PK, customer_id, kind, period_year, period_month, totals JSONB, pdf_object_key, created_at)
+- report_deliveries (delivery_id, report_id FK, channel, recipient, status, delivered_at, external_id, error JSONB)
+
+Falls die Tabellen aus der vorherigen Migration anders heißen oder Spalten fehlen:
+Erstelle 010_reports_fix.sql mit den fehlenden ALTER TABLE oder CREATE TABLE Statements.
+
+================================================================================
+WICHTIGE REGELN
+================================================================================
+
+- IMMER zuerst die vorhandenen Migrations-Dateien lesen bevor du neue schreibst
+- IMMER prüfen ob npm-Pakete schon installiert sind (npm list <paket>) bevor du installierst
+- Alle Endpoints mit HMAC-Auth-Middleware (schaue wie bestehende Routes das machen)
+- TypeScript strict mode — keine any-Typen
+- Nach jeder Aufgabe: npm run build im backend/ Verzeichnis + Fehler fixen
+- FANGE MIT AUFGABE 1 (Lexoffice-Client) AN — Aufgabe 2 hängt davon ab
+- Baue M08 so, dass es ohne echtes SMTP/WhatsApp läuft (Umgebungsvariablen als Feature-Flags: SMTP_ENABLED=false überspringt Mail-Versand)

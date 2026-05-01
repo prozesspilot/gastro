@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProzessPilot – Entwicklungsfortschritt</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', Arial, sans-serif; font-size: 10.5pt; color: #1a1a2e; background: #f4f6fb; line-height: 1.6; }
+
+  /* TOP HEADER */
+  .top-bar {
+    background: #1a1a2e;
+    color: white;
+    padding: 14px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  .logo { font-size: 18pt; font-weight: 700; }
+  .logo span { color: #4d9fff; }
+  .top-meta { font-size: 8.5pt; color: rgba(255,255,255,0.55); text-align: right; line-height: 1.8; }
+
+  /* TAB NAV */
+  .tab-nav {
+    background: white;
+    border-bottom: 2px solid #e8eaf0;
+    padding: 0 40px;
+    display: flex;
+    gap: 0;
+    position: sticky;
+    top: 57px;
+    z-index: 99;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  .tab-btn {
+    padding: 14px 22px;
+    font-size: 9pt;
+    font-weight: 600;
+    color: #888;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .tab-btn:hover { color: #0066cc; }
+  .tab-btn.active { color: #0066cc; border-bottom-color: #0066cc; }
+  .tab-num {
+    background: #e8eaf0;
+    color: #888;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    transition: all 0.2s;
+  }
+  .tab-btn.active .tab-num { background: #0066cc; color: white; }
+
+  /* CONTENT */
+  .tab-content { display: none; max-width: 960px; margin: 0 auto; padding: 36px 40px 60px; }
+  .tab-content.active { display: block; }
+
+  /* SECTIONS */
+  .section { margin-bottom: 36px; }
+  .section-header {
+    background: #f0f4ff;
+    border-left: 4px solid #0066cc;
+    padding: 8px 14px;
+    margin-bottom: 16px;
+    border-radius: 0 4px 4px 0;
+  }
+  .section-header h2 { font-size: 11pt; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .page-title {
+    background: #1a1a2e;
+    color: white;
+    padding: 22px 28px;
+    border-radius: 6px;
+    margin-bottom: 32px;
+  }
+  .page-title h1 { font-size: 16pt; font-weight: 700; margin-bottom: 5px; }
+  .page-title p { font-size: 9.5pt; opacity: 0.65; }
+
+  h3 { font-size: 10.5pt; font-weight: 700; color: #1a1a2e; margin: 20px 0 8px 0; padding-bottom: 4px; border-bottom: 1px solid #e8eaf0; }
+  p { margin-bottom: 8px; font-size: 9.5pt; }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 9.5pt; }
+  thead tr { background: #1a1a2e; color: white; }
+  thead th { padding: 9px 12px; text-align: left; font-weight: 600; font-size: 9pt; }
+  tbody tr:nth-child(even) { background: #f7f9fc; }
+  tbody tr:hover { background: #eef2ff; }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid #e8eaf0; vertical-align: top; }
+  td.green { color: #16a34a; font-weight: 600; }
+  td.amber { color: #d97706; font-weight: 600; }
+  td.red { color: #dc2626; font-weight: 600; }
+  td code { background: #f0f4ff; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt; font-family: monospace; color: #333; }
+
+  /* STATUS BADGES */
+  .status-ok { background: #dcfce7; color: #16a34a; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .status-risk { background: #fee2e2; color: #dc2626; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .status-wip { background: #fef3c7; color: #d97706; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .status-miss { background: #f0f0f0; color: #666; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .status-spec { background: #e0e7ff; color: #3730a3; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+
+  /* CALLOUTS */
+  .note { background: #fff8e1; border-left: 3px solid #f59e0b; padding: 8px 12px; font-size: 9pt; color: #555; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .tip { background: #f0f7ff; border-left: 3px solid #0066cc; padding: 8px 12px; font-size: 9pt; color: #333; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .success-box { background: #f0fdf4; border-left: 3px solid #16a34a; padding: 8px 12px; font-size: 9pt; color: #333; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .decision-box { background: #fffbeb; border: 1.5px solid #fbbf24; border-radius: 6px; padding: 16px 18px; margin: 16px 0; }
+  .decision-box .dt { font-weight: 700; color: #92400e; margin-bottom: 8px; font-size: 10pt; }
+
+  /* PROGRESS BAR */
+  .progress-wrap { background: #e8eaf0; border-radius: 20px; height: 10px; margin: 6px 0 4px 0; overflow: hidden; }
+  .progress-bar { height: 10px; border-radius: 20px; transition: width 0.6s ease; }
+  .pb-green { background: linear-gradient(90deg, #16a34a, #4ade80); }
+  .pb-blue  { background: linear-gradient(90deg, #0066cc, #60a5fa); }
+  .pb-amber { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .pb-gray  { background: #ddd; }
+  .progress-label { font-size: 8pt; color: #666; display: flex; justify-content: space-between; margin-bottom: 2px; }
+
+  /* STAT CARDS */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 16px 0; }
+  .stat-card { background: white; border: 1.5px solid #e8eaf0; border-radius: 8px; padding: 18px 16px; text-align: center; }
+  .stat-card .stat-val { font-size: 26pt; font-weight: 700; line-height: 1.1; }
+  .stat-card .stat-label { font-size: 8.5pt; color: #666; margin-top: 4px; }
+  .stat-card.green-card { border-color: #86efac; background: #f0fdf4; }
+  .stat-card.green-card .stat-val { color: #16a34a; }
+  .stat-card.blue-card { border-color: #93c5fd; background: #eff6ff; }
+  .stat-card.blue-card .stat-val { color: #0066cc; }
+  .stat-card.amber-card { border-color: #fcd34d; background: #fffbeb; }
+  .stat-card.amber-card .stat-val { color: #d97706; }
+  .stat-card.gray-card { border-color: #e8eaf0; background: #f9fafb; }
+  .stat-card.gray-card .stat-val { color: #888; }
+
+  /* MODULE CARDS */
+  .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+  .module-card { border: 1.5px solid #e8eaf0; border-radius: 8px; padding: 16px; background: white; }
+  .module-card.done { border-color: #86efac; background: #f0fdf4; }
+  .module-card.wip  { border-color: #fcd34d; background: #fffbeb; }
+  .module-card.todo { border-color: #e8eaf0; background: #f9fafb; }
+  .module-card .mc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .module-card .mc-title { font-weight: 700; font-size: 10.5pt; color: #1a1a2e; }
+  .module-card .mc-id { font-size: 8pt; font-weight: 700; color: #0066cc; background: #e0e7ff; padding: 2px 7px; border-radius: 10px; }
+  .module-card .mc-desc { font-size: 9pt; color: #555; margin-bottom: 8px; }
+  .module-card .mc-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mc-tag { font-size: 7.5pt; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: #f0f4ff; color: #0066cc; }
+  .mc-tag.green { background: #dcfce7; color: #16a34a; }
+  .mc-tag.amber { background: #fef3c7; color: #d97706; }
+  .mc-tag.gray  { background: #f0f0f0; color: #888; }
+
+  /* TECH STACK GRID */
+  .tech-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
+  .tech-card { background: white; border: 1.5px solid #e8eaf0; border-radius: 6px; padding: 14px; }
+  .tech-card .tc-layer { font-size: 7.5pt; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .tech-card .tc-name { font-size: 11pt; font-weight: 700; color: #0066cc; margin-bottom: 2px; }
+  .tech-card .tc-desc { font-size: 8.5pt; color: #555; }
+
+  /* TIMELINE / STEPS */
+  .steps { counter-reset: step; list-style: none; margin: 12px 0; }
+  .steps li { counter-increment: step; display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid #f0f0f0; font-size: 9.5pt; }
+  .steps li::before { content: counter(step); background: #0066cc; color: white; font-weight: 700; font-size: 9pt; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .steps li.done-step::before { content: "✓"; background: #16a34a; }
+  .steps li .step-content { flex: 1; }
+  .steps li .step-title { font-weight: 600; color: #1a1a2e; }
+  .steps li .step-detail { color: #555; margin-top: 2px; font-size: 9pt; }
+  .steps li .step-badge { font-size: 8pt; white-space: nowrap; padding-top: 2px; }
+
+  /* DELIVERABLE TABLE highlight */
+  tr.done-row td { background: #f0fdf4 !important; }
+  tr.done-row:hover td { background: #dcfce7 !important; }
+
+  /* PHASE BLOCK */
+  .phase-block { border: 1.5px solid #e8eaf0; border-radius: 8px; margin-bottom: 18px; overflow: hidden; background: white; }
+  .phase-head { background: #1a1a2e; color: white; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; }
+  .phase-head .ph-title { font-weight: 700; font-size: 10.5pt; }
+  .phase-head .ph-badge { font-size: 7.5pt; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+  .ph-done { background: #4ade80; color: #052e16; }
+  .ph-wip  { background: #fbbf24; color: #451a03; }
+  .ph-next { background: #93c5fd; color: #1e3a5f; }
+  .ph-later{ background: #888; color: white; }
+  .phase-body { padding: 16px 18px; }
+
+  /* FILE TREE */
+  .file-tree { font-family: 'Courier New', monospace; font-size: 9pt; background: #f9fafb; border: 1px solid #e8eaf0; border-radius: 6px; padding: 18px 22px; line-height: 2; color: #333; }
+  .ft-dir { color: #0066cc; font-weight: 600; }
+  .ft-done { color: #16a34a; }
+  .ft-tag { font-size: 7.5pt; font-weight: 700; padding: 1px 6px; border-radius: 8px; margin-left: 8px; vertical-align: middle; }
+  .ft-tag-done { background: #dcfce7; color: #16a34a; }
+  .ft-tag-wip  { background: #fef3c7; color: #d97706; }
+  .ft-tag-spec { background: #e0e7ff; color: #3730a3; }
+  .ft-tag-next { background: #f0f4ff; color: #0066cc; }
+</style>
+</head>
+<body>
+
+<!-- TOP HEADER -->
+<div class="top-bar">
+  <div class="logo">Prozess<span>Pilot</span></div>
+  <div class="top-meta">Entwicklungsfortschritt · Stand: April 2026 · Intern</div>
+</div>
+
+<!-- TAB NAVIGATION -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('tab1', this)">📊 Übersicht <span class="tab-num">1</span></button>
+  <button class="tab-btn" onclick="showTab('tab2', this)">🏗️ Foundation D1–D10 <span class="tab-num">2</span></button>
+  <button class="tab-btn" onclick="showTab('tab3', this)">📦 Module M01–M10 <span class="tab-num">3</span></button>
+  <button class="tab-btn" onclick="showTab('tab4', this)">🔧 Tech Stack <span class="tab-num">4</span></button>
+  <button class="tab-btn" onclick="showTab('tab5', this)">🗂️ Dateistruktur <span class="tab-num">5</span></button>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 1: ÜBERSICHT -->
+<!-- ============================================================ -->
+<div id="tab1" class="tab-content active">
+  <div class="page-title">
+    <h1>📊 Entwicklungsfortschritt – Gesamtübersicht</h1>
+    <p>Aktueller Stand aller Phasen, Deliverables und Module · Automatisch generiert aus dem Workspace</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Kennzahlen auf einen Blick</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card green-card">
+        <div class="stat-val">10/10</div>
+        <div class="stat-label">Foundation Deliverables abgeschlossen</div>
+      </div>
+      <div class="stat-card blue-card">
+        <div class="stat-val">1/10</div>
+        <div class="stat-label">Module implementiert (M10 WhatsApp)</div>
+      </div>
+      <div class="stat-card amber-card">
+        <div class="stat-val">10</div>
+        <div class="stat-label">Modul-Specs vollständig dokumentiert</div>
+      </div>
+      <div class="stat-card gray-card">
+        <div class="stat-val">13</div>
+        <div class="stat-label">Test-Dateien vorhanden</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Gesamtfortschritt nach Phase</h2></div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="ph-title">Phase 0 – Foundation (D1–D10)</span>
+        <span class="ph-badge ph-done">✅ ABGESCHLOSSEN</span>
+      </div>
+      <div class="phase-body">
+        <div class="progress-label"><span>Alle 10 Deliverables fertig</span><span>100 %</span></div>
+        <div class="progress-wrap"><div class="progress-bar pb-green" style="width:100%"></div></div>
+        <p style="margin-top:10px;">PostgreSQL-Schema, Redis Event Bus, HMAC Auth, Zod Validation, Customer API, Routing Service, n8n Client, MinIO Storage, Logging/Tracing – alles produktionsreif implementiert und getestet.</p>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="ph-title">Phase 1 – Eingangskanal (M10 WhatsApp)</span>
+        <span class="ph-badge ph-done">✅ ABGESCHLOSSEN</span>
+      </div>
+      <div class="phase-body">
+        <div class="progress-label"><span>M10 vollständig implementiert</span><span>100 %</span></div>
+        <div class="progress-wrap"><div class="progress-bar pb-green" style="width:100%"></div></div>
+        <p style="margin-top:10px;">Webhook-Verifikation, Media-Download (Meta Graph API), Kunden-Auflösung per Telefonnummer, Template-Versand, Audit-Logging – inklusive vollständiger Test-Suite (E2E + Unit).</p>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="ph-title">Phase 1 – MVP Module (M01 OCR · M02 Archiv · M03 KI-Kategorisierung)</span>
+        <span class="ph-badge ph-next">⏭️ NÄCHSTE PHASE</span>
+      </div>
+      <div class="phase-body">
+        <div class="progress-label"><span>Specs vorhanden, Implementierung ausstehend</span><span>0 %</span></div>
+        <div class="progress-wrap"><div class="progress-bar pb-gray" style="width:0%"></div></div>
+        <p style="margin-top:10px;">Alle drei Module sind vollständig spezifiziert (JSON-Schemas, API-Endpunkte, DB-Erweiterungen, Akzeptanzkriterien). Bereit zur sofortigen Implementierung.</p>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="ph-title">Phase 2 – Exporte & Integrationen (M04–M07)</span>
+        <span class="ph-badge ph-later">📅 SPÄTER</span>
+      </div>
+      <div class="phase-body">
+        <div class="progress-label"><span>Nur Spezifikation vorhanden</span><span>0 %</span></div>
+        <div class="progress-wrap"><div class="progress-bar pb-gray" style="width:0%"></div></div>
+        <p style="margin-top:10px;">DATEV-Export (Pro), Lexoffice API, sevDesk API, Google Sheets / Excel – alle Specs fertig, Implementierung erst nach MVP-Phase.</p>
+      </div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="ph-title">Phase 3 – Reporting & Kommunikation (M08–M09)</span>
+        <span class="ph-badge ph-later">📅 SPÄTER</span>
+      </div>
+      <div class="phase-body">
+        <div class="progress-label"><span>Nur Spezifikation vorhanden</span><span>0 %</span></div>
+        <div class="progress-wrap"><div class="progress-bar pb-gray" style="width:0%"></div></div>
+        <p style="margin-top:10px;">Monatsreporting (Standard+) und Lieferanten-Kommunikation (Pro) – nach MVP und Exportmodulen umzusetzen.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Aktuelle Ausgangslage</h2></div>
+    <table>
+      <thead><tr><th>Bereich</th><th>Status</th><th>Bewertung</th></tr></thead>
+      <tbody>
+        <tr><td>Foundation (D1–D10)</td><td>Alle 10 Deliverables implementiert & getestet</td><td><span class="status-ok">Abgeschlossen</span></td></tr>
+        <tr><td>M10 – WhatsApp-Eingang</td><td>Vollständig implementiert, Tests vorhanden</td><td><span class="status-ok">Abgeschlossen</span></td></tr>
+        <tr><td>M01 – OCR Belegerfassung</td><td>Spec fertig, Code steht aus</td><td><span class="status-spec">Spezifiziert</span></td></tr>
+        <tr><td>M02 – Belegarchivierung</td><td>Spec fertig (GoBD-konform), Code steht aus</td><td><span class="status-spec">Spezifiziert</span></td></tr>
+        <tr><td>M03 – KI-Kategorisierung</td><td>Spec fertig (Claude API), Code steht aus</td><td><span class="status-spec">Spezifiziert</span></td></tr>
+        <tr><td>M04–M09 – Exporte & Reporting</td><td>Specs vollständig, noch keine Implementierung</td><td><span class="status-miss">Ausstehend</span></td></tr>
+        <tr><td>Infrastruktur (Docker)</td><td>Postgres 16 · Redis 7 · MinIO · n8n – alle konfiguriert</td><td><span class="status-ok">Bereit</span></td></tr>
+        <tr><td>Datenbank-Schema</td><td>2 Migrations (Initial Schema + RLS), produktionsreif</td><td><span class="status-ok">Solide</span></td></tr>
+        <tr><td>Test-Suite</td><td>13 Test-Dateien (Cross-Module + M10 Unit/E2E)</td><td><span class="status-ok">Vorhanden</span></td></tr>
+        <tr><td>n8n Workflow – WhatsApp</td><td>WF-INPUT-WHATSAPP.json angelegt (inaktiv, unvollständig)</td><td><span class="status-wip">In Arbeit</span></td></tr>
+        <tr><td>Gesamtdokumentation</td><td>~3.500 Zeilen Architektur-Docs + 10 Modul-Specs</td><td><span class="status-ok">Umfassend</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Empfohlene nächste Schritte</h2></div>
+    <ul class="steps">
+      <li class="done-step">
+        <div class="step-content">
+          <div class="step-title">Foundation abschließen (D1–D10)</div>
+          <div class="step-detail">Alle 10 Basiskomponenten sind implementiert und getestet.</div>
+        </div>
+        <div class="step-badge"><span class="status-ok">Erledigt</span></div>
+      </li>
+      <li class="done-step">
+        <div class="step-content">
+          <div class="step-title">M10 WhatsApp-Eingang implementieren</div>
+          <div class="step-detail">Vollständige Implementation mit Handlers, Services, Schemas und Tests.</div>
+        </div>
+        <div class="step-badge"><span class="status-ok">Erledigt</span></div>
+      </li>
+      <li>
+        <div class="step-content">
+          <div class="step-title">n8n Workflow WF-INPUT-WHATSAPP vervollständigen</div>
+          <div class="step-detail">Die JSON-Workflow-Datei ist angelegt aber noch inaktiv. Verbindung zu den Backend-Endpoints herstellen und aktivieren.</div>
+        </div>
+        <div class="step-badge"><span class="status-wip">Offen</span></div>
+      </li>
+      <li>
+        <div class="step-content">
+          <div class="step-title">M01 – OCR Belegerfassung implementieren</div>
+          <div class="step-detail">Spec unter <code>modules/M01_Belegerfassung_OCR.md</code> vollständig. Google Cloud Vision API einbinden, Belegreceiving-Route anlegen.</div>
+        </div>
+        <div class="step-badge"><span class="status-miss">Nächstes Ziel</span></div>
+      </li>
+      <li>
+        <div class="step-content">
+          <div class="step-title">M02 – GoBD-konforme Archivierung</div>
+          <div class="step-detail">Aufbauend auf M01: Belege revisionssicher in MinIO ablegen, Metadaten in PostgreSQL schreiben.</div>
+        </div>
+        <div class="step-badge"><span class="status-miss">Nach M01</span></div>
+      </li>
+      <li>
+        <div class="step-content">
+          <div class="step-title">M03 – KI-Kategorisierung (Claude API)</div>
+          <div class="step-detail">Aufbauend auf M01/M02: Extraierte OCR-Texte via Claude Sonnet kategorisieren und Datev-Kontonummern vorschlagen.</div>
+        </div>
+        <div class="step-badge"><span class="status-miss">Nach M02</span></div>
+      </li>
+      <li>
+        <div class="step-content">
+          <div class="step-title">Ersten Pilot-Kunden onboarden</div>
+          <div class="step-detail">Mit M01–M03 + M10 ist das MVP für Gastro-Kunden einsatzfähig: Belege per WhatsApp senden → OCR → Kategorisierung → Archiv.</div>
+        </div>
+        <div class="step-badge"><span class="status-miss">MVP-Ziel</span></div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="decision-box">
+    <div class="dt">🎯 Wo wir stehen – in einem Satz</div>
+    <p style="font-size:9.5pt;">Das <strong>technische Fundament ist vollständig fertig</strong> – Infrastruktur, Datenbank, Auth, Events, Storage und der WhatsApp-Eingangskanal laufen. <strong>Jetzt fehlt der Kern-MVP:</strong> M01 (OCR), M02 (Archiv) und M03 (KI-Kategorisierung). Mit diesen drei Modulen ist das Produkt für die ersten Kunden einsatzfähig.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 2: FOUNDATION D1–D10 -->
+<!-- ============================================================ -->
+<div id="tab2" class="tab-content">
+  <div class="page-title">
+    <h1>🏗️ Foundation Layer – D1 bis D10</h1>
+    <p>Alle 10 Basis-Deliverables · Status, Beschreibung und Dateipfade</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Fortschrittsbalken Foundation</h2></div>
+    <div class="progress-label"><span>Foundation Layer</span><span>10 / 10 abgeschlossen</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-green" style="width:100%"></div></div>
+    <div class="success-box" style="margin-top:12px;"><strong>✅ Alle 10 Foundation-Deliverables sind implementiert und in der README als abgeschlossen markiert.</strong> Die Basis ist produktionsreif.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Detailübersicht aller Deliverables</h2></div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Deliverable</th>
+          <th>Beschreibung</th>
+          <th>Hauptdateien</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="done-row">
+          <td><strong>D1</strong></td>
+          <td>Repo Bootstrap</td>
+          <td>Node.js 20 + TypeScript, Fastify, Biome, Vitest. Health- und Ready-Endpoints.</td>
+          <td><code>app.ts</code> · <code>server.ts</code> · <code>routes/health.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D2</strong></td>
+          <td>Postgres + RLS</td>
+          <td>5 Kerntabellen (tenants, customers, document_inbox, routing_jobs, audit_log). Row-Level Security für Multi-Tenancy.</td>
+          <td><code>001_initial_schema.sql</code> · <code>002_rls.sql</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D3</strong></td>
+          <td>HMAC Auth</td>
+          <td>HMAC-SHA256 Signierung für Service-to-Service Kommunikation. Middleware für alle <code>/api/v1</code>-Routen.</td>
+          <td><code>auth/hmac.ts</code> · <code>hmac.middleware.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D4</strong></td>
+          <td>Zod Schemas</td>
+          <td>Vollständige Input-Validierung für alle Entitäten. Schemas für Customer, Document, RoutingJob, Tenant.</td>
+          <td><code>schemas/</code> (6 Dateien)</td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D5</strong></td>
+          <td>Customer Profile API</td>
+          <td>GET/PUT Endpunkte für Kundenverwaltung. PII-Verschlüsselung via pgcrypto AES-256-GCM.</td>
+          <td><code>customers/customer.routes.ts</code> · <code>customer.repository.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D6</strong></td>
+          <td>Event Bus (Redis Streams)</td>
+          <td>Asynchrone Event-Kommunikation zwischen Modulen über Redis Streams. Publisher + Consumer Framework.</td>
+          <td><code>events/publisher.ts</code> · <code>consumer.ts</code> · <code>types.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D7</strong></td>
+          <td>n8n Client + Webhooks</td>
+          <td>API-Client zum Triggern von n8n-Workflows. Webhook-Routen für eingehende n8n-Callbacks.</td>
+          <td><code>n8n/client.ts</code> · <code>routes/webhooks.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D8</strong></td>
+          <td>Storage Service (MinIO)</td>
+          <td>S3-kompatibler Objektspeicher für Originaldokumente. Document-Upload-Endpunkt.</td>
+          <td><code>storage/storage.service.ts</code> · <code>documents/document.routes.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D9</strong></td>
+          <td>Routing Service</td>
+          <td>Job-Queue mit Status-Management (queued → running → done/failed/dead). Worker für Job-Verarbeitung.</td>
+          <td><code>routing/routing.service.ts</code> · <code>routing.worker.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+        <tr class="done-row">
+          <td><strong>D10</strong></td>
+          <td>Logging & Tracing</td>
+          <td>Pino JSON-Logging + Distributed Tracing via TraceID-Context. Request-Lifecycle Logging.</td>
+          <td><code>core/logger.ts</code> · <code>trace.ts</code> · <code>hooks/request-logging.ts</code></td>
+          <td><span class="status-ok">✅ Fertig</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Datenbankschema – Kerntabellen</h2></div>
+    <table>
+      <thead><tr><th>Tabelle</th><th>Zweck</th><th>Besonderheit</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenants</code></td><td>Multi-Tenancy Verwaltung</td><td>Grundlage für alle RLS-Policies</td></tr>
+        <tr><td><code>customers</code></td><td>Kundenprofile + Routingkonfiguration</td><td>PII verschlüsselt (AES-256-GCM)</td></tr>
+        <tr><td><code>document_inbox</code></td><td>Belegmetadaten + Verarbeitungsstatus</td><td>Status: pending → processing → done/error</td></tr>
+        <tr><td><code>routing_jobs</code></td><td>Job-Queue für asynchrone Verarbeitung</td><td>Status: queued → running → done/failed/dead</td></tr>
+        <tr><td><code>audit_log</code></td><td>Unveränderliches Audit-Trail</td><td>Append-only, für GoBD-Compliance</td></tr>
+      </tbody>
+    </table>
+    <div class="tip"><strong>Hinweis:</strong> Row-Level Security (RLS) ist aktiv – jeder Tenant sieht ausschließlich seine eigenen Daten. Das gilt für alle 5 Kerntabellen.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Test-Abdeckung Foundation</h2></div>
+    <table>
+      <thead><tr><th>Test-Datei</th><th>Was getestet wird</th></tr></thead>
+      <tbody>
+        <tr><td><code>smoke.test.ts</code></td><td>App-Start, Health-Endpoints</td></tr>
+        <tr><td><code>auth/hmac.test.ts</code></td><td>HMAC-Signierung und Verifikation</td></tr>
+        <tr><td><code>customers/customer.routes.test.ts</code></td><td>Kunden-API Endpunkte</td></tr>
+        <tr><td><code>events/event-bus.test.ts</code></td><td>Redis Streams Event-Publishing</td></tr>
+        <tr><td><code>logging/request-logging.test.ts</code></td><td>Request/Response Logging</td></tr>
+        <tr><td><code>n8n/n8n-client.test.ts</code></td><td>n8n API-Client</td></tr>
+        <tr><td><code>n8n/webhook.routes.test.ts</code></td><td>Webhook-Endpunkte</td></tr>
+        <tr><td><code>routing/routing.routes.test.ts</code></td><td>Routing-Endpunkte</td></tr>
+        <tr><td><code>routing/routing.service.test.ts</code></td><td>Job-Queue Logik</td></tr>
+        <tr><td><code>schemas/schemas.test.ts</code></td><td>Zod Schema-Validierung</td></tr>
+        <tr><td><code>storage/storage.service.test.ts</code></td><td>MinIO-Client</td></tr>
+        <tr><td><code>storage/document.routes.test.ts</code></td><td>Dokument-Upload-Endpunkt</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 3: MODULE M01–M10 -->
+<!-- ============================================================ -->
+<div id="tab3" class="tab-content">
+  <div class="page-title">
+    <h1>📦 Modul-Übersicht – M01 bis M10</h1>
+    <p>Status, Zielgruppe und Implementierungsstand jedes Moduls</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Fortschritt aller Module</h2></div>
+    <div class="progress-label"><span>M10 – WhatsApp Eingang</span><span>✅ 100 %</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-green" style="width:100%"></div></div>
+
+    <div class="progress-label" style="margin-top:12px;"><span>M01 – OCR Belegerfassung</span><span>Spec fertig · 0 % Code</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-blue" style="width:12%"></div></div>
+
+    <div class="progress-label" style="margin-top:8px;"><span>M02 – Belegarchivierung</span><span>Spec fertig · 0 % Code</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-blue" style="width:12%"></div></div>
+
+    <div class="progress-label" style="margin-top:8px;"><span>M03 – KI-Kategorisierung</span><span>Spec fertig · 0 % Code</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-blue" style="width:12%"></div></div>
+
+    <div class="progress-label" style="margin-top:8px;"><span>M04–M09 – Exporte & Reporting</span><span>Nur Spec · 0 % Code</span></div>
+    <div class="progress-wrap"><div class="progress-bar pb-gray" style="width:6%"></div></div>
+
+    <div class="note" style="margin-top:14px;"><strong>Legende:</strong> Vollständige Spec = ca. 12 % (Planung abgeschlossen). Code-Implementierung = 0–100 %.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Phase 1 – MVP Module (sofort umsetzbar)</h2></div>
+    <div class="module-grid">
+      <div class="module-card done">
+        <div class="mc-head">
+          <span class="mc-title">WhatsApp-Eingang</span>
+          <span class="mc-id">M10</span>
+        </div>
+        <div class="mc-desc">Belegempfang via WhatsApp Business Cloud API. Webhook-Verifikation, Media-Download, Kunden-Auflösung per Telefonnummer, Template-Antworten.</div>
+        <div class="mc-tags">
+          <span class="mc-tag green">✅ Implementiert</span>
+          <span class="mc-tag green">Tests vorhanden</span>
+          <span class="mc-tag">Alle Pläne</span>
+          <span class="mc-tag">Meta Graph API</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">OCR Belegerfassung</span>
+          <span class="mc-id">M01</span>
+        </div>
+        <div class="mc-desc">Texterkennung auf Fotos/PDFs via Google Cloud Vision API. Extraktion von Betrag, Datum, Lieferant, MwSt. Gibt strukturiertes JSON zurück.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Basic+</span>
+          <span class="mc-tag">Google Vision</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">Belegarchivierung</span>
+          <span class="mc-id">M02</span>
+        </div>
+        <div class="mc-desc">GoBD-konforme revisionssichere Ablage in MinIO. Originaldokument + OCR-Ergebnis + Metadaten unlöschbar gespeichert.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Basic+</span>
+          <span class="mc-tag">GoBD-konform</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">KI-Kategorisierung</span>
+          <span class="mc-id">M03</span>
+        </div>
+        <div class="mc-desc">Automatische Kategorie-Zuweisung + DATEV-Kontonummer-Vorschlag via Claude Sonnet. Lernend auf Basis historischer Korrekturen.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Standard+</span>
+          <span class="mc-tag">Claude API</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Phase 2 – Export & Integrationen</h2></div>
+    <div class="module-grid">
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">DATEV-Export</span>
+          <span class="mc-id">M04</span>
+        </div>
+        <div class="mc-desc">Export als DATEV-kompatible CSV-Dateien. Monatlich oder bei Bedarf. Steuerberater-Übergabe direkt aus dem System.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Pro</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">Lexoffice Integration</span>
+          <span class="mc-id">M05</span>
+        </div>
+        <div class="mc-desc">Automatischer Beleg-Push via Lexoffice REST API. Kategorisierte Belege direkt in die Buchhaltungssoftware übertragen.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Standard+</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">sevDesk Integration</span>
+          <span class="mc-id">M06</span>
+        </div>
+        <div class="mc-desc">Automatischer Beleg-Push via sevDesk REST API. Alternative zu Lexoffice für Kunden die sevDesk nutzen.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Standard+</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">Excel / Google Sheets Export</span>
+          <span class="mc-id">M07</span>
+        </div>
+        <div class="mc-desc">Einfachste Export-Option: Belege als Excel-Tabelle oder direkt in Google Sheets schreiben. Für Kunden ohne Buchhaltungssoftware.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Basic+</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Phase 3 – Reporting & Kommunikation</h2></div>
+    <div class="module-grid">
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">Monatsreporting</span>
+          <span class="mc-id">M08</span>
+        </div>
+        <div class="mc-desc">Automatischer monatlicher PDF-Report mit Ausgaben-Übersicht, Kategorien-Verteilung und Top-Lieferanten. Per E-Mail versandt.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Standard+</span>
+        </div>
+      </div>
+      <div class="module-card todo">
+        <div class="mc-head">
+          <span class="mc-title">Lieferanten-Kommunikation</span>
+          <span class="mc-id">M09</span>
+        </div>
+        <div class="mc-desc">Automatisierte Lieferantenanfragen, Bestellbestätigungen und Kommunikation auf Basis erkannter Belege und Muster.</div>
+        <div class="mc-tags">
+          <span class="mc-tag amber">📋 Spec fertig</span>
+          <span class="mc-tag gray">Code ausstehend</span>
+          <span class="mc-tag">Pro</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>M10 – WhatsApp Implementierung (Referenz)</h2></div>
+    <p>M10 ist das erste vollständig implementierte Modul und dient als Referenzimplementierung für alle weiteren Module.</p>
+    <table>
+      <thead><tr><th>Komponente</th><th>Datei(en)</th><th>Funktion</th></tr></thead>
+      <tbody>
+        <tr><td>Routes</td><td><code>m10-whatsapp/routes.ts</code></td><td>POST /api/v1/internal/whatsapp/*</td></tr>
+        <tr><td>Webhook Verifikation</td><td><code>handlers/verify.handler.ts</code></td><td>X-Hub-Signature-256 Validierung</td></tr>
+        <tr><td>Media Download</td><td><code>handlers/media.handler.ts</code></td><td>Mediendatei von Meta-Servern laden</td></tr>
+        <tr><td>Kunden-Auflösung</td><td><code>handlers/resolve.handler.ts</code></td><td>Telefonnummer → Customer ID</td></tr>
+        <tr><td>Template-Versand</td><td><code>handlers/send-template.handler.ts</code></td><td>WhatsApp-Bestätigung senden</td></tr>
+        <tr><td>Meta Graph Client</td><td><code>services/meta-graph.client.ts</code></td><td>Meta Business API Wrapper</td></tr>
+        <tr><td>Credential Service</td><td><code>services/credential.service.ts</code></td><td>Per-Kunden API-Keys verwalten</td></tr>
+        <tr><td>Audit Service</td><td><code>services/audit.service.ts</code></td><td>Unveränderliches Audit-Log</td></tr>
+        <tr><td>Tests (E2E)</td><td><code>tests/e2e.test.ts</code></td><td>Vollständiger End-to-End Flow</td></tr>
+        <tr><td>Tests (Unit)</td><td><code>tests/verify.test.ts</code> · <code>media.test.ts</code> · <code>resolve.test.ts</code></td><td>Einzelkomponenten-Tests</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 4: TECH STACK -->
+<!-- ============================================================ -->
+<div id="tab4" class="tab-content">
+  <div class="page-title">
+    <h1>🔧 Technologie-Stack</h1>
+    <p>Verwendete Technologien, Bibliotheken und externe Dienste</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Core Backend Stack</h2></div>
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tc-layer">Runtime</div>
+        <div class="tc-name">Node.js 20</div>
+        <div class="tc-desc">LTS, TypeScript strict mode. Basis für alle Backend-Services.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">HTTP Framework</div>
+        <div class="tc-name">Fastify v4.28</div>
+        <div class="tc-desc">Leistungsstärkstes Node.js-Framework. Schema-Validierung integriert.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Validierung</div>
+        <div class="tc-name">Zod v3.23</div>
+        <div class="tc-desc">TypeScript-first Schema-Validierung. Alle API-Inputs abgesichert.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Datenbank</div>
+        <div class="tc-name">PostgreSQL 16</div>
+        <div class="tc-desc">Primärdatenbank. Row-Level Security, pgcrypto für PII-Verschlüsselung.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Cache / Events</div>
+        <div class="tc-name">Redis 7</div>
+        <div class="tc-desc">Event Bus via Redis Streams. Idempotenz-Checks, Job-Queue Support.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Objektspeicher</div>
+        <div class="tc-name">MinIO (S3)</div>
+        <div class="tc-desc">S3-kompatibler Storage für Originaldokumente. Unveränderliche Belage.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Logging</div>
+        <div class="tc-name">Pino v9.2</div>
+        <div class="tc-desc">JSON Structured Logging. TraceID durch alle Requests.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Testing</div>
+        <div class="tc-name">Vitest v2.0</div>
+        <div class="tc-desc">Schneller Test-Runner. 13 Test-Dateien vorhanden.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Code-Qualität</div>
+        <div class="tc-name">Biome v1.8</div>
+        <div class="tc-desc">Linter + Formatter. Ersetzt ESLint + Prettier in einem Tool.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Workflow & Orchestrierung</h2></div>
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tc-layer">Orchestrierung</div>
+        <div class="tc-name">n8n (self-hosted)</div>
+        <div class="tc-desc">Visuelle Workflow-Automatisierung. Alle Geschäftsprozesse als Workflows. Läuft in Docker.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">Infrastruktur</div>
+        <div class="tc-name">Docker Compose</div>
+        <div class="tc-desc">5 Services (Postgres, Redis, MinIO, n8n, Backend). Healthchecks konfiguriert.</div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-layer">AWS SDK</div>
+        <div class="tc-name">@aws-sdk/client-s3</div>
+        <div class="tc-desc">S3-kompatibler MinIO-Zugriff via offizielem AWS SDK v3.600.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Externe APIs (Phase 1–3)</h2></div>
+    <table>
+      <thead><tr><th>API / Dienst</th><th>Modul</th><th>Zweck</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Meta Business Cloud API</strong></td><td>M10</td><td>WhatsApp-Nachrichten empfangen & senden</td><td><span class="status-ok">Integriert</span></td></tr>
+        <tr><td><strong>Google Cloud Vision API</strong></td><td>M01</td><td>OCR-Texterkennung auf Belegen</td><td><span class="status-spec">Geplant</span></td></tr>
+        <tr><td><strong>Claude API (Sonnet)</strong></td><td>M03</td><td>KI-Kategorisierung, DATEV-Kontozuordnung</td><td><span class="status-spec">Geplant</span></td></tr>
+        <tr><td><strong>Lexoffice REST API</strong></td><td>M05</td><td>Beleg-Push in Lexoffice-Buchhaltung</td><td><span class="status-miss">Später</span></td></tr>
+        <tr><td><strong>sevDesk REST API</strong></td><td>M06</td><td>Beleg-Push in sevDesk-Buchhaltung</td><td><span class="status-miss">Später</span></td></tr>
+        <tr><td><strong>Google Sheets API</strong></td><td>M07</td><td>Export in Google Tabellen</td><td><span class="status-miss">Später</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Infrastruktur (Docker Compose)</h2></div>
+    <table>
+      <thead><tr><th>Service</th><th>Port</th><th>Image</th><th>Zweck</th><th>Health Check</th></tr></thead>
+      <tbody>
+        <tr><td><strong>PostgreSQL</strong></td><td>5432</td><td><code>postgres:16</code></td><td>Primärdatenbank</td><td><code>pg_isready</code></td></tr>
+        <tr><td><strong>Redis</strong></td><td>6379</td><td><code>redis:7-alpine</code></td><td>Event Streams, Cache</td><td><code>redis-cli ping</code></td></tr>
+        <tr><td><strong>MinIO</strong></td><td>9000 / 9001</td><td><code>minio/minio</code></td><td>Objektspeicher + Web-UI</td><td><code>curl /health</code></td></tr>
+        <tr><td><strong>n8n</strong></td><td>5678</td><td><code>n8nio/n8n</code></td><td>Workflow-Orchestrierung</td><td><code>wget /healthz</code></td></tr>
+        <tr><td><strong>Backend</strong></td><td>3000</td><td>lokaler Build</td><td>Fastify API-Server</td><td><code>GET /health</code></td></tr>
+      </tbody>
+    </table>
+    <div class="success-box"><strong>✅ Alle Container sind konfiguriert</strong> – Volumes, Healthchecks und Service-Abhängigkeiten sind in <code>docker-compose.yml</code> vollständig definiert.</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- TAB 5: DATEISTRUKTUR -->
+<!-- ============================================================ -->
+<div id="tab5" class="tab-content">
+  <div class="page-title">
+    <h1>🗂️ Dateistruktur – Workspace</h1>
+    <p>Vollständige Übersicht aller Dateien und Verzeichnisse im ProzessPilot-Workspace</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Projektstruktur im Überblick</h2></div>
+    <div class="file-tree">
+<span class="ft-dir">📁 ProzessPilot/</span>
+├── <span class="ft-dir">📁 Modulkonzept/Konzeptentwicklung/</span> &nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">Vollständig dokumentiert</span>
+│   ├── <span class="ft-done">00_Architektur_Hauptdokument.md</span> &nbsp;&nbsp;(269 Zeilen · System-Übersicht &amp; Tech Stack)
+│   ├── <span class="ft-done">01_Datenmodell_Events.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(488 Zeilen · Beleg-Schema, Events, APIs)
+│   ├── <span class="ft-done">02_Kundenprofil_System.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(499 Zeilen · Kundenprofil &amp; Routing-Logik)
+│   ├── <span class="ft-done">03_n8n_Workflows.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(406 Zeilen · Workflow-Orchestrierung)
+│   ├── <span class="ft-done">04_Erweiterbarkeit_Pro.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(366 Zeilen · Hook-System)
+│   ├── <span class="ft-done">05_Roadmap.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(256 Zeilen · Phasenplan, Sprint-Schedule)
+│   ├── <span class="ft-done">06_Prompt_System.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(678 Zeilen · Claude Prompt-Generierung)
+│   ├── <span class="ft-done">Foundation_Spec.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(406 Zeilen · D1–D10 Specs)
+│   ├── <span class="ft-done">README.md</span>
+│   ├── <span class="ft-dir">📁 _sprints/</span>
+│   │   ├── <span class="ft-done">Sprint_0_Foundation.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(Foundation Prompts D1–D10)
+│   │   └── <span class="ft-done">Sprint_1_MVP.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(MVP Modul-Plan M01–M07)
+│   └── <span class="ft-dir">📁 modules/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-spec">10 Specs vorhanden</span>
+│       ├── M01_Belegerfassung_OCR.md &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-next">Nächste Implementierung</span>
+│       ├── M02_Belegarchivierung.md
+│       ├── M03_Kategorisierung.md &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-spec">Claude API</span>
+│       ├── M04_DATEV_Export.md
+│       ├── M05_Lexoffice_Integration.md
+│       ├── M06_sevDesk_Integration.md
+│       ├── M07_Excel_Sheets_Export.md
+│       ├── M08_Monatsreporting.md
+│       ├── M09_Lieferanten_Kommunikation.md
+│       └── M10_WhatsApp_Eingang.md &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">✅ Implementiert</span>
+│
+└── <span class="ft-dir">📁 prozesspilot/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">Backend Implementation</span>
+    ├── <span class="ft-done">README.md</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(alle D1–D10 ✅ markiert)
+    ├── <span class="ft-done">docker-compose.yml</span>
+    ├── .env.example &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(25+ Umgebungsvariablen)
+    ├── <span class="ft-dir">📁 backend/src/</span>
+    │   ├── <span class="ft-dir">📁 core/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">D1–D10 vollständig</span>
+    │   │   ├── config.ts · logger.ts · trace.ts
+    │   │   ├── auth/ &nbsp;&nbsp;(hmac.ts · hmac.middleware.ts)
+    │   │   ├── db/ &nbsp;&nbsp;&nbsp;&nbsp;(migrate.ts · crypto.ts · tenant.ts)
+    │   │   ├── events/ (publisher.ts · consumer.ts · types.ts)
+    │   │   ├── hooks/ &nbsp;(request-logging.ts · tenant-context.ts)
+    │   │   ├── schemas/(6 Schema-Dateien)
+    │   │   ├── storage/(storage.service.ts)
+    │   │   └── n8n/ &nbsp;&nbsp;&nbsp;(client.ts)
+    │   ├── <span class="ft-dir">📁 routes/</span>
+    │   │   ├── health.ts &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(GET /health · /ready)
+    │   │   └── webhooks.ts &nbsp;&nbsp;&nbsp;(POST /webhooks/*)
+    │   └── <span class="ft-dir">📁 modules/</span>
+    │       ├── customers/ &nbsp;(routes + repository)
+    │       ├── documents/ &nbsp;(routes + repository)
+    │       ├── routing/ &nbsp;&nbsp;&nbsp;(routes + service + worker + repository)
+    │       └── <span class="ft-dir">📁 m10-whatsapp/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">✅ Vollständig</span>
+    │           ├── routes.ts
+    │           ├── handlers/ (4 Handler-Dateien)
+    │           ├── services/ (8 Service-Dateien)
+    │           ├── schemas/  (5 Schema-Dateien)
+    │           └── tests/ &nbsp;&nbsp;&nbsp;(e2e · verify · media · resolve)
+    ├── <span class="ft-dir">📁 backend/tests/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-done">12 Test-Dateien</span>
+    ├── <span class="ft-dir">📁 migrations/</span>
+    │   ├── 001_initial_schema.sql
+    │   └── 002_rls.sql
+    └── <span class="ft-dir">📁 n8n/workflows/</span>
+        └── WF-INPUT-WHATSAPP.json &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ft-tag ft-tag-wip">Inaktiv/unvollständig</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Codezeilen nach Kategorie</h2></div>
+    <table>
+      <thead><tr><th>Kategorie</th><th>Inhalt</th><th>Umfang (ca.)</th></tr></thead>
+      <tbody>
+        <tr><td>Architektur-Dokumentation</td><td>6 Hauptdokumente + README + Foundation Spec</td><td class="green">~3.500 Zeilen</td></tr>
+        <tr><td>Modul-Spezifikationen</td><td>10 vollständige Modul-Specs (M01–M10)</td><td class="green">~2.500 Zeilen</td></tr>
+        <tr><td>Foundation Backend (D1–D10)</td><td>Core, Schemas, Routes, Module-Boilerplate</td><td class="amber">~1.200 Zeilen TS</td></tr>
+        <tr><td>M10 WhatsApp-Modul</td><td>Handlers, Services, Schemas, Tests</td><td class="green">~1.000+ Zeilen TS</td></tr>
+        <tr><td>Test-Suite (Cross-Module)</td><td>12 Test-Dateien Foundation + 4 M10-Tests</td><td class="amber">~800 Zeilen TS</td></tr>
+        <tr><td>Datenbankmigrationen</td><td>2 SQL-Dateien (Schema + RLS)</td><td class="amber">~220 Zeilen SQL</td></tr>
+        <tr><td>n8n Workflows</td><td>1 JSON-Datei (M10, noch inaktiv)</td><td class="red">~50 Zeilen JSON</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Produktionsreife pro Komponente</h2></div>
+    <table>
+      <thead><tr><th>Komponente</th><th>Implementiert</th><th>Getestet</th><th>Produktionsreif</th></tr></thead>
+      <tbody>
+        <tr><td>Foundation Layer (D1–D10)</td><td class="green">✅ Ja</td><td class="green">✅ Ja (12 Tests)</td><td><span class="status-ok">Ja</span></td></tr>
+        <tr><td>M10 WhatsApp-Eingang</td><td class="green">✅ Ja</td><td class="green">✅ Ja (4 Tests)</td><td><span class="status-ok">Ja</span></td></tr>
+        <tr><td>n8n WF-INPUT-WHATSAPP</td><td class="amber">⚠️ Teilweise</td><td class="red">❌ Nein</td><td><span class="status-wip">In Arbeit</span></td></tr>
+        <tr><td>M01 OCR Belegerfassung</td><td class="red">❌ Nein</td><td class="red">❌ Nein</td><td><span class="status-miss">Ausstehend</span></td></tr>
+        <tr><td>M02 Belegarchivierung</td><td class="red">❌ Nein</td><td class="red">❌ Nein</td><td><span class="status-miss">Ausstehend</span></td></tr>
+        <tr><td>M03 KI-Kategorisierung</td><td class="red">❌ Nein</td><td class="red">❌ Nein</td><td><span class="status-miss">Ausstehend</span></td></tr>
+        <tr><td>M04–M09 Exporte &amp; Reporting</td><td class="red">❌ Nein</td><td class="red">❌ Nein</td><td><span class="status-miss">Ausstehend</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="decision-box">
+    <div class="dt">📌 Zusammenfassung</div>
+    <p style="font-size:9.5pt;">Der Workspace enthält <strong>~9.300 Zeilen Gesamtinhalt</strong> (Docs + Code + Tests + SQL). Die technische Basis ist solide und vollständig. Der nächste große Schritt ist die Implementierung von <strong>M01 (OCR)</strong>, <strong>M02 (Archiv)</strong> und <strong>M03 (Kategorisierung)</strong> – damit ist das MVP für den ersten Kunden einsatzbereit.</p>
+  </div>
+</div>
+
+<script>
+  function showTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>

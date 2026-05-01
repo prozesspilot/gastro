@@ -1,0 +1,15 @@
+{
+  "name": "Supermarkt-Beleg DE (klar lesbar, hohe Confidence)",
+  "raw_text": "Metro AG\nBahnhofstr. 5, 80331 München\nUSt-IdNr: DE123456789\n\nRechnung Nr. RE-2026-1042\nDatum: 28.04.2026\n\nPos  Beschreibung           Menge  EP      Gesamt\n1    Mehl Tipo 00 25kg        4    18.50    74.00\n2    Olivenöl 5L              2    23.02    46.04\n\nNetto                                       120.04\nMwSt 19 %                                    19.00\nMwSt 7 %                                      1.40\nGesamt                                      142.85 EUR\n\nZahlart: Bar",
+  "expected_fields": {
+    "supplier_vat_id": "DE123456789",
+    "document_number": "RE-2026-1042",
+    "document_date":   "2026-04-28",
+    "currency":        "EUR",
+    "total_gross":     142.85,
+    "total_net":       120.04
+  },
+  "expected_status": "extracted",
+  "expected_confidence_range": [0.85, 1.0],
+  "ocr_confidence": 0.95
+}

@@ -1,0 +1,25 @@
+{
+  "customer_id": "cust_e2e_test",
+  "package": "standard",
+  "modules_enabled": ["M01", "M03", "M02", "M07"],
+  "integrations": {
+    "ocr": { "provider": "mock_ocr" },
+    "archive": null,
+    "spreadsheet": null
+  },
+  "routing": {
+    "low_confidence_threshold": 0.75,
+    "skr_chart": "SKR03",
+    "ki_kategorisierung": true,
+    "tax_keys_map": { "0.19": "9", "0.07": "8", "0": "0" }
+  },
+  "custom": {
+    "supplier_overrides": {
+      "EDEKA Supermarkt GmbH": {
+        "category": "wareneinkauf_food",
+        "skr": "3100",
+        "tax_key": "8"
+      }
+    }
+  }
+}

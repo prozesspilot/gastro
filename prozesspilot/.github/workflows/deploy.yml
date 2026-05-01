@@ -1,0 +1,51 @@
+name: Deploy
+
+# Wird nach erfolgreichem CI auf main ausgelöst.
+# TODO: Hier echte Deploy-Schritte eintragen.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    # TODO: needs: [ci] hinzufügen sobald ein gemeinsamer CI-Workflow referenziert wird
+    # needs: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy Backend
+        run: |
+          # TODO: Deploy-Script hier eintragen
+          # Beispiel für Docker/Render/Railway/Fly.io:
+          # docker build -t prozesspilot-backend ./backend
+          # docker push registry.example.com/prozesspilot-backend:${{ github.sha }}
+          # render deploy --service-id ${{ secrets.RENDER_SERVICE_ID }}
+          echo "TODO: Backend-Deploy implementieren"
+        # env:
+        #   RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+
+      - name: Deploy Webapp
+        run: |
+          # TODO: Deploy-Script hier eintragen
+          # Beispiel für Vercel/Netlify:
+          # npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+          echo "TODO: Webapp-Deploy implementieren"
+        # env:
+        #   VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Post-Deploy Smoke Tests
+        run: |
+          # TODO: Smoke-Tests gegen Staging ausführen
+          # curl -f https://staging.prozesspilot.de/health
+          echo "TODO: Post-Deploy Smoke-Tests implementieren"
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          # TODO: Slack/Email-Benachrichtigung bei Deploy-Fehler
+          echo "TODO: Fehler-Benachrichtigung implementieren"

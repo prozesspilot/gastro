@@ -1,0 +1,269 @@
+Du bist ein Senior React/TypeScript Engineer und arbeitest am Projekt ProzessPilot — ein multi-tenant Belegverarbeitungs-System für Steuerberater.
+
+STACK: React 18 + Vite + TypeScript + TailwindCSS + React Router · Dark-Mode UI · Axios mit X-Tenant-ID Header
+
+ARBEITSVERZEICHNIS: Du bist in prozesspilot/webapp/ (nicht im Monorepo-Root).
+
+BEVOR DU ANFÄNGST: Lies folgende Dateien komplett durch:
+- ../Modulkonzept/Konzeptentwicklung/05_Roadmap.md
+- ../Modulkonzept/Konzeptentwicklung/modules/M03_Kategorisierung.md
+- ../Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md
+- src/types.ts (aktuell — wird heute komplett ersetzt)
+- src/App.tsx (Routes verstehen)
+- src/data/tasks.ts (Phasen und Status verstehen)
+
+================================================================================
+AUFGABE 1 — types.ts KOMPLETT NACH KONZEPT ERSETZEN (Priorität: KRITISCH)
+================================================================================
+
+Ersetze src/types.ts vollständig mit folgenden Typen:
+
+export type ReceiptStatus =
+  | 'received'
+  | 'extracting' | 'extracted'
+  | 'categorizing' | 'categorized'
+  | 'archiving' | 'archived'
+  | 'exporting' | 'exported'
+  | 'completed'
+  | 'requires_review'
+  | 'error';
+
+export type ReceiptFileType = 'pdf' | 'jpg' | 'jpeg' | 'png' | 'heic';
+
+export interface ExtractedData {
+  vendor_name?: string;
+  vendor_address?: string;
+  invoice_date?: string;
+  invoice_number?: string;
+  total_amount?: number;
+  tax_amount?: number;
+  tax_rate?: number;
+  line_items?: Array<{ description: string; amount: number; quantity?: number }>;
+  payment_method?: string;
+  currency?: string;
+  confidence: number; // 0.0 bis 1.0
+  raw_text?: string;
+}
+
+export interface CategorizationResult {
+  category_id: string;
+  category_name: string;
+  skr03_konto?: string;
+  skr04_konto?: string;
+  confidence: number;
+  method: 'override' | 'master_data' | 'ai';
+  ai_reasoning?: string;
+}
+
+export interface Receipt {
+  id: string;
+  tenant_id: string;
+  customer_id: string;
+  status: ReceiptStatus;
+  file_name: string;
+  file_type: ReceiptFileType;
+  file_size: number;
+  original_path: string;
+  archive_path?: string;
+  extracted_data?: ExtractedData;
+  categorization?: CategorizationResult;
+  lexoffice_export?: { voucher_id: string; exported_at: string; status: string };
+  datev_export?: { file_path: string; exported_at: string };
+  requires_review_reason?: string;
+  processing_started_at?: string;
+  processing_completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerProfile {
+  id: string;
+  tenant_id: string;
+  display_name: string;
+  legal_name?: string;
+  tax_id?: string;
+  whatsapp_number?: string;
+  email?: string;
+  enabled_modules: {
+    m01_ingestion: boolean;
+    m02_archiving: boolean;
+    m03_extraction: boolean;
+    m04_categorization: boolean;
+    m05_lexoffice: boolean;
+    m06_portal: boolean;
+    m07_notifications: boolean;
+    m08_reporting: boolean;
+    m09_supplier_comm: boolean;
+  };
+  lexoffice_api_key?: string;
+  skr_type?: 'SKR03' | 'SKR04';
+  notification_language?: 'de' | 'en';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  skr03_konto?: string;
+  skr04_konto?: string;
+  description?: string;
+  is_system: boolean;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface Customer {
+  id: string;
+  tenant_id: string;
+  display_name: string;
+  created_at: string;
+}
+
+export interface ApiResponse<T> {
+  data: T;
+  meta?: { total?: number; page?: number; pageSize?: number };
+}
+
+export interface ApiError {
+  error: string;
+  code?: string;
+  details?: unknown;
+}
+
+Nach dem Ersetzen: alle bestehenden Komponenten/Pages die die alten Typen importieren aktualisieren. Alle TypeScript-Fehler müssen behoben sein (npm run build muss durchlaufen).
+
+================================================================================
+AUFGABE 2 — ReceiptDetailPage vollständig (Priorität: HOCH)
+================================================================================
+
+Erstelle src/pages/ReceiptDetailPage.tsx:
+
+Layout:
+- Zurück-Button zu /customers/:customerId/receipts
+- Seitentitel: Dateiname + Upload-Datum
+- Status-Badge (farbig je nach Status)
+
+Status-Timeline-Komponente (vertikale Timeline):
+  Empfangen         [Zeitstempel]
+  OCR Extraktion    [Zeitstempel] → Confidence %
+  Kategorisierung   [Zeitstempel] → Kategorie + Konto
+  Archivierung      [läuft... / Zeitstempel]
+  Export            [ausstehend / Zeitstempel]
+
+Jeder Schritt hat Icon: Häkchen (erledigt), Spinner (aktiv), Kreis (ausstehend), X (Fehler).
+
+Extraktions-Daten Panel (nur wenn extracted_data vorhanden):
+- Lieferant, Datum, Rechnungsnummer, Betrag, MwSt in einer Card
+- Confidence als Fortschrittsbalken: grün > 0.85, gelb > 0.6, rot < 0.6
+
+Kategorisierungs-Panel (nur wenn categorization vorhanden):
+- Kategorie-Name + SKR03/04-Konto
+- Methode als Badge: "KI" / "Stammdaten" / "Override"
+- Bei KI: ai_reasoning ausklappbar anzeigen
+- Confidence-Balken
+
+Aktions-Buttons:
+- "Zur Überprüfung markieren" → PUT /receipts/:id/status mit { status: 'requires_review' }
+- "Erneut verarbeiten" → POST /receipts/:id/reprocess (nur wenn status = error oder requires_review)
+- "Archiv herunterladen" → GET /receipts/:id/download (nur wenn status = archived oder completed)
+
+requires_review Banner:
+- Wenn status = requires_review: rotes Banner ganz oben mit requires_review_reason Text
+
+================================================================================
+AUFGABE 3 — CustomerProfilePage mit echten Formularen (Priorität: HOCH)
+================================================================================
+
+Erstelle oder ersetze vollständig src/pages/CustomerProfilePage.tsx:
+
+Abschnitt 1: Stammdaten
+- display_name (Text, required)
+- legal_name (Text, optional)
+- tax_id (Text, maskiert angezeigt als "••••••••123", änderbar)
+- email (Email-Input)
+- whatsapp_number (Tel-Input, Format +49...)
+- skr_type: Toggle-Buttons "SKR03" / "SKR04"
+
+Abschnitt 2: Aktive Module
+Für jedes Modul (M01 bis M09) eine Toggle-Row mit Name und Kurzbeschreibung.
+Abhängigkeiten beachten:
+- M04 braucht M03 — Toggle deaktivieren + Tooltip wenn M03 aus
+- M05 braucht M04 — Toggle deaktivieren + Tooltip wenn M04 aus
+- M07 braucht WhatsApp-Nummer — Hinweis anzeigen wenn Nummer fehlt
+- M08 braucht M07 — Toggle deaktivieren wenn M07 aus
+
+Abschnitt 3: Lexoffice-Konfiguration (nur sichtbar wenn M05 aktiviert)
+- lexoffice_api_key (Password-Input mit Anzeigen/Verstecken-Button)
+- Test-Button "Verbindung testen" → POST /integrations/lexoffice/test
+- Erfolg/Fehler-Feedback direkt unter dem Button
+
+Abschnitt 4: Benachrichtigungen
+- notification_language: Toggle "Deutsch" / "English"
+- Checkbox: WhatsApp-Bestätigung nach jedem Beleg
+- Checkbox: Monatsbericht per WhatsApp
+
+Speichern:
+- Speichern-Button → PUT /customers/:customerId/profile
+- "Nicht gespeicherte Änderungen" Badge oben rechts wenn Formular dirty
+- Optimistic Update + Error-Toast bei API-Fehler
+
+================================================================================
+AUFGABE 4 — ReceiptsListPage verbessern (Priorität: MITTEL)
+================================================================================
+
+Lies die bestehende Receipts-Seite und ergänze:
+1. Status-Filter: Dropdown "Alle / Offen / Fehler / Abgeschlossen"
+2. Status-Badge neben jedem Beleg (farbcodiert nach ReceiptStatus)
+3. Klick auf Zeile → Navigation zu /receipts/:receiptId
+4. Spalte "Kategorie" aus categorization.category_name (falls vorhanden)
+5. Spalte "Confidence" als Balken (falls categorization.confidence vorhanden)
+6. Zeilen mit requires_review in leicht rotem Hintergrund hervorheben
+
+================================================================================
+AUFGABE 5 — API-Client src/api/ Struktur (Priorität: MITTEL)
+================================================================================
+
+Erstelle strukturierte API-Funktionen:
+
+src/api/receipts.ts:
+- getReceipts(customerId, filters?) → Promise<Receipt[]>
+- getReceipt(receiptId) → Promise<Receipt>
+- uploadReceipt(customerId, file) → Promise<Receipt>
+- updateReceiptStatus(receiptId, status) → Promise<Receipt>
+- reprocessReceipt(receiptId) → Promise<Receipt>
+- downloadReceipt(receiptId) → Promise<Blob>
+
+src/api/customers.ts:
+- getCustomers(tenantId) → Promise<Customer[]>
+- getCustomerProfile(customerId) → Promise<CustomerProfile>
+- updateCustomerProfile(customerId, data) → Promise<CustomerProfile>
+
+src/api/categories.ts:
+- getCategories(tenantId) → Promise<Category[]>
+
+Alle Funktionen nutzen die Typen aus src/types.ts. Axios-Instanz mit X-Tenant-ID Header verwenden.
+
+================================================================================
+AUFGABE 6 — App.tsx: fehlende Routes hinzufügen
+================================================================================
+
+Ergänze in src/App.tsx:
+- Route: /receipts/:receiptId → ReceiptDetailPage
+- Sicherstellen dass von ReceiptsListPage und CustomerDetailPage aus navigiert wird
+
+================================================================================
+WICHTIGE REGELN
+================================================================================
+
+- Alle neuen Komponenten im bestehenden Dark-Mode Design-System (TailwindCSS, gleiche Klassen wie bestehende Pages)
+- Keine neuen npm-Pakete installieren ohne vorherige Rückfrage — nutze was schon da ist
+- TypeScript strict mode — keine any-Typen
+- Nach jeder Aufgabe: npm run build ausführen und alle Fehler fixen bevor weiter
+- FANGE MIT AUFGABE 1 (types.ts) AN — alles andere hängt davon ab
+- Mobile-Responsive ist nice-to-have, kein Blocker

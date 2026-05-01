@@ -1,0 +1,169 @@
+{
+  "name": "WF-M07",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "description": "M07 — Excel/Google-Sheets-Export. Sub-Workflow von WF-MASTER-RECEIPT. Ruft Backend POST /api/v1/receipts/{id}/exports/spreadsheet und mappt Response auf Sub-Workflow-Output (M07 §5.2/§6). version: 1.0 owner: ProzessPilot Core Team"
+  },
+  "tags": [
+    { "name": "M07" },
+    { "name": "spreadsheet" },
+    { "name": "phase-1" }
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "events": "workflow",
+        "inputSource": "passthrough"
+      },
+      "id": "n1-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "notes": "Sub-Workflow-Aufruf aus WF-MASTER-RECEIPT. Input-Schema (M07 §5.1): { trace_id, idempotency_key, receipt:{...}, customer_profile:{...} }."
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// M07 §6 Schritt 2 — assert_status\n// Akzeptierte Eingangs-Status: 'archived' (Default) und 'categorized' (M07 §3).\nconst input = $json;\nconst receipt = input.receipt || {};\nconst profile = input.customer_profile || {};\nconst status = receipt.status;\n\nif (!receipt.receipt_id || !receipt.customer_id) {\n  throw new Error('M07 input invalid — missing receipt.receipt_id / customer_id');\n}\nif (!['archived', 'categorized'].includes(status)) {\n  throw new Error('M07 input invalid — unsupported status: ' + status);\n}\nif (!profile?.integrations?.spreadsheet?.config?.sheet_id) {\n  throw new Error('M07 input invalid — profile.integrations.spreadsheet.config.sheet_id missing');\n}\n\nconst crypto = require('crypto');\nconst secret = $env.PP_HMAC_SECRET || '';\nconst nowSec = Math.floor(Date.now() / 1000).toString();\nconst traceId = input.trace_id || ('trc_' + Math.random().toString(36).slice(2, 12));\nconst idempotencyKey = input.idempotency_key || ('ik_M07_' + receipt.receipt_id);\n\nconst body = JSON.stringify({ customer_profile: profile, trace_id: traceId });\nfunction sha256Hex(s) { return crypto.createHash('sha256').update(s, 'utf-8').digest('hex'); }\nfunction sign(method, path, ts, bodyStr) {\n  const canonical = [method.toUpperCase(), path, ts, sha256Hex(bodyStr)].join('\\n');\n  return crypto.createHmac('sha256', secret).update(canonical).digest('hex');\n}\nconst path = '/api/v1/receipts/' + receipt.receipt_id + '/exports/spreadsheet';\n\nreturn [{\n  json: {\n    receipt,\n    customer_profile: profile,\n    trace_id:        traceId,\n    idempotency_key: idempotencyKey,\n    __hmacTs:        nowSec,\n    __body:          body,\n    __path:          path,\n    __sig:           sign('POST', path, nowSec, body)\n  }\n}];"
+      },
+      "id": "n2-assert-status",
+      "name": "Function: assert_status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}{{$json.__path}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "={{$json.idempotency_key}}" },
+            { "name": "x-customer-id",   "value": "={{$json.receipt.customer_id}}" },
+            { "name": "x-pp-timestamp",  "value": "={{$json.__hmacTs}}" },
+            { "name": "x-pp-signature",  "value": "={{$json.__sig}}" },
+            { "name": "x-trace-id",      "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_profile\": {{JSON.stringify($json.customer_profile)}},\n  \"trace_id\":         \"{{$json.trace_id}}\"\n}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry": { "maxRetries": 3, "waitBetweenRetries": 5000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      },
+      "id": "n3-backend-append",
+      "name": "Backend: Append Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "notesInFlow": true,
+      "notes": "POST /api/v1/receipts/{id}/exports/spreadsheet. 3× Retry bei 5xx (M07 §12 Quota-Recoverable)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-ok",
+              "leftValue":  "={{$json.ok}}",
+              "rightValue": true,
+              "operator":   { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n4-if-ok",
+      "name": "IF: ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\": true,\n  \"module\": \"M07\",\n  \"receipt_patch\": {{JSON.stringify($json.data && $json.data.receipt_patch)}},\n  \"events_to_emit\": {{JSON.stringify(($json.data && $json.data.events_to_emit) || ['pp.receipt.exported'])}}\n}",
+        "options": {}
+      },
+      "id": "n5-build-result",
+      "name": "Build: Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1180, 200]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\": false,\n  \"module\": \"M07\",\n  \"error\": {\n    \"code\":    \"{{ ($json.error && $json.error.code) || 'EXTERNAL_API_FAILED' }}\",\n    \"message\": \"{{ ($json.error && $json.error.message) || 'M07 spreadsheet append failed' }}\",\n    \"details\": {{JSON.stringify($json.error && $json.error.details || {})}}\n  }\n}",
+        "options": {}
+      },
+      "id": "n6-build-error",
+      "name": "Build: Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "n7-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1420, 300]
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [
+        [{ "node": "Function: assert_status", "type": "main", "index": 0 }]
+      ]
+    },
+    "Function: assert_status": {
+      "main": [
+        [{ "node": "Backend: Append Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Backend: Append Row": {
+      "main": [
+        [{ "node": "IF: ok", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF: ok": {
+      "main": [
+        [{ "node": "Build: Result", "type": "main", "index": 0 }],
+        [{ "node": "Build: Error",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Build: Result": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build: Error": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "versionId": "m07-1.0.0",
+  "id": "WF-M07"
+}

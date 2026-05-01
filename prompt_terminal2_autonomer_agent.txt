@@ -1,0 +1,424 @@
+Du bist ein autonomer Senior-Engineer und arbeitest selbstständig am Projekt ProzessPilot. Du brauchst keine Bestätigung für einzelne Schritte — arbeite kontinuierlich durch bis du fertig bist.
+
+WICHTIG: Ein zweiter Agent arbeitet parallel an M05 Lexoffice, M08 Reporting und der Webapp.
+Du arbeitest NUR an Backend und Infrastruktur. Fasse KEINE Webapp-Dateien an (webapp/) und
+berühre NICHT m05-lexoffice/ oder m08-reporting/.
+
+================================================================================
+SCHRITT 1 — ORIENTIERUNG (ZUERST)
+================================================================================
+
+Lies folgende Dateien komplett:
+
+1. Modulkonzept/Konzeptentwicklung/modules/M04_DATEV_Export.md
+2. Modulkonzept/Konzeptentwicklung/modules/M06_sevDesk_Integration.md
+3. Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md
+   (nur lesen — M05 wird vom anderen Agent gebaut, aber du brauchst das BookingAdapter-Interface)
+4. backend/src/modules/ (Struktur anschauen — M03/M04/M05 als Vorlagen nutzen)
+5. backend/migrations/ (alle Migrationen lesen — welche Tabellen existieren schon?)
+6. backend/src/core/adapters/ (falls booking/-Ordner vom anderen Agent schon da ist — anschauen)
+
+================================================================================
+BLOCK A — BOOKING-ADAPTER INTERFACE (Basis für M05 + M06)
+================================================================================
+
+A1. Erstelle backend/src/core/adapters/booking/booking-adapter.interface.ts:
+
+    export interface ExportEntry {
+      target: 'lexoffice' | 'sevdesk';
+      status: 'pushed' | 'failed';
+      external_id: string;
+      external_url: string;
+      pushed_at: string;
+    }
+
+    export interface BookingAdapter {
+      readonly id: 'lexoffice' | 'sevdesk';
+      pushVoucher(receipt: Receipt, profile: CustomerProfile): Promise<ExportEntry>;
+      testConnection(customerId: string): Promise<{ ok: boolean; organizationName?: string }>;
+    }
+
+    Dieses Interface wird sowohl von M05 (Lexoffice) als auch M06 (sevDesk) implementiert.
+    Erstelle die Datei so, dass sie importiert werden kann ohne Circular Dependencies.
+
+================================================================================
+BLOCK B — M06 SEVDESK INTEGRATION (Phase 2)
+================================================================================
+
+B1. Erstelle backend/src/core/adapters/booking/sevdesk/:
+
+    sevdesk.client.ts:
+    - Auth: API-Token im Header "Authorization: <token>" (kein Bearer-Prefix)
+    - Basis-URL aus ENV: SEVDESK_API_BASE=https://my.sevdesk.de/api/v1
+    - Timeout: SEVDESK_DEFAULT_TIMEOUT_MS=15000
+    - Rate-Limit: 250 Req/min (Token-Bucket in-memory)
+    - Retry: 3x exponential bei 5xx/429
+    - Methoden:
+        saveVoucher(payload): Promise<{ objects: { voucher: { id: number } } }>
+        uploadTempFile(fileBytes: Buffer, fileName: string): Promise<{ filename: string }>
+        attachFileToVoucher(voucherId: number, filename: string): Promise<void>
+        getAccountingTypes(): Promise<SevDeskAccountingType[]>
+        getTaxRules(): Promise<SevDeskTaxRule[]>
+        testConnection(): Promise<{ ok: boolean; organizationName?: string }>
+
+    auth.ts:
+    - getApiToken(customerId: string): Promise<string>
+      → aus customer_credentials WHERE customer_id = ? AND kind = 'sevdesk_api_token'
+
+    voucher.builder.ts:
+    Implementiere buildSevDeskVoucher() exakt laut Konzept M06 §6:
+    - voucherDate aus extracted_data.invoice_date
+    - supplierName aus extracted_data.vendor_name
+    - status: 50 (offen)
+    - creditDebit: 'C' (Eingangsrechnung)
+    - voucherType: 'VOU'
+    - taxRule.id: aus sevdesk_tax_rule_map
+    - voucherPosSave[0]: accountingType.id aus sevdesk_account_map, sumGross, sumNet, sumTax
+    - Fehlende Felder: sinnvolle Defaults, nie null/undefined bei Pflichtfeldern
+
+    account-mapper.ts:
+    - mapSkrToSevDeskAccountId(skrKonto, tenantId): Promise<number>
+      → aus sevdesk_account_map, Fallback: 0 (Sonstiges)
+    - syncAccountingTypes(tenantId, customerId): Promise<void>
+      → GET /AccountingType → in sevdesk_account_map schreiben (upsert)
+
+    tax-mapper.ts:
+    - mapTaxRuleId(taxRatePct, tenantId): Promise<number>
+      → aus sevdesk_tax_rule_map
+    - syncTaxRules(tenantId, customerId): Promise<void>
+      → GET /TaxRule → in sevdesk_tax_rule_map schreiben
+
+    types.ts:
+    - SevDeskVoucherFactory, SevDeskVoucherPos, SevDeskAccountingType, SevDeskTaxRule Interfaces
+
+B2. Erstelle Migrationen (falls noch nicht vorhanden — zuerst migrations/ lesen!):
+
+    011_sevdesk.sql:
+    - sevdesk_account_map: customer_id TEXT, skr_account TEXT, sevdesk_account_id INT, PRIMARY KEY (customer_id, skr_account)
+    - sevdesk_tax_rule_map: customer_id TEXT, tax_rate_pct NUMERIC, sevdesk_tax_rule_id INT, PRIMARY KEY (customer_id, tax_rate_pct)
+    - sevdesk_exports: id UUID PK, tenant_id UUID FK, receipt_id UUID FK, voucher_id TEXT, exported_at TIMESTAMPTZ, status TEXT
+    Alle IF NOT EXISTS.
+
+B3. Erstelle backend/src/modules/m06-sevdesk/:
+
+    routes.ts — Endpoints (alle mit HMAC-Auth):
+      POST /api/v1/receipts/:receiptId/exports/sevdesk
+      GET  /api/v1/customers/:customerId/exports/sevdesk
+      POST /api/v1/integrations/sevdesk/test
+      POST /api/v1/integrations/sevdesk/sync-accounts
+
+    handlers/push.handler.ts:
+    Identischer Flow wie M05 push.handler, nur mit sevDesk-Client:
+    1. Receipt laden + Status prüfen (archived oder categorized)
+    2. Idempotenz: schon gepusht? → existing zurückgeben
+    3. buildSevDeskVoucher() aufrufen
+    4. Hook before_export.sevdesk feuern
+    5. saveVoucher() aufrufen
+    6. uploadTempFile() + attachFileToVoucher()
+    7. Receipt.exports updaten, status = 'exported'
+    8. Hook after_export.sevdesk feuern
+    9. In sevdesk_exports schreiben
+
+    tests/push.handler.test.ts:
+    - Erfolg: Voucher angelegt + Anhang + Receipt exported
+    - Idempotenz: zweiter Push → existing
+    - M06 nicht aktiviert → 400
+
+    In backend/src/app.ts registrieren.
+
+B4. Erstelle n8n/workflows/WF-M06.json:
+    Identische Struktur wie WF-M05 — nur Endpoint ist /exports/sevdesk
+    Schaue WF-M05.json (vom anderen Agent) als Vorlage, falls schon vorhanden.
+
+B5. Ergänze n8n/workflows/WF-MASTER-RECEIPT.json:
+    Nach M02: IF m06_sevdesk aktiviert → WF-M06 aufrufen
+    (parallel zu M05 — beide können aktiv sein)
+
+B6. npm run build im backend/ — Fehler fixen
+
+================================================================================
+BLOCK C — M04 DATEV EXPORT (Phase 3)
+================================================================================
+
+C1. Erstelle Migrationen:
+
+    012_datev.sql:
+    - datev_exports Tabelle exakt laut Konzept M04 §9:
+        datev_export_id TEXT PK
+        customer_id TEXT NOT NULL REFERENCES customers
+        period_year INT NOT NULL
+        period_month INT NOT NULL
+        receipt_ids TEXT[] NOT NULL
+        csv_object_key TEXT NOT NULL
+        csv_sha256 TEXT NOT NULL
+        zip_object_key TEXT
+        delivered_at TIMESTAMPTZ
+        delivery_message_id TEXT
+        created_at TIMESTAMPTZ DEFAULT now()
+    - Index: idx_datev_customer_period ON datev_exports(customer_id, period_year, period_month)
+    Alles IF NOT EXISTS.
+
+C2. Erstelle backend/src/modules/m04-datev/:
+
+    services/csv-renderer.ts:
+    Implementiere renderDatevCsv() + toDatevRow() exakt laut Konzept M04 §8:
+
+    Zeile 1 — EXTF-Header (fixe Struktur aus §8.1):
+      "EXTF";700;21;"Buchungsstapel";9;{ISO-Timestamp};;{importer};;{consultant_no};{client_no};{accounting_year};{date_from_yyyymmdd};{date_to_yyyymmdd};;"";;1;0;"EUR";0;"";0;;;0;0;""
+      Hinweis: consultant_no und client_no aus CustomerProfile, accounting_year aus period.year
+
+    Zeile 2 — Spalten-Header (aus §8.2):
+      Umsatz;Soll/Haben-Kennzeichen;WKZ Umsatz;Kurs;Basisumsatz;WKZ Basisumsatz;Konto;Gegenkonto;BU-Schluessel;Belegdatum;Belegfeld 1;Belegfeld 2;Skonto;Buchungstext;...
+
+    Ab Zeile 3 — Datenzeilen (toDatevRow() aus §8.3):
+      - Umsatz: total_amount formatiert als "1234,56" (Komma als Dezimaltrenner!)
+      - Soll/Haben: immer 'S' für Aufwand
+      - Konto: categorization.skr03_konto oder skr04_konto je nach CustomerProfile.skr_type
+      - Gegenkonto: 1600 (Standard Verbindlichkeiten), oder aus counter-account-resolver.ts
+      - BU-Schlüssel: aus tax_rate (19% → "9", 7% → "2", 0% → "40")
+      - Belegdatum: DDMM Format (nur 4 Stellen!)
+      - Belegfeld 1: invoice_number max. 12 Zeichen
+      - Buchungstext: vendor_name max. 60 Zeichen, Sonderzeichen entfernen
+      - Beleglink: "BELEG://{receipt_id}.pdf"
+
+    Encoding: Standard UTF-8 mit BOM (﻿ am Anfang).
+    Falls CustomerProfile.datev_encoding === 'windows-1252': mit iconv-lite konvertieren
+    (npm list iconv-lite — falls nicht da: npm install iconv-lite --save)
+
+    services/zip-builder.ts:
+    - zipReceipts(receipts): Promise<Buffer>
+      → Nutze archiver (npm list archiver — falls nicht: npm install archiver --save)
+      → PDFs aus Storage laden (receipt.archive_path oder original_path)
+      → Dateinamen: "{invoice_date}_{vendor_name}_{invoice_number}.pdf" (Sonderzeichen ersetzen)
+      → Falls ZIP > 25MB: aufteilen in belege_1.zip, belege_2.zip (je 100 PDFs max)
+
+    services/counter-account-resolver.ts:
+    - resolveCounterAccount(receipt, profile): string
+      → Standard: '1600' (Verbindlichkeiten aus Lieferungen)
+      → Falls tax_rate === 0: '1600'
+      → Kann per CustomerProfile.datev_counter_account überschrieben werden
+
+    services/totals-calculator.ts:
+    - calculateTotals(receipts): { gross_sum, net_sum, tax_sum, receipts_count }
+
+    handlers/build.handler.ts:
+    Implementiere exakt den Flow aus Konzept M04 §7.1:
+    1. CustomerProfile laden, DATEV_NOT_ENABLED prüfen
+    2. Receipts des Monats laden (status IN ['archived', 'exported', 'completed'])
+    3. Falls delta_only: vorherigen Export holen, bereits exportierte receipt_ids filtern
+    4. Falls 0 Receipts: { receipts_count: 0, skipped: true } zurückgeben
+    5. Receipts ohne Kategorisierung herausfiltern + loggen
+    6. Hook before_export.datev feuern
+    7. renderDatevCsv() aufrufen
+    8. Storage.upload für CSV
+    9. Falls include_pdfs: zipReceipts() + Storage.upload für ZIP
+    10. In datev_exports schreiben
+    11. Event pp.datev.exported emittieren
+
+    handlers/send.handler.ts:
+    Implementiere exakt §7.2:
+    - CSV + ZIP aus Storage laden
+    - nodemailer (npm list nodemailer — falls nicht: npm install nodemailer --save)
+    - Mail-Template: datev_delivery_de.txt aus §12 befüllen
+    - An profile.datev_tax_advisor_email senden
+    - SMTP aus ENV: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+    - SMTP_ENABLED=false → Mail überspringen (Dev-Mode)
+    - datev_exports.delivered_at updaten
+
+    templates/datev_delivery_de.txt:
+    Exakt den Mail-Text aus Konzept M04 §12 als Template-Datei.
+
+    routes.ts:
+      POST /api/v1/customers/:customerId/datev/build
+      POST /api/v1/customers/:customerId/datev/:exportId/send
+      GET  /api/v1/customers/:customerId/datev (Liste aller Exporte)
+      GET  /api/v1/customers/:customerId/datev/:exportId/download/csv
+      GET  /api/v1/customers/:customerId/datev/:exportId/download/zip
+
+    tests/csv-renderer.test.ts (Goldmaster-Tests):
+    - Erstelle fixture: 3 Test-Receipts mit bekannten Werten
+    - Rufe renderDatevCsv() auf
+    - Prüfe Zeile 1 beginnt mit "EXTF";700
+    - Prüfe Zeile 3 (erste Datenzeile): Umsatz, Konto, Gegenkonto, Belegdatum korrekt
+    - Prüfe Encoding-Header (BOM vorhanden)
+    - Prüfe Dezimaltrenner ist Komma (nicht Punkt)
+
+    In backend/src/app.ts registrieren.
+
+C3. Erstelle n8n/workflows/WF-M04.json laut Konzept §6:
+    Nodes:
+    1. Cron Trigger: "0 7 5 * *" (5. des Monats, 07:00)
+    2. HTTP Request: GET /api/v1/customers?modules=m04_datev (Pro-Kunden mit DATEV aktiv)
+    3. Loop Over Items: für jeden Kunden
+    4.   Code: berechne Vormonat
+    5.   HTTP Request: POST .../datev/build
+    6.   IF: ok && receipts_count > 0
+    7.   HTTP Request: POST .../datev/{export_id}/send
+    8.   IF: Fehler → WF-ERROR-HANDLER
+    9. End Loop
+
+C4. npm run build im backend/ — alle Fehler fixen
+
+================================================================================
+BLOCK D — UMFASSENDE TEST-COVERAGE
+================================================================================
+
+D1. Schreibe fehlende Tests für bereits vorhandene Module:
+
+    backend/src/modules/m03-categorization/tests/ (falls leer oder unvollständig):
+    - categorize.handler.test.ts:
+        Erfolg: extracted Receipt → Kategorie aus DB zurückgegeben
+        Cache-Hit: gleicher input_hash → aus categorization_cache
+        AI-Fallback: kein Override, kein Stammdaten-Match → Claude API wird aufgerufen
+        Confidence < 0.6 → status = requires_review
+
+    backend/src/core/hooks/__tests__/hook-runner.test.ts (falls unvollständig):
+    - Alle 4 Tests aus dem ursprünglichen Anforderungs-Dokument
+    - Zusätzlich: retry-Logik (3 Versuche bei Netzwerkfehler)
+    - Zusätzlich: execution wird in DB geloggt (Mock-Check)
+
+    backend/src/__tests__/receipts.test.ts (falls nicht vorhanden):
+    - POST /receipts → 201 + Receipt-Objekt
+    - GET /receipts/:id → 200 + korrektes Receipt
+    - PUT /receipts/:id/status → Status-Update + 200
+    - GET /receipts mit Filter status=requires_review → nur gefilterte Ergebnisse
+    - Tenant-Isolation: Receipt von Tenant A nicht zugänglich für Tenant B
+
+D2. Erstelle backend/src/__tests__/tenant-isolation.test.ts:
+    - Zwei Tenants anlegen
+    - Receipts für Tenant A erstellen
+    - Mit Tenant-B-Header auf Receipts von A zugreifen → 404 oder leere Liste
+    - Customer von A mit B-Header → 404
+
+D3. npm test im backend/ — alle Tests müssen grün sein (oder Failures dokumentieren)
+
+================================================================================
+BLOCK E — CI/CD GITHUB ACTIONS
+================================================================================
+
+E1. Erstelle .github/workflows/ci.yml (im Monorepo-Root prozesspilot/):
+
+    name: CI
+    on:
+      push:
+        branches: [main, develop]
+      pull_request:
+        branches: [main]
+
+    jobs:
+      backend:
+        runs-on: ubuntu-latest
+        services:
+          postgres:
+            image: postgres:15
+            env:
+              POSTGRES_DB: prozesspilot_test
+              POSTGRES_USER: pp
+              POSTGRES_PASSWORD: pp
+            ports: ['5432:5432']
+            options: >-
+              --health-cmd pg_isready
+              --health-interval 10s
+              --health-timeout 5s
+              --health-retries 5
+        steps:
+          - uses: actions/checkout@v4
+          - uses: actions/setup-node@v4
+            with:
+              node-version: '20'
+              cache: 'npm'
+              cache-dependency-path: backend/package-lock.json
+          - name: Install dependencies
+            run: cd backend && npm ci
+          - name: TypeScript Build
+            run: cd backend && npm run build
+          - name: Run migrations
+            run: cd backend && npm run migrate
+            env:
+              DATABASE_URL: postgresql://pp:pp@localhost:5432/prozesspilot_test
+              PP_AUTH_DISABLED: '1'
+          - name: Run tests
+            run: cd backend && npm test
+            env:
+              DATABASE_URL: postgresql://pp:pp@localhost:5432/prozesspilot_test
+              PP_AUTH_DISABLED: '1'
+              SMTP_ENABLED: 'false'
+              LEXOFFICE_API_BASE: 'http://localhost:9999'
+              SEVDESK_API_BASE: 'http://localhost:9999'
+
+      webapp:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          - uses: actions/setup-node@v4
+            with:
+              node-version: '20'
+              cache: 'npm'
+              cache-dependency-path: webapp/package-lock.json
+          - name: Install dependencies
+            run: cd webapp && npm ci
+          - name: TypeScript check
+            run: cd webapp && npx tsc --noEmit
+          - name: Build
+            run: cd webapp && npm run build
+
+E2. Prüfe ob backend/package.json ein "migrate" Script hat:
+    Falls nicht: ergänze "migrate": "node dist/scripts/migrate.js" oder wie auch immer der
+    Migration-Runner aufgerufen wird (schaue wie Migrationen aktuell ausgeführt werden).
+
+E3. Erstelle .github/workflows/deploy.yml (nur als Vorlage, kein echter Deploy):
+
+    name: Deploy
+    on:
+      push:
+        branches: [main]
+    jobs:
+      deploy:
+        runs-on: ubuntu-latest
+        needs: [ci]  # (oder den CI-Workflow-Namen)
+        steps:
+          - name: Deploy to staging
+            run: echo "TODO: Deploy-Script hier eintragen"
+          # Platzhalter für späteren Echtbetrieb
+
+================================================================================
+BLOCK F — TASKS.TS AKTUALISIEREN
+================================================================================
+
+Nach Abschluss aller Blöcke: aktualisiere prozesspilot/webapp/src/data/tasks.ts.
+Setze done: true für:
+- ID 400 (M04 DATEV Export) — nach Block C
+- ID 505 (CI/CD Pipeline) — nach Block E
+
+================================================================================
+BLOCK G — ABSCHLUSS
+================================================================================
+
+G1. cd backend && npm run build — muss 0 Fehler haben
+G2. cd backend && npm test — alle Tests grün (dokumentiere Failures wenn unvermeidbar)
+G3. Kurzes Fazit in eine neue Datei schreiben: prozesspilot/TERMINAL2_STATUS.md
+    Was wurde gebaut, was läuft, welche manuellen Schritte fehlen noch (z.B. echte SMTP-Credentials).
+
+================================================================================
+WAS DU NICHT ANFASSEN SOLLST
+================================================================================
+
+- webapp/ — komplett tabu (anderer Agent)
+- backend/src/modules/m05-lexoffice/ — anderer Agent
+- backend/src/modules/m08-reporting/ — anderer Agent
+- M06 Steuerberater-Portal (das ist eine komplett andere Sache als M06 sevDesk — lass es weg)
+- M09 Lieferanten-Kommunikation — nicht in Phase 2
+- Phase 4: Load Tests, Sentry, Backup, Security Review, DSGVO, Runbook — nicht jetzt
+
+================================================================================
+ARBEITSWEISE
+================================================================================
+
+- Lies die Konzept-Datei BEVOR du ein Modul baust
+- Schaue dir M05 Lexoffice als Vorlage für M06 sevDesk an (wenn der andere Agent es schon gebaut hat)
+- Nach jedem Block: npm run build + Fehler sofort fixen
+- Bei npm-Paketen: erst prüfen ob schon installiert (npm list <paket>)
+- Wenn du auf ein unlösbares Problem stößt: Kommentar im Code, weiter mit nächstem Block
+- Kein Breaking Change an bestehenden Interfaces ohne alle abhängigen Dateien zu aktualisieren
+
+Los geht's — starte mit SCHRITT 1 (Orientierung) und dann Block für Block.

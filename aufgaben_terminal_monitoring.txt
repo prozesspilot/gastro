@@ -1,0 +1,318 @@
+════════════════════════════════════════════════════════════════
+AUFGABEN: SENTRY + GRAFANA MONITORING (Task 501)
+════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Sentry: Error-Tracking ins Backend integrieren
+════════════════════════════════════════════════════════════════
+
+1. Sentry SDK installieren:
+   cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend
+   npm install @sentry/node @sentry/profiling-node
+
+2. Datei erstellen: /backend/src/core/sentry.ts
+   ```ts
+   import * as Sentry from '@sentry/node';
+   import { nodeProfilingIntegration } from '@sentry/profiling-node';
+
+   export function initSentry(): void {
+     const dsn = process.env.SENTRY_DSN;
+     if (!dsn) {
+       console.log('[Sentry] SENTRY_DSN nicht gesetzt — Sentry deaktiviert');
+       return;
+     }
+
+     Sentry.init({
+       dsn,
+       environment: process.env.NODE_ENV ?? 'development',
+       release: process.env.APP_VERSION ?? 'unknown',
+       integrations: [nodeProfilingIntegration()],
+       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+       profilesSampleRate: 0.1,
+     });
+
+     console.log(`[Sentry] Initialisiert (env: ${process.env.NODE_ENV})`);
+   }
+
+   export function captureException(err: unknown, context?: Record<string, unknown>): void {
+     if (!process.env.SENTRY_DSN) return;
+     Sentry.withScope((scope) => {
+       if (context) scope.setExtras(context);
+       Sentry.captureException(err);
+     });
+   }
+
+   export function captureMessage(msg: string, level: Sentry.SeverityLevel = 'info'): void {
+     if (!process.env.SENTRY_DSN) return;
+     Sentry.captureMessage(msg, level);
+   }
+   ```
+
+3. In /backend/src/server.ts (oder app.ts) ganz oben einfügen:
+   ```ts
+   import { initSentry } from './core/sentry.js';
+   initSentry(); // Muss vor allem anderen aufgerufen werden
+   ```
+
+4. In Fastify Error-Handler: captureException aufrufen bei unerwarteten Fehlern (5xx).
+   Suche den bestehenden setErrorHandler in server.ts/app.ts und ergänze:
+   ```ts
+   import { captureException } from './core/sentry.js';
+   // im error handler:
+   if (error.statusCode >= 500 || !error.statusCode) {
+     captureException(error, { tenant_id: request.headers['x-tenant-id'] });
+   }
+   ```
+
+5. In WF-ERROR-HANDLER Integration (optional, falls n8n Fehler-Modul vorhanden):
+   Suche in /backend/src/modules/ nach Error-Handler-Modul.
+   Falls vorhanden: captureException dort einbauen bei kritischen Workflow-Fehlern.
+
+6. .env.example ergänzen (falls Datei existiert):
+   SENTRY_DSN=https://xxx@oNNN.ingest.sentry.io/NNN
+   APP_VERSION=1.0.0
+
+════════════════════════════════════════════════════════════════
+BLOCK B — Prometheus Metrics Endpoint (Basis für Grafana)
+════════════════════════════════════════════════════════════════
+
+Grafana braucht eine Datenquelle — wir nutzen Prometheus-Metriken vom Backend.
+
+1. Installieren:
+   cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend
+   npm install prom-client
+
+2. Datei erstellen: /backend/src/core/metrics.ts
+   ```ts
+   import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
+
+   export const registry = new Registry();
+   collectDefaultMetrics({ register: registry, prefix: 'pp_' });
+
+   // Belege-Metriken
+   export const receiptsProcessed = new Counter({
+     name: 'pp_receipts_processed_total',
+     help: 'Anzahl verarbeiteter Belege',
+     labelNames: ['status', 'tenant_id'],
+     registers: [registry],
+   });
+
+   export const receiptProcessingDuration = new Histogram({
+     name: 'pp_receipt_processing_duration_seconds',
+     help: 'Verarbeitungszeit pro Beleg in Sekunden',
+     labelNames: ['module'],
+     buckets: [0.1, 0.5, 1, 2, 5, 10, 30],
+     registers: [registry],
+   });
+
+   export const activeReceipts = new Gauge({
+     name: 'pp_receipts_active',
+     help: 'Belege aktuell in Verarbeitung',
+     labelNames: ['tenant_id'],
+     registers: [registry],
+   });
+
+   // API-Metriken
+   export const httpRequestDuration = new Histogram({
+     name: 'pp_http_request_duration_seconds',
+     help: 'HTTP Request Dauer',
+     labelNames: ['method', 'route', 'status_code'],
+     buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+     registers: [registry],
+   });
+
+   export const httpRequestsTotal = new Counter({
+     name: 'pp_http_requests_total',
+     help: 'Anzahl HTTP Requests',
+     labelNames: ['method', 'route', 'status_code'],
+     registers: [registry],
+   });
+   ```
+
+3. Metrics-Endpoint in server.ts/app.ts registrieren:
+   ```ts
+   import { registry } from './core/metrics.js';
+
+   // Prometheus scrape endpoint (kein Auth nötig, da intern)
+   app.get('/metrics', async (request, reply) => {
+     reply.header('Content-Type', registry.contentType);
+     return registry.metrics();
+   });
+   ```
+
+4. Request-Hook für automatische HTTP-Metriken in server.ts/app.ts:
+   ```ts
+   import { httpRequestDuration, httpRequestsTotal } from './core/metrics.js';
+
+   app.addHook('onRequest', async (request, reply) => {
+     (request as any).startTime = Date.now();
+   });
+
+   app.addHook('onResponse', async (request, reply) => {
+     const duration = (Date.now() - (request as any).startTime) / 1000;
+     const route = request.routeOptions?.url ?? request.url;
+     const labels = { method: request.method, route, status_code: String(reply.statusCode) };
+     httpRequestDuration.observe(labels, duration);
+     httpRequestsTotal.inc(labels);
+   });
+   ```
+
+5. In den Receipt-Verarbeitungsmodulen: Metriken inkrementieren.
+   Suche in /backend/src/modules/m01-receipt-intake/ nach dem Handler der Belege empfängt.
+   Ergänze nach erfolgreichem Empfang:
+   ```ts
+   import { receiptsProcessed } from '../../core/metrics.js';
+   receiptsProcessed.inc({ status: 'received', tenant_id: profile.tenant_id });
+   ```
+
+════════════════════════════════════════════════════════════════
+BLOCK C — Grafana + Prometheus Docker-Compose Setup
+════════════════════════════════════════════════════════════════
+
+1. Erstelle /infra/monitoring/docker-compose.yml:
+   ```yaml
+   version: '3.8'
+   services:
+     prometheus:
+       image: prom/prometheus:v2.51.0
+       container_name: pp-prometheus
+       ports:
+         - "9090:9090"
+       volumes:
+         - ./prometheus.yml:/etc/prometheus/prometheus.yml
+         - prometheus_data:/prometheus
+       command:
+         - '--config.file=/etc/prometheus/prometheus.yml'
+         - '--storage.tsdb.retention.time=30d'
+       restart: unless-stopped
+
+     grafana:
+       image: grafana/grafana:10.4.0
+       container_name: pp-grafana
+       ports:
+         - "3001:3000"
+       volumes:
+         - grafana_data:/var/lib/grafana
+         - ./grafana/provisioning:/etc/grafana/provisioning
+       environment:
+         - GF_SECURITY_ADMIN_USER=admin
+         - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-prozesspilot}
+         - GF_USERS_ALLOW_SIGN_UP=false
+       restart: unless-stopped
+       depends_on:
+         - prometheus
+
+   volumes:
+     prometheus_data:
+     grafana_data:
+   ```
+
+2. Erstelle /infra/monitoring/prometheus.yml:
+   ```yaml
+   global:
+     scrape_interval: 15s
+     evaluation_interval: 15s
+
+   scrape_configs:
+     - job_name: 'prozesspilot-backend'
+       static_configs:
+         - targets: ['host.docker.internal:3000']    # Backend auf Host-Maschine
+       metrics_path: '/metrics'
+       scrape_interval: 10s
+   ```
+
+3. Erstelle /infra/monitoring/grafana/provisioning/datasources/prometheus.yml:
+   ```yaml
+   apiVersion: 1
+   datasources:
+     - name: Prometheus
+       type: prometheus
+       access: proxy
+       url: http://prometheus:9090
+       isDefault: true
+   ```
+
+4. Erstelle /infra/monitoring/grafana/provisioning/dashboards/dashboard.yml:
+   ```yaml
+   apiVersion: 1
+   providers:
+     - name: 'ProzessPilot'
+       folder: 'ProzessPilot'
+       type: file
+       options:
+         path: /etc/grafana/provisioning/dashboards
+   ```
+
+5. Erstelle /infra/monitoring/grafana/provisioning/dashboards/prozesspilot.json:
+   Ein vollständiges Grafana-Dashboard JSON mit folgenden Panels:
+   - Panel 1: "Belege verarbeitet (letzte 24h)" — Counter pp_receipts_processed_total
+   - Panel 2: "API Latenz p95" — Histogram pp_http_request_duration_seconds
+   - Panel 3: "Fehlerrate" — Rate pp_http_requests_total{status_code=~"5.."}
+   - Panel 4: "Aktive Belege in Verarbeitung" — Gauge pp_receipts_active
+   - Panel 5: "Node.js Heap Memory" — pp_nodejs_heap_size_used_bytes
+   - Panel 6: "HTTP Requests/min" — Rate pp_http_requests_total
+
+   Dashboard-Grundstruktur (gültiges Grafana JSON):
+   ```json
+   {
+     "title": "ProzessPilot Overview",
+     "uid": "pp-overview-v1",
+     "version": 1,
+     "refresh": "30s",
+     "time": { "from": "now-24h", "to": "now" },
+     "panels": [
+       {
+         "id": 1, "type": "stat", "title": "Belege (24h)",
+         "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+         "targets": [{ "expr": "increase(pp_receipts_processed_total[24h])", "legendFormat": "Total" }]
+       },
+       {
+         "id": 2, "type": "timeseries", "title": "API Latenz p95",
+         "gridPos": { "x": 6, "y": 0, "w": 18, "h": 8 },
+         "targets": [{ "expr": "histogram_quantile(0.95, rate(pp_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95" }]
+       },
+       {
+         "id": 3, "type": "stat", "title": "Fehlerrate",
+         "gridPos": { "x": 0, "y": 4, "w": 6, "h": 4 },
+         "targets": [{ "expr": "rate(pp_http_requests_total{status_code=~\"5..\"}[5m])", "legendFormat": "5xx/s" }]
+       },
+       {
+         "id": 4, "type": "gauge", "title": "Aktive Belege",
+         "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+         "targets": [{ "expr": "sum(pp_receipts_active)", "legendFormat": "Aktiv" }]
+       },
+       {
+         "id": 5, "type": "timeseries", "title": "Heap Memory",
+         "gridPos": { "x": 6, "y": 8, "w": 9, "h": 8 },
+         "targets": [{ "expr": "pp_nodejs_heap_size_used_bytes", "legendFormat": "Heap Used" }]
+       },
+       {
+         "id": 6, "type": "timeseries", "title": "Requests/min",
+         "gridPos": { "x": 15, "y": 8, "w": 9, "h": 8 },
+         "targets": [{ "expr": "rate(pp_http_requests_total[1m]) * 60", "legendFormat": "{{method}} {{route}}" }]
+       }
+     ],
+     "schemaVersion": 39
+   }
+   ```
+
+6. Erstelle /infra/monitoring/README.md:
+   - Starten: `docker-compose up -d`
+   - Grafana öffnen: http://localhost:3001 (admin / prozesspilot)
+   - Prometheus öffnen: http://localhost:9090
+   - Backend muss auf /metrics erreichbar sein
+   - GRAFANA_ADMIN_PASSWORD in .env setzen für Produktion
+   - Alerting-Hinweis: in Grafana > Alerting > Rules konfigurieren für Fehlerrate > 5%
+
+════════════════════════════════════════════════════════════════
+BLOCK D — Build-Check + tasks.ts
+════════════════════════════════════════════════════════════════
+
+1. Build prüfen:
+   cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+   Bei Fehlern wegen prom-client oder @sentry/node → beheben.
+
+2. tasks.ts aktualisieren:
+   Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+   Setze done: true für:
+   - id: 501  (Sentry + Grafana)

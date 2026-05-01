@@ -1,0 +1,254 @@
+{
+  "name": "WF-M09-SUPPLIER-COMM",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "m09-supplier-comm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.trigger }}",
+              "operation": "equals",
+              "value2": "requires_review"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000002",
+      "name": "IF trigger=requires_review",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/communications/build",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $json.body.tenant_id }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "customer_id",
+              "value": "={{ $json.body.customer_id }}"
+            },
+            {
+              "name": "template_key",
+              "value": "requires_review_notification"
+            },
+            {
+              "name": "channel",
+              "value": "email"
+            },
+            {
+              "name": "context",
+              "value": "={{ JSON.stringify({ receipt_id: $json.body.receipt_id, supplier_name: $json.body.supplier_name ?? 'Unbekannt' }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000003",
+      "name": "POST /communications/build",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.data?.skip_send ?? false }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000004",
+      "name": "IF !skip_send",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/communications/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $('Webhook').item.json.body.tenant_id }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "customer_id",
+              "value": "={{ $('Webhook').item.json.body.customer_id }}"
+            },
+            {
+              "name": "template_key",
+              "value": "requires_review_notification"
+            },
+            {
+              "name": "channel",
+              "value": "email"
+            },
+            {
+              "name": "context",
+              "value": "={{ JSON.stringify({ receipt_id: $('Webhook').item.json.body.receipt_id }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000005",
+      "name": "POST /communications/send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"message\":\"Communication processed\"}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000006",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "IF trigger=requires_review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF trigger=requires_review": {
+      "main": [
+        [
+          {
+            "node": "POST /communications/build",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /communications/build": {
+      "main": [
+        [
+          {
+            "node": "IF !skip_send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF !skip_send": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "POST /communications/send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /communications/send": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "id": "wf-m09-supplier-comm",
+  "tags": [
+    {
+      "createdAt": "2026-05-01T00:00:00.000Z",
+      "updatedAt": "2026-05-01T00:00:00.000Z",
+      "id": "tag-m09",
+      "name": "M09"
+    }
+  ]
+}

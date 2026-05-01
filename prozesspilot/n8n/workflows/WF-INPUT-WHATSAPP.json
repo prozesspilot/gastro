@@ -1,0 +1,192 @@
+{
+  "id": "wf-input-whatsapp-0001-0001-000000000001",
+  "name": "WF-INPUT-WHATSAPP",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "n1-webhook",
+      "name": "Webhook: POST /webhooks/wa",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "pp-wa-webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhooks/wa",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      }
+    },
+    {
+      "id": "n2-extract",
+      "name": "Function: Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Meta WhatsApp webhook payload → flat fields the rest of the workflow needs.\n// Layout: body.entry[0].changes[0].value.{ metadata, contacts, messages }.\nconst webhook = $input.first().json;\nconst body    = webhook.body ?? webhook;\nconst entry   = (body.entry    || [])[0] || {};\nconst change  = (entry.changes || [])[0] || {};\nconst value   = change.value             || {};\nconst metadata = value.metadata          || {};\nconst contact  = (value.contacts || [])[0] || {};\nconst message  = (value.messages || [])[0] || {};\n\nconst media =\n  (message.image    && { id: message.image.id,    mime: message.image.mime_type,    caption: message.image.caption }) ||\n  (message.document && { id: message.document.id, mime: message.document.mime_type, caption: message.document.caption }) ||\n  null;\n\nconst traceId = (webhook.headers || {})['x-trace-id'] || ('trc_' + Math.random().toString(36).slice(2, 12));\n\nreturn [{\n  json: {\n    phone_number_id: metadata.phone_number_id || null,\n    display_phone:   metadata.display_phone_number || null,\n    from:            message.from || null,\n    wa_id:           contact.wa_id || null,\n    display_name:    (contact.profile && contact.profile.name) || null,\n    external_id:     message.id || null,\n    timestamp:       message.timestamp || null,\n    type:            message.type || null,\n    media_id:        media && media.id,\n    mime_type:       media && media.mime,\n    caption:         media && media.caption,\n    text:            (message.text && message.text.body) || null,\n    raw_payload:     body,\n    trace_id:        traceId\n  }\n}];"
+      }
+    },
+    {
+      "id": "n3-resolve-customer",
+      "name": "HTTP: Resolve Customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/resolve",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "=resolve_{{$json.external_id}}" },
+            { "name": "x-trace-id",      "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phone_number_id\": \"{{$json.phone_number_id}}\",\n  \"from\":            \"{{$json.from}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 1500, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n4-download-media",
+      "name": "HTTP: Download Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/media/{{$('Function: Extract Message').item.json.media_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-customer-id", "value": "={{$json.data && $json.data.customer_id}}" },
+            { "name": "x-trace-id",    "value": "={{$('Function: Extract Message').item.json.trace_id}}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "customer_id", "value": "={{$json.data && $json.data.customer_id}}" }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": false, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 5000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n5-build-master-input",
+      "name": "Set: Build Master Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1200, 300],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"trace_id\":    \"{{$('Function: Extract Message').item.json.trace_id}}\",\n  \"customer_id\": \"{{$('HTTP: Resolve Customer').item.json.data.customer_id}}\",\n  \"file\": {\n    \"object_key\": \"{{$('HTTP: Download Media').item.json.data.object_key}}\",\n    \"mime_type\":  \"{{$('HTTP: Download Media').item.json.data.mime_type}}\",\n    \"size_bytes\": {{$('HTTP: Download Media').item.json.data.size_bytes}},\n    \"sha256\":     \"{{$('HTTP: Download Media').item.json.data.sha256}}\"\n  },\n  \"source\": {\n    \"channel\":     \"whatsapp\",\n    \"external_id\": \"{{$('Function: Extract Message').item.json.external_id}}\",\n    \"sender\": {\n      \"type\":         \"phone\",\n      \"value\":        \"+{{$('Function: Extract Message').item.json.from}}\",\n      \"display_name\": \"{{$('Function: Extract Message').item.json.display_name}}\"\n    }\n  },\n  \"user_caption\": \"{{$('Function: Extract Message').item.json.caption}}\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n6-execute-master",
+      "name": "Execute: WF-MASTER-RECEIPT",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1440, 300],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wf-master-receipt-0002-0002-000000000002",
+          "cachedResultName": "WF-MASTER-RECEIPT"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "n7-send-confirmation",
+      "name": "HTTP: Send Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "=cnf_{{$('Function: Extract Message').item.json.external_id}}" },
+            { "name": "x-trace-id",      "value": "={{$('Function: Extract Message').item.json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_id\": \"{{$('HTTP: Resolve Customer').item.json.data.customer_id}}\",\n  \"to\":          \"+{{$('Function: Extract Message').item.json.from}}\",\n  \"text\":        \"Beleg empfangen ✓\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 2000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n8-respond-200",
+      "name": "Respond: 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1920, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"trace_id\": \"{{$('Function: Extract Message').item.json.trace_id}}\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: POST /webhooks/wa": {
+      "main": [[{ "node": "Function: Extract Message", "type": "main", "index": 0 }]]
+    },
+    "Function: Extract Message": {
+      "main": [[{ "node": "HTTP: Resolve Customer", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Resolve Customer": {
+      "main": [[{ "node": "HTTP: Download Media", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Download Media": {
+      "main": [[{ "node": "Set: Build Master Input", "type": "main", "index": 0 }]]
+    },
+    "Set: Build Master Input": {
+      "main": [[{ "node": "Execute: WF-MASTER-RECEIPT", "type": "main", "index": 0 }]]
+    },
+    "Execute: WF-MASTER-RECEIPT": {
+      "main": [[{ "node": "HTTP: Send Confirmation", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Send Confirmation": {
+      "main": [[{ "node": "Respond: 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {}
+}

@@ -1,0 +1,229 @@
+════════════════════════════════════════════════════════════════
+AUFGABEN: LOAD TESTS + RUNBOOK (Tasks 500 + 506)
+════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Load Tests: 100 gleichzeitige Uploads (Task 500)
+════════════════════════════════════════════════════════════════
+
+Ziel: k6-Lasttest-Suite die 100 gleichzeitige Uploads simuliert. Ziel: p95 < 2s.
+
+1. Verzeichnis: /infra/load-tests/
+
+2. Datei: /infra/load-tests/package.json
+   ```json
+   {
+     "name": "prozesspilot-load-tests",
+     "scripts": {
+       "test:upload":  "k6 run scenarios/upload-receipts.js",
+       "test:api":     "k6 run scenarios/api-endpoints.js",
+       "test:stress":  "k6 run --vus 200 --duration 60s scenarios/upload-receipts.js"
+     }
+   }
+   ```
+
+3. Datei: /infra/load-tests/config.js
+   ```js
+   export const BASE_URL  = __ENV.BASE_URL  || 'http://localhost:3000';
+   export const TENANT_ID = __ENV.TENANT_ID || 'test-tenant-001';
+   export const AUTH_KEY  = __ENV.AUTH_KEY  || 'dev-hmac-key';
+
+   export const DEFAULT_OPTIONS = {
+     thresholds: {
+       http_req_duration: ['p(95)<2000'],   // p95 unter 2 Sekunden
+       http_req_failed:   ['rate<0.01'],    // unter 1% Fehlerrate
+     },
+   };
+   ```
+
+4. Datei: /infra/load-tests/scenarios/upload-receipts.js
+   ```js
+   import http from 'k6/http';
+   import { check, sleep } from 'k6';
+   import { Counter, Trend } from 'k6/metrics';
+   import { BASE_URL, TENANT_ID, DEFAULT_OPTIONS } from '../config.js';
+
+   export const options = {
+     ...DEFAULT_OPTIONS,
+     scenarios: {
+       concurrent_uploads: {
+         executor: 'ramping-vus',
+         startVUs: 0,
+         stages: [
+           { duration: '30s', target: 100 },   // Hochfahren auf 100 VUs
+           { duration: '60s', target: 100 },   // 100 VUs halten
+           { duration: '20s', target: 0 },     // Runterfahren
+         ],
+       },
+     },
+   };
+
+   const uploadErrors   = new Counter('upload_errors');
+   const processingTime = new Trend('processing_time_ms');
+
+   // Minimales Test-PDF als Base64 (1-KB Dummy)
+   const DUMMY_PDF_B64 = 'JVBERi0xLjMKJcfs...'; // gültiges Minimal-PDF
+
+   export default function () {
+     const payload = {
+       file:        http.file(open('../fixtures/test-receipt.pdf'), 'test-receipt.pdf', 'application/pdf'),
+       customer_id: 'load-test-customer',
+     };
+
+     const headers = { 'X-Tenant-ID': TENANT_ID };
+     const start   = Date.now();
+     const res     = http.post(`${BASE_URL}/api/v1/receipts`, payload, { headers });
+
+     processingTime.add(Date.now() - start);
+
+     const ok = check(res, {
+       'status 201': (r) => r.status === 201,
+       'hat receipt_id': (r) => JSON.parse(r.body)?.receipt_id !== undefined,
+     });
+
+     if (!ok) uploadErrors.add(1);
+
+     sleep(Math.random() * 2); // 0–2s Pause zwischen Requests
+   }
+   ```
+
+5. Datei: /infra/load-tests/scenarios/api-endpoints.js
+   Testet die wichtigsten GET-Endpunkte unter Last:
+   - GET /api/v1/receipts        (Liste)
+   - GET /api/v1/receipts/:id    (Detail)
+   - GET /api/v1/stats/summary   (Dashboard)
+   50 VUs, 60s, gleiche Thresholds.
+   Header: X-Tenant-ID
+
+6. Datei: /infra/load-tests/fixtures/README.md
+   Hinweis: test-receipt.pdf muss manuell abgelegt werden (echter kleiner Beleg oder generiertes PDF).
+   Befehl zum Generieren: `python3 -c "import fpdf; ..."` oder einfach eine leere PDF-Datei.
+
+7. Datei: /infra/load-tests/fixtures/generate-test-pdf.sh
+   ```bash
+   #!/bin/bash
+   # Erstellt ein minimales gültiges Test-PDF
+   python3 -c "
+   import struct, zlib
+   # Minimales PDF mit einem leeren Seiteninhalt
+   content = b'%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
+   open('test-receipt.pdf', 'wb').write(content)
+   print('test-receipt.pdf erstellt')
+   " 2>/dev/null || echo '%PDF-1.4
+   1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+   2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+   3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj
+   xref
+   0 4
+   0000000000 65535 f
+   0000000009 00000 n
+   0000000058 00000 n
+   0000000115 00000 n
+   trailer<</Size 4/Root 1 0 R>>
+   startxref
+   190
+   %%EOF' > fixtures/test-receipt.pdf
+   ```
+
+8. Datei: /infra/load-tests/README.md
+   - Installation: `npm install -g k6` (oder brew install k6)
+   - Ausführung: `npm run test:upload`
+   - Mit eigenem Server: `BASE_URL=https://staging.example.com npm run test:upload`
+   - Ergebnis interpretieren: p95, p99, Fehlerrate erklären
+
+NACH BLOCK A: echo "Load-Test-Skripte erstellt" && ls /Users/donandrejo/Documents/ProzessPilot/prozesspilot/../infra/load-tests/
+
+════════════════════════════════════════════════════════════════
+BLOCK B — Runbook: Betriebsdokumentation (Task 506)
+════════════════════════════════════════════════════════════════
+
+Ziel: Vollständiges Betriebshandbuch für den Produktivbetrieb von ProzessPilot.
+
+Erstelle /infra/runbook/ mit folgenden Dateien:
+
+1. /infra/runbook/README.md — Index aller Runbook-Dokumente
+
+2. /infra/runbook/01_deployment.md — Deployment-Anleitung
+   Inhalte:
+   - Voraussetzungen (Node 20+, PostgreSQL 15+, n8n, MinIO/S3)
+   - Umgebungsvariablen Checkliste (alle .env Werte mit Beschreibung)
+   - Schritt-für-Schritt Erstinstallation:
+     1. Repository klonen
+     2. pnpm install
+     3. .env konfigurieren
+     4. PostgreSQL Datenbank anlegen
+     5. Migrationen ausführen: npm run migrate
+     6. Backend starten: npm run start
+     7. n8n starten + Workflows importieren
+     8. Webapp bauen + deployen: npm run build
+   - Docker-Compose Deployment (falls docker-compose.yml existiert, sonst Vorlage angeben)
+   - Nginx-Config Beispiel (Reverse Proxy für Backend + Webapp)
+   - SSL mit Let's Encrypt (Certbot-Befehl)
+
+3. /infra/runbook/02_rollback.md — Rollback-Anleitung
+   Inhalte:
+   - Wann rollback nötig ist
+   - DB-Rollback: letztes pg_dump backup einspielen (Befehl)
+   - Code-Rollback: git revert / git checkout previous tag
+   - n8n Workflow-Rollback: JSON-Export vor Deployment machen
+   - Smoke-Test nach Rollback: welche Endpunkte prüfen?
+
+4. /infra/runbook/03_oncall_playbook.md — On-Call Playbook
+   Format pro Szenario: Symptom → Diagnose-Befehle → Lösung
+
+   Szenarien:
+   - Backend antwortet nicht (502/504)
+     Diagnose: pm2 status, docker ps, netstat -tlnp :3000
+     Lösung: pm2 restart pp-backend / docker-compose restart backend
+   - Datenbank-Verbindung verloren
+     Diagnose: pg_isready, tail /var/log/postgresql/...
+     Lösung: service postgresql restart, Connection-Pool prüfen
+   - n8n Workflow läuft nicht durch
+     Diagnose: n8n UI → Executions → letzten Fehler anschauen
+     Lösung: Workflow manuell triggern, Webhook-URL prüfen
+   - Beleg steckt in Status "extracting" fest
+     Diagnose: SELECT * FROM receipts WHERE status='extracting' AND updated_at < now()-interval '10min'
+     Lösung: UPDATE receipts SET status='received' WHERE ... (re-trigger)
+   - Hohe Fehlerrate bei Kategorisierung
+     Diagnose: SELECT error_type, COUNT(*) FROM receipt_errors GROUP BY 1
+     Lösung: Claude API-Key prüfen, Rate-Limit kontrollieren
+   - S3/MinIO nicht erreichbar
+     Diagnose: aws s3 ls s3://bucket-name --endpoint-url ...
+     Lösung: MinIO-Service neu starten, S3-Credentials prüfen
+
+5. /infra/runbook/04_tenant_onboarding.md — Tenant-Onboarding-Checkliste
+   Checkliste für jeden neuen Kunden:
+   - [ ] Tenant in DB anlegen: INSERT INTO tenants ...
+   - [ ] Customer Profile anlegen mit korrekten enabled_modules
+   - [ ] WhatsApp-Nummer in customer_profiles eintragen
+   - [ ] Lexoffice/sevDesk API-Key in customer_credentials speichern
+   - [ ] Test-Beleg über WhatsApp senden und Pipeline durchlaufen lassen
+   - [ ] Kategorisierungs-Mapping für häufige Lieferanten prüfen
+   - [ ] Monatsreport-Cron für den Kunden aktivieren
+   - [ ] DSGVO-Einwilligung + AV-Vertrag unterschrieben?
+   - [ ] Backup überprüfen (customer_id taucht in neuem pg_dump auf?)
+   - [ ] Onboarding-Mail mit Zugangsdaten versenden
+
+6. /infra/runbook/05_monitoring_checks.md — Tägliche/Wöchentliche Checks
+   Tägliche Checks (5 Min):
+   - Backup-Log: tail /var/log/pp-backup.log | grep ERROR
+   - Fehlgeschlagene Belege: SELECT COUNT(*) FROM receipts WHERE status='error' AND created_at > now()-interval '24h'
+   - n8n Executions: UI öffnen, rote Executions vorhanden?
+
+   Wöchentliche Checks (15 Min):
+   - npm audit im Backend: keine critical vulnerabilities
+   - DB-Größe: SELECT pg_size_pretty(pg_database_size('prozesspilot'))
+   - Restore-Test Logs prüfen
+   - Load-Test einmal kurz ausführen (10 VUs, 30s)
+
+NACH BLOCK B: echo "Runbook erstellt" && ls /Users/donandrejo/Documents/ProzessPilot/prozesspilot/../infra/runbook/
+
+════════════════════════════════════════════════════════════════
+BLOCK C — tasks.ts aktualisieren
+════════════════════════════════════════════════════════════════
+
+Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Setze folgende Tasks auf done: true:
+- id: 500  (Load Tests)
+- id: 506  (Runbook)

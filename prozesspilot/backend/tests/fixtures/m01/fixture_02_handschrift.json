@@ -1,0 +1,11 @@
+{
+  "name": "Handschriftlicher Beleg (schlechte OCR, Claude-Fallback)",
+  "raw_text": "Cafe? klein\nRecpt 5\n01.02.2026\n\nTosti  4,50\nLatte  3,80\n\nTtl  8,30",
+  "expected_fields": {
+    "document_date": "2026-02-01",
+    "currency":      "EUR"
+  },
+  "expected_status": "requires_review",
+  "expected_confidence_range": [0.0, 0.6],
+  "ocr_confidence": 0.45
+}

@@ -1,0 +1,152 @@
+Du bist ein Senior TypeScript/Node.js Engineer und arbeitest am Projekt ProzessPilot — ein multi-tenant Belegverarbeitungs-System für Steuerberater.
+
+STACK: Fastify + TypeScript + Zod · PostgreSQL mit pgcrypto · n8n Workflows · HMAC-SHA256 Auth (PP_AUTH_DISABLED=1 in dev)
+
+ARBEITSVERZEICHNIS: Du bist in prozesspilot/ — das Monorepo-Root. Backend-Code ist unter backend/, n8n-Workflows unter n8n/workflows/.
+
+BEVOR DU ANFÄNGST: Lies folgende Konzept-Dateien komplett durch:
+- Modulkonzept/Konzeptentwicklung/05_Roadmap.md
+- Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md
+- Modulkonzept/Konzeptentwicklung/modules/M08_Monatsreporting.md
+- backend/src/core/hooks/hook-runner.ts (aktuell ein STUB — wird heute ersetzt)
+- backend/migrations/ (alle vorhandenen Migrations-Dateien lesen)
+
+================================================================================
+AUFGABE 1 — FEHLENDE DATENBANK-MIGRATIONEN (Priorität: KRITISCH)
+================================================================================
+
+Erstelle folgende SQL-Migrationsdateien unter backend/migrations/ (nach der bestehenden 002_customer_profiles.sql):
+
+003_categories.sql:
+- categories Tabelle: id UUID PK, tenant_id UUID FK tenants, name TEXT, skr03_konto TEXT, skr04_konto TEXT, description TEXT, is_system BOOLEAN DEFAULT false, created_at TIMESTAMPTZ
+- Index auf tenant_id
+- Befülle mit den 14 Standard-Kategorien aus dem M04-Konzept (Büromaterial SKR03: 6815 usw. — lies das Konzept für die vollständige Liste)
+- Alle Migrations-Dateien sind idempotent (CREATE TABLE IF NOT EXISTS, INSERT ... ON CONFLICT DO NOTHING)
+
+004_customer_categories.sql:
+- customer_category_overrides Tabelle: id UUID PK, tenant_id UUID FK, customer_id UUID FK, keyword TEXT, category_id UUID FK categories, created_by TEXT, created_at TIMESTAMPTZ
+- Index auf tenant_id + customer_id
+
+005_categorization_cache.sql:
+- categorization_cache Tabelle: id UUID PK, tenant_id UUID FK, receipt_id UUID FK, input_hash TEXT, category_id UUID FK, confidence NUMERIC(4,3), model TEXT, created_at TIMESTAMPTZ
+- Index auf input_hash für schnelle Lookups
+
+006_lexoffice.sql:
+- lexoffice_category_map Tabelle: id UUID PK, tenant_id UUID FK, category_id UUID FK categories, lexoffice_booking_type TEXT, lexoffice_category TEXT, tax_rate NUMERIC(5,2)
+- lexoffice_exports Tabelle: id UUID PK, tenant_id UUID FK, receipt_id UUID FK, voucher_id TEXT, exported_at TIMESTAMPTZ, status TEXT
+- Standard-Mappings für alle 14 Kategorien einfügen (laut M05-Konzept)
+
+007_monthly_reports.sql:
+- monthly_reports Tabelle: id UUID PK, tenant_id UUID FK, customer_id UUID FK, year INT, month INT, generated_at TIMESTAMPTZ, pdf_path TEXT, summary_data JSONB, status TEXT, delivered_at TIMESTAMPTZ
+- UNIQUE constraint auf (tenant_id, customer_id, year, month)
+
+008_hook_system.sql:
+- hook_definitions Tabelle: id UUID PK, tenant_id UUID FK, event_name TEXT, endpoint_url TEXT, secret TEXT, timeout_ms INT DEFAULT 10000, retry_count INT DEFAULT 3, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ
+- hook_executions Tabelle: id UUID PK, hook_definition_id UUID FK, receipt_id UUID FK, event_name TEXT, request_payload JSONB, response_status INT, response_body TEXT, duration_ms INT, created_at TIMESTAMPTZ, error TEXT
+- Index auf hook_definition_id + created_at
+
+009_error_log.sql:
+- error_log Tabelle: id UUID PK, tenant_id UUID FK, receipt_id UUID FK, stage TEXT, error_type TEXT, error_message TEXT, stack_trace TEXT, resolved BOOLEAN DEFAULT false, created_at TIMESTAMPTZ
+- Index auf tenant_id + created_at
+
+================================================================================
+AUFGABE 2 — HOOK-SYSTEM ECHTE IMPLEMENTIERUNG (Priorität: HOCH)
+================================================================================
+
+Ersetze den STUB in backend/src/core/hooks/hook-runner.ts mit einer echten Implementierung:
+
+Die echte Implementierung muss:
+1. hook_definitions aus der DB laden (WHERE tenant_id = ? AND event_name = ? AND is_active = true)
+2. Für jeden aktiven Hook: HTTP POST an endpoint_url senden mit Payload { event, receipt, timestamp }
+3. HMAC-SHA256 Signatur im Header X-ProzessPilot-Signature (secret aus hook_definitions)
+4. Timeout: timeout_ms aus DB (default 10000ms) — nutze AbortController
+5. Retry: bis zu retry_count Versuche bei Netzwerkfehler (exponentielles Backoff: 1s, 2s, 4s)
+6. Execution in hook_executions Tabelle loggen (immer, egal ob Erfolg oder Fehler)
+7. Bei Hook-Fehler: Receipt NICHT stoppen — Fehler nur loggen, Pipeline läuft weiter
+8. Unterstützte Events: before_extraction, after_extraction, before_categorization, after_categorization, after_archiving, receipt_completed, receipt_error
+
+Erstelle auch backend/src/core/hooks/hook.repository.ts mit:
+- getActiveHooks(tenantId, eventName) → HookDefinition[]
+- logExecution(data) → void
+- createHook(tenantId, data) → HookDefinition
+- updateHook(tenantId, hookId, data) → HookDefinition
+- deleteHook(tenantId, hookId) → void
+
+Erstelle backend/src/core/hooks/hook.routes.ts:
+- GET /hooks → alle Hooks des Tenants
+- POST /hooks → Hook erstellen
+- PUT /hooks/:hookId → Hook bearbeiten
+- DELETE /hooks/:hookId → Hook löschen
+- GET /hooks/:hookId/executions → Execution-Log der letzten 50
+
+Registriere die Routes in backend/src/app.ts.
+
+Schreibe Tests in backend/src/core/hooks/__tests__/hook-runner.test.ts:
+- Hook mit Erfolg → execution geloggt, status 200
+- Hook mit Timeout → execution geloggt als error, Pipeline läuft weiter
+- Hook mit falschem Secret → wird trotzdem gesendet (Empfänger verifiziert)
+- Kein Hook in DB → Receipt wird unverändert zurückgegeben
+
+================================================================================
+AUFGABE 3 — WF-ERROR-HANDLER n8n Workflow (Priorität: MITTEL)
+================================================================================
+
+Erstelle n8n/workflows/WF-ERROR-HANDLER.json als vollständigen n8n-Workflow.
+
+Der Workflow:
+1. Trigger: Webhook POST von WF-MASTER-RECEIPT bei Fehler (/webhook/error-handler)
+2. Input: { receiptId, tenantId, customerId, stage, error, errorType }
+3. Klassifiziert Fehler nach errorType:
+   - OCR_FAILED → receipt status = requires_review, Benachrichtigung an Steuerberater
+   - CATEGORY_FAILED → receipt status = requires_review, Confidence war zu niedrig
+   - ARCHIVE_FAILED → receipt status = error, Retry-Mechanismus (3 Versuche)
+   - WEBHOOK_FAILED → nur loggen, Pipeline läuft weiter
+4. Setzt Receipt-Status via PUT /receipts/:id/status
+5. Schreibt Fehler in error_log Tabelle via Backend-Endpoint POST /errors
+6. Sendet WhatsApp-Benachrichtigung wenn customer WhatsApp aktiv hat (M07 nutzen)
+
+Der Workflow muss das gleiche JSON-Format haben wie die anderen Workflows in n8n/workflows/.
+
+================================================================================
+AUFGABE 4 — WF-MASTER-RECEIPT um Error-Handler erweitern
+================================================================================
+
+Lies n8n/workflows/WF-MASTER-RECEIPT.json und ergänze:
+- Bei jedem Fehler-Node: HTTP Request Node → POST /webhook/error-handler
+- Payload: { receiptId, tenantId, customerId, stage: "M01"|"M03"|"M02"|"M07", error, errorType }
+- Eigener Fehler-Pfad (Error branch) nach jedem kritischen Schritt
+
+================================================================================
+AUFGABE 5 — E2E TEST: mvp-pipeline.test.ts
+================================================================================
+
+Erstelle backend/src/__tests__/mvp-pipeline.test.ts mit folgenden Tests:
+
+describe('MVP Pipeline E2E'):
+  - it('POST /receipts → extracting → extracted → categorized → archived → completed'):
+      1. Erstelle Test-Tenant + Test-Customer in DB
+      2. POST /receipts mit Test-PDF (fixtures/test-receipt.pdf)
+      3. Trigger M03 Extraktion direkt über Handler (nicht über n8n)
+      4. Trigger M04 Kategorisierung
+      5. Trigger M02 Archivierung
+      6. Prüfe finalen Status === 'completed'
+      7. Prüfe extracted_data ist befüllt
+      8. Prüfe category_id ist gesetzt
+      9. Prüfe archive_path ist gesetzt
+      Gesamt-Timeout: 30 Sekunden
+  - it('OCR_FAILED → status requires_review')
+  - it('Hook wird nach after_categorization gefeuert')
+
+Erstelle auch backend/src/__tests__/fixtures/test-receipt.pdf (minimales gültiges PDF).
+
+================================================================================
+WICHTIGE REGELN
+================================================================================
+
+- NIEMALS von Konzept-Specs abweichen — wenn etwas unklar ist, lies die Konzept-Datei
+- KEINE Phase 3/4 Features bauen (DATEV, Plugin-System, Load Tests) — das ist Phase 2
+- Alle neuen Dateien mit TypeScript strict mode + Zod-Validierung
+- Alle Routes mit HMAC-Auth absichern (nutze den bestehenden Auth-Middleware)
+- Migration-Dateien sind idempotent (IF NOT EXISTS überall)
+- Nach jeder Aufgabe: npm run build im backend/ Verzeichnis ausführen und Fehler fixen
+- FANGE MIT AUFGABE 1 (Migrationen) AN — alles andere hängt davon ab

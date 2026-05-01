@@ -1,0 +1,294 @@
+════════════════════════════════════════════════════════════════
+AUFGABEN: MINDEE OCR ADAPTER + PRO-KATEGORISIERUNG
+════════════════════════════════════════════════════════════════
+
+Zwei Aufgaben aus dem Konzept-Dokument 04_Erweiterbarkeit_Pro.md:
+Mindee als zweiter OCR-Adapter + Pro-Kunden Kategorisierungs-Erweiterungen.
+
+PFLICHT: Lies diese Dateien VOR dem Start:
+  /Modulkonzept/Konzeptentwicklung/modules/M01_Belegerfassung_OCR.md
+  /Modulkonzept/Konzeptentwicklung/04_Erweiterbarkeit_Pro.md
+  /Modulkonzept/Konzeptentwicklung/modules/M03_Kategorisierung.md
+  /backend/src/core/adapters/ocr/google-vision.adapter.ts  (als Referenz)
+  /backend/src/modules/m03-categorization/services/skr-mapper.ts
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Mindee OCR Adapter (Phase 3, Pro-Paket)
+════════════════════════════════════════════════════════════════
+
+Stub-Datei: /backend/src/core/adapters/ocr/mindee.adapter.ts
+Interface:  /backend/src/core/adapters/ocr/adapter.interface.ts
+Factory:    /backend/src/core/adapters/ocr/factory.ts
+
+LIES die Interface-Datei und die Google Vision Adapter-Implementierung vollständig.
+
+IMPLEMENTIERUNG:
+
+Ersetze den Stub mit echter Mindee API v1 Implementierung.
+
+1. npm install mindee --save
+   (im backend-Verzeichnis)
+
+2. Mindee API Grundlagen:
+   - Endpoint: https://api.mindee.net/v1/products/mindee/invoices/v4/predict
+   - Auth: Header "Authorization: Token {MINDEE_API_KEY}"
+   - Input: Multipart form-data mit Datei
+   - Output: JSON mit Feldern wie supplier_name, total_amount, tax_amount, date, etc.
+   - Dokumentation: https://developers.mindee.com/docs/invoice-ocr
+
+3. Implementiere extract(bytes: Buffer, config?: Record<string, unknown>): Promise<OcrResult>
+
+   ```ts
+   import { Client } from 'mindee';
+   import type { InvoiceV4 } from 'mindee/src/product';
+
+   export class MindeeAdapter implements OcrAdapter {
+     readonly id = 'mindee' as const;
+     readonly version = 'v1';
+
+     async extract(bytes: Buffer, config?: Record<string, unknown>): Promise<OcrResult> {
+       const apiKey = process.env.MINDEE_API_KEY;
+       if (!apiKey) throw new Error('MINDEE_API_KEY nicht gesetzt');
+
+       const client = new Client({ apiKey });
+
+       // Bytes in Mindee-kompatibles Format bringen
+       const inputSource = client.docFromBuffer({ buffer: bytes, filename: 'receipt.pdf' });
+       const response = await client.parse(MindeeClient.PRODUCT_MINDEE_INVOICE_V4, inputSource);
+
+       const doc = response.document.inference.prediction;
+
+       // Mapping Mindee → OcrResult (gleiche Struktur wie Google Vision Adapter)
+       return mapMindeeToOcrResult(doc);
+     }
+   }
+   ```
+
+4. Erstelle Mapping-Funktion mapMindeeToOcrResult(doc: InvoiceV4):
+   Mindee-Felder → OcrResult-Felder (gleiche Struktur wie Google Vision Output):
+
+   | Mindee Feld              | OcrResult Feld              |
+   |--------------------------|------------------------------|
+   | supplier_name.value      | fields.supplier_name         |
+   | supplier_company_registrations[0] | fields.supplier_vat_id |
+   | supplier_address.value   | fields.supplier_address      |
+   | invoice_number.value     | fields.document_number       |
+   | invoice_date.value       | fields.document_date (YYYY-MM-DD) |
+   | due_date.value           | fields.due_date              |
+   | total_net.value          | fields.total_net             |
+   | total_amount.value       | fields.total_gross           |
+   | total_tax.value          | fields.total_tax             |
+   | taxes[]                  | fields.tax_lines[]           |
+   | locale.currency          | fields.currency              |
+   | payment_details[]        | fields.payment_method        |
+
+   Confidence: nutze doc.supplier_name.confidence als Basis, Durchschnitt aller Felder.
+
+   Falls ein Wert null ist → undefined im OcrResult (nicht null).
+   Datums-Format normalisieren: Mindee gibt YYYY-MM-DD zurück, das passt.
+
+5. ENV in .env.example ergänzen:
+   MINDEE_API_KEY=...
+
+6. In /backend/src/core/adapters/ocr/factory.ts:
+   Prüfe ob MindeeAdapter bereits importiert und registriert ist.
+   Falls nicht: ergänze den case 'mindee' in der Factory.
+
+NACH BLOCK A: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+7. Tests: /backend/src/core/adapters/ocr/tests/mindee.adapter.test.ts
+   - Mock: mindee Client (vi.mock('mindee'))
+   - Test: extract gibt korrektes OcrResult zurück
+   - Test: fehlende Felder werden als undefined behandelt (nicht crash)
+   - Test: MINDEE_API_KEY fehlt → sauberer Error
+
+════════════════════════════════════════════════════════════════
+BLOCK B — Pro-Kategorisierung: supplier_overrides + branch_rules + AI-Examples
+════════════════════════════════════════════════════════════════
+
+Konzept: /Modulkonzept/Konzeptentwicklung/04_Erweiterbarkeit_Pro.md §2.1
+Ziel-Dateien:
+  /backend/src/modules/m03-categorization/services/skr-mapper.ts
+  /backend/src/modules/m04-categorize/categorize.handler.ts (oder m03-categorization Handler)
+
+LIES 04_Erweiterbarkeit_Pro.md §2.1 und §2.2 vollständig.
+LIES den bestehenden Kategorisierungs-Code vollständig.
+
+Das Konzept definiert drei customer_profile.custom-Felder die M03 nutzen soll:
+
+### B1: supplier_overrides (Vorrang vor Claude)
+
+In customer_profile.custom:
+```json
+{
+  "supplier_overrides": {
+    "Metro AG": { "category": "wareneinkauf_food", "skr": "3100" },
+    "Stadtwerke München": { "category": "betriebskosten_energie", "skr": "4240" }
+  }
+}
+```
+
+In der Kategorisierungs-Pipeline (VOR dem Claude-API-Call):
+1. Lese custom.supplier_overrides aus dem CustomerProfile
+2. Normalisiere den extrahierten Lieferantennamen: toLowerCase().trim()
+3. Prüfe ob ein Key aus supplier_overrides (ebenfalls normalisiert) im Lieferantennamen enthalten ist
+4. Falls Treffer: setze category + skr direkt, überspringe Claude-Call
+5. Setze confidence: 1.0 (manuelles Override → 100% sicher)
+6. Setze source: 'supplier_override' im Kategorisierungsergebnis
+
+Suche in der Codebase wo der Claude-Call für Kategorisierung stattfindet:
+  grep -r "claude\|anthropic\|categoriz" /backend/src/modules/ --include="*.ts" -l
+Füge den Override-Check VOR diesem Aufruf ein.
+
+### B2: ai_categorization_examples (Prompt-Anreicherung)
+
+In customer_profile.custom:
+```json
+{
+  "ai_categorization_examples": [
+    {
+      "supplier": "BackHaus Schmidt",
+      "items_pattern": "Brot|Brötchen",
+      "category": "wareneinkauf_food",
+      "skr": "3100"
+    }
+  ]
+}
+```
+
+Suche wo der Claude-Prompt für Kategorisierung aufgebaut wird.
+Ergänze: Wenn custom.ai_categorization_examples vorhanden, hänge ans Ende des Prompts:
+
+```
+Zusätzliche Beispiele für diesen Kunden:
+- Lieferant "BackHaus Schmidt" mit Artikeln wie "Brot, Brötchen" → wareneinkauf_food / SKR 3100
+[... weitere Beispiele ...]
+```
+
+Diese Beispiele verbessern die Claude-Genauigkeit für kundenspezifische Lieferanten.
+
+### B3: branch_rules (Kostenstellen-Zuweisung)
+
+In customer_profile.custom:
+```json
+{
+  "branch_rules": {
+    "muenchen-altstadt": { "cost_center": "loc_muc_alt" },
+    "muenchen-west":     { "cost_center": "loc_muc_west" }
+  }
+}
+```
+
+Nach der Kategorisierung: wenn receipt.meta?.branch vorhanden ist
+und custom.branch_rules[receipt.meta.branch] existiert:
+→ Setze categorization.cost_center auf den Wert aus branch_rules.
+→ Override hat Vorrang vor Claude-bestimmter Kostenstelle.
+
+WICHTIG: Alle drei Erweiterungen sind NUR aktiv wenn:
+- Das Profil-Feld vorhanden ist (kein Crash wenn fehlt)
+- Kein leeres Objekt/Array (length-Check)
+- Bei supplier_overrides: Case-insensitive, Partial-Match (enthält) erlaubt
+
+NACH BLOCK B: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+Tests ergänzen in:
+  /backend/src/modules/m03-categorization/tests/categorize.handler.test.ts
+  Neue Test-Cases:
+  - supplier_override greift: kein Claude-Call, confidence=1.0
+  - supplier_override: kein Treffer → normaler Claude-Call
+  - ai_examples werden in Prompt injiziert
+  - branch_rules: cost_center wird gesetzt
+  - branch_rules: kein Match → cost_center unverändert
+
+════════════════════════════════════════════════════════════════
+BLOCK C — Kundenprofil-Historie tracken
+════════════════════════════════════════════════════════════════
+
+Konzept: /Modulkonzept/Konzeptentwicklung/02_Kundenprofil_System.md §2.1
+
+Die Tabelle customer_profile_history ist in der Spec definiert aber
+möglicherweise noch nicht befüllt. Prüfe:
+
+1. Existiert customer_profile_history Tabelle in den Migrations?
+   grep -r "customer_profile_history" /backend/migrations/
+
+2. Falls nicht: erstelle /backend/migrations/017_profile_history.sql:
+   ```sql
+   CREATE TABLE IF NOT EXISTS customer_profile_history (
+     history_id      BIGSERIAL PRIMARY KEY,
+     customer_id     TEXT NOT NULL,
+     profile_version INT  NOT NULL,
+     snapshot        JSONB NOT NULL,
+     changed_by      TEXT NOT NULL,
+     changed_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+     change_summary  TEXT
+   );
+   CREATE INDEX idx_profile_history_customer ON customer_profile_history(customer_id, changed_at DESC);
+   ```
+
+3. Suche wo customer_profiles UPDATE-Queries gemacht werden:
+   grep -r "UPDATE customer_profiles\|profiles.*update\|updateProfile" /backend/src/ --include="*.ts" -l
+
+4. Bei jedem Profil-Update: vor oder nach dem UPDATE einen INSERT in
+   customer_profile_history machen mit:
+   - customer_id
+   - profile_version (alten Wert + 1)
+   - snapshot: vollständiges altes Profil als JSONB
+   - changed_by: aus Request-Context (tenant_id oder 'system')
+   - change_summary: kurze Beschreibung was geändert wurde (optional)
+
+5. Neuer Endpoint GET /api/v1/customers/{customerId}/profile/history:
+   - Gibt die letzten 20 Einträge aus customer_profile_history zurück
+   - Sortiert nach changed_at DESC
+   - Für Audit-Zwecke
+
+6. In Webapp SettingsPage oder CustomerProfilePage:
+   Kleinen "Änderungsverlauf" Button ergänzen der die History lädt und
+   als Timeline darstellt: Datum | Geändert von | Zusammenfassung
+
+NACH BLOCK C: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK D — tasks.ts aktualisieren
+════════════════════════════════════════════════════════════════
+
+Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Füge neue Tasks ein (am Ende der jeweiligen Phase-Sektion):
+
+Phase 3 Block:
+  {
+    id: 405,
+    text: 'Mindee OCR Adapter implementieren (Phase 3, Pro)',
+    meta: 'Mindee API v1 · Invoice-Parsing · Mapping → OcrResult · Tests',
+    priority: 'medium',
+    done: true,
+    phase: 'phase3',
+    category: 'Backend',
+  },
+  {
+    id: 406,
+    text: 'Pro-Kategorisierung: supplier_overrides + branch_rules + AI-Examples',
+    meta: 'custom.supplier_overrides vor Claude-Call · Prompt-Injektion · Kostenstellen-Routing',
+    priority: 'medium',
+    done: true,
+    phase: 'phase3',
+    category: 'Backend',
+  },
+  {
+    id: 407,
+    text: 'Kundenprofil-Historisierung',
+    meta: 'customer_profile_history · Snapshot bei jedem Update · GET /profile/history',
+    priority: 'low',
+    done: true,
+    phase: 'phase3',
+    category: 'Backend',
+  },
+
+NICHT ANFASSEN:
+- /backend/src/core/adapters/spreadsheet/google-sheets.adapter.ts
+- /backend/src/core/adapters/archive-storage/google-drive.adapter.ts
+- /backend/src/modules/m05-lexoffice/
+- /backend/src/modules/m06-sevdesk/
+- /backend/migrations/001_* bis 016_*
+- /webapp/ (außer tasks.ts und SettingsPage/CustomerProfilePage für History-Button)

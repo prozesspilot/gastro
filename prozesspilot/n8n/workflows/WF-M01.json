@@ -1,0 +1,158 @@
+{
+  "id": "wf-m01-000000000003-0003-000000000003",
+  "name": "WF-M01",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "n1-trigger",
+      "name": "Trigger: Sub-Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "events": "workflow",
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "n2-assert",
+      "name": "Function: Assert Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// M01 entry contract — caller (WF-MASTER-RECEIPT) must hand us:\n//   { trace_id, receipt:{ receipt_id, customer_id, status, file, source, ... }, customer_profile, idempotency_key }\nconst input    = $json;\nconst receipt  = input.receipt || {};\nconst profile  = input.customer_profile || {};\nif (!receipt.receipt_id || !receipt.customer_id) {\n  throw new Error('M01 input invalid — missing receipt.receipt_id / customer_id');\n}\nif (receipt.status !== 'received') {\n  throw new Error('M01 input invalid — expected status=received, got: ' + receipt.status);\n}\nreturn [{\n  json: {\n    receipt,\n    customer_profile: profile,\n    trace_id:        input.trace_id || ('trc_' + Math.random().toString(36).slice(2, 12)),\n    idempotency_key: input.idempotency_key || ('ik_M01_' + receipt.receipt_id)\n  }\n}];"
+      }
+    },
+    {
+      "id": "n3-create-receipt",
+      "name": "HTTP: Create Receipt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/receipts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "=create_{{$json.receipt.receipt_id}}" },
+            { "name": "x-customer-id",   "value": "={{$json.receipt.customer_id}}" },
+            { "name": "x-trace-id",      "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"receipt_id\":  \"{{$json.receipt.receipt_id}}\",\n  \"customer_id\": \"{{$json.receipt.customer_id}}\",\n  \"file\":        {{JSON.stringify($json.receipt.file)}},\n  \"source\":      {{JSON.stringify($json.receipt.source)}},\n  \"user_caption\": \"{{$json.receipt.user_caption || ''}}\",\n  \"trace_id\":    \"{{$json.trace_id}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 1500, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n4-extract",
+      "name": "HTTP: Extract (OCR)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Function: Assert Status').item.json.receipt.receipt_id}}/extract",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",    "value": "application/json" },
+            { "name": "idempotency-key", "value": "={{$('Function: Assert Status').item.json.idempotency_key}}" },
+            { "name": "x-customer-id",   "value": "={{$('Function: Assert Status').item.json.receipt.customer_id}}" },
+            { "name": "x-trace-id",      "value": "={{$('Function: Assert Status').item.json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_profile\": {{JSON.stringify($('Function: Assert Status').item.json.customer_profile)}},\n  \"trace_id\":         \"{{$('Function: Assert Status').item.json.trace_id}}\"\n}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } },
+          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 5000, "retryOnStatusCode": "500,502,503,504" } }
+        }
+      }
+    },
+    {
+      "id": "n5-if-ok",
+      "name": "IF: response.ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-ok",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n6-build-ok",
+      "name": "Set: Build OK Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1420, 200],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\":     true,\n  \"module\": \"M01\",\n  \"receipt_patch\": {{JSON.stringify(($json.data && $json.data.receipt_patch) || {})}},\n  \"events_to_emit\": {{JSON.stringify(($json.data && $json.data.events_to_emit) || [])}}\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n7-build-err",
+      "name": "Set: Build Error Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1420, 400],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\":     false,\n  \"module\": \"M01\",\n  \"error\": {\n    \"code\":    \"{{ ($json.error && $json.error.code)    || 'EXTERNAL_API_FAILED' }}\",\n    \"message\": \"{{ ($json.error && $json.error.message) || 'M01 extract failed' }}\",\n    \"details\": {{JSON.stringify(($json.error && $json.error.details) || {})}}\n  }\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Trigger: Sub-Workflow": {
+      "main": [[{ "node": "Function: Assert Status", "type": "main", "index": 0 }]]
+    },
+    "Function: Assert Status": {
+      "main": [[{ "node": "HTTP: Create Receipt", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Create Receipt": {
+      "main": [[{ "node": "HTTP: Extract (OCR)", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Extract (OCR)": {
+      "main": [[{ "node": "IF: response.ok", "type": "main", "index": 0 }]]
+    },
+    "IF: response.ok": {
+      "main": [
+        [{ "node": "Set: Build OK Result",    "type": "main", "index": 0 }],
+        [{ "node": "Set: Build Error Result", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {}
+}

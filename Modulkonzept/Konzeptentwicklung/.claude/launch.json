@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend (npm run dev)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "../../prozesspilot/backend"],
+      "port": 3000
+    },
+    {
+      "name": "docker compose (postgres + redis + minio + n8n)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "../../prozesspilot/docker-compose.yml", "up"],
+      "port": 5678
+    },
+    {
+      "name": "postgres",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "../../prozesspilot/docker-compose.yml", "up", "postgres"],
+      "port": 5432
+    },
+    {
+      "name": "redis",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "../../prozesspilot/docker-compose.yml", "up", "redis"],
+      "port": 6379
+    },
+    {
+      "name": "minio",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "../../prozesspilot/docker-compose.yml", "up", "minio"],
+      "port": 9000
+    },
+    {
+      "name": "n8n",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "-f", "../../prozesspilot/docker-compose.yml", "up", "n8n"],
+      "port": 5678
+    }
+  ]
+}

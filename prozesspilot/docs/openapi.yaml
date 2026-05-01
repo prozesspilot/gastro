@@ -1,0 +1,1833 @@
+openapi: 3.0.3
+info:
+  title: ProzessPilot API
+  version: "1.0.0"
+  description: |
+    REST-API der ProzessPilot-Buchhaltungsautomation.
+    Alle Endpoints unter `/api/v1` benötigen eine HMAC-SHA256-Signatur und
+    den Header `x-pp-tenant-id` (UUID).
+  contact:
+    name: ProzessPilot Team
+servers:
+  - url: http://localhost:3000
+    description: Lokales Backend
+  - url: https://api.prozesspilot.example
+    description: Production
+
+security:
+  - HmacAuth: []
+
+components:
+  securitySchemes:
+    HmacAuth:
+      type: apiKey
+      in: header
+      name: x-pp-signature
+      description: |
+        HMAC-SHA256 über (Method + Path + Timestamp + RawBody) mit
+        `PP_HMAC_SECRET`. Zusätzlich erforderlich: `x-pp-timestamp` (Unix-Sek)
+        und `x-pp-tenant-id` (UUID).
+
+  parameters:
+    TenantHeader:
+      name: x-pp-tenant-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID des Mandanten.
+    TimestampHeader:
+      name: x-pp-timestamp
+      in: header
+      required: true
+      schema:
+        type: integer
+      description: Unix-Timestamp in Sekunden.
+
+  schemas:
+    ApiError:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+            details:
+              type: object
+
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        external_id:
+          type: string
+          nullable: true
+        tax_number:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+
+    CustomerCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        external_id:
+          type: string
+        tax_number:
+          type: string
+
+    Receipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, done, error]
+        original_name:
+          type: string
+          nullable: true
+        mime_type:
+          type: string
+          nullable: true
+        storage_key:
+          type: string
+          nullable: true
+        file_size_bytes:
+          type: integer
+          nullable: true
+        file_sha256:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [manual, whatsapp, email]
+        metadata:
+          type: object
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ReceiptCreate:
+      type: object
+      required: [customer_id]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        original_name:
+          type: string
+        mime_type:
+          type: string
+        source:
+          type: string
+          enum: [manual, whatsapp, email]
+        file_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+
+    ReceiptStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        by_status:
+          type: object
+          properties:
+            pending: { type: integer }
+            processing: { type: integer }
+            done: { type: integer }
+            error: { type: integer }
+        by_source:
+          type: object
+          properties:
+            manual: { type: integer }
+            whatsapp: { type: integer }
+            email: { type: integer }
+        today_count:
+          type: integer
+        this_week_count:
+          type: integer
+
+    BulkStatus:
+      type: object
+      required: [ids, status]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum: [pending, processing, done, error]
+
+    OcrResult:
+      type: object
+      properties:
+        receipt:
+          $ref: '#/components/schemas/Receipt'
+        ocr_text:
+          type: string
+        ocr_confidence:
+          type: number
+        ocr_at:
+          type: string
+          format: date-time
+        mock:
+          type: boolean
+
+    Categorization:
+      type: object
+      properties:
+        category:
+          type: string
+          enum: [Büromaterial, Reise, Bewirtung, Porto, Telekommunikation, Miete, Sonstiges]
+        amount:
+          type: number
+        currency:
+          type: string
+        date:
+          type: string
+          nullable: true
+        vendor:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+
+    ExportResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        receipt_id:
+          type: string
+          format: uuid
+        target:
+          type: string
+          enum: [lexoffice, sevdesk, datev]
+        external_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [success, error, pending]
+        error_message:
+          type: string
+          nullable: true
+        exported_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    CustomerProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        skr_type:
+          type: string
+          enum: [SKR03, SKR04]
+          nullable: true
+        enabled_modules:
+          type: object
+          description: Map von Modul-Key auf boolean
+        whatsapp_number:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CustomerStats:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        total_receipts:
+          type: integer
+        receipts_today:
+          type: integer
+        receipts_this_week:
+          type: integer
+        receipts_this_month:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        by_category:
+          type: object
+          additionalProperties:
+            type: integer
+        avg_confidence:
+          type: number
+          nullable: true
+        last_receipt_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AdvisorCustomerSummary:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        pending_count:
+          type: integer
+        error_count:
+          type: integer
+        requires_review_count:
+          type: integer
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Communication:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        channel:
+          type: string
+          enum: [email, whatsapp, sms]
+        template_key:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        body:
+          type: string
+        status:
+          type: string
+          enum: [pending, sent, failed]
+        error_message:
+          type: string
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    CommunicationPreview:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum: [email, whatsapp, sms]
+        subject:
+          type: string
+          nullable: true
+        body:
+          type: string
+        recipient:
+          type: string
+          description: E-Mail-Adresse oder Telefonnummer
+
+    Plugin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        webhook_url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+        last_executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PluginExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plugin_id:
+          type: string
+          format: uuid
+        event:
+          type: string
+        payload:
+          type: object
+        success:
+          type: boolean
+        http_status:
+          type: integer
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        executed_at:
+          type: string
+          format: date-time
+
+    DeletionRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        requested_at:
+          type: string
+          format: date-time
+        executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_records:
+          type: integer
+          nullable: true
+
+paths:
+  /health:
+    get:
+      summary: Liveness-Probe
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  version: { type: string }
+                  uptime: { type: integer }
+
+  /ready:
+    get:
+      summary: Readiness-Probe (DB, Redis, Migrations)
+      security: []
+      responses:
+        '200':
+          description: bereit
+        '503':
+          description: nicht bereit
+
+  /api/v1/events:
+    get:
+      summary: Server-Sent Events für Live-Updates (Webapp)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: SSE-Stream (text/event-stream)
+
+  /api/v1/tenants:
+    get:
+      summary: Tenants auflisten
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Tenants
+
+  /api/v1/customers:
+    get:
+      summary: Kunden auflisten (paginiert)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: paginierte Liste
+    post:
+      summary: Kunde anlegen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+            example:
+              name: "Max Mustermann GmbH"
+              email: "info@mustermann.de"
+              external_id: "DATEV-001"
+      responses:
+        '201':
+          description: angelegt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Customer'
+        '422':
+          description: Validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/customers/{id}:
+    get:
+      summary: Einzelnen Kunden laden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Kunde
+        '404':
+          description: nicht gefunden
+
+  /api/v1/receipts:
+    get:
+      summary: Receipts auflisten (paginiert + Filter + Volltext)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: customer_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, processing, done, error] }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Liste
+    post:
+      summary: Receipt anlegen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptCreate'
+            example:
+              customer_id: "11111111-1111-1111-1111-111111111111"
+              original_name: "rechnung-2026-04.pdf"
+              mime_type: "application/pdf"
+              source: "manual"
+              file_sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      responses:
+        '201':
+          description: angelegt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Receipt'
+        '404':
+          description: Customer nicht im Tenant
+        '409':
+          description: Duplicate Receipt (gleicher SHA-256)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiError'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, example: DUPLICATE_RECEIPT }
+                          existing_id: { type: string, format: uuid }
+        '422':
+          description: Validation
+
+  /api/v1/receipts/stats:
+    get:
+      summary: Aggregierte Statistiken über Receipts
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Statistik
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/ReceiptStats'
+
+  /api/v1/receipts/bulk-status:
+    put:
+      summary: Status für mehrere Receipts (max. 50) gleichzeitig aktualisieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkStatus'
+      responses:
+        '200':
+          description: aktualisiert
+        '422':
+          description: > 50 IDs oder ungültiger Status
+
+  /api/v1/receipts/export:
+    get:
+      summary: CSV-Export aller Receipts des Tenants
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /api/v1/receipts/{id}:
+    get:
+      summary: Einzelnen Receipt laden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Receipt
+        '404':
+          description: nicht gefunden
+
+  /api/v1/receipts/{id}/status:
+    put:
+      summary: Status eines Receipts aktualisieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, processing, done, error]
+                error_message:
+                  type: string
+      responses:
+        '200':
+          description: aktualisiert
+
+  /api/v1/receipts/{id}/upload-url:
+    get:
+      summary: Presigned Upload-URL für die Original-Datei
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uploadUrl: { type: string }
+                      key: { type: string }
+
+  /api/v1/receipts/{id}/ocr:
+    post:
+      summary: OCR auf Receipt ausführen (M03)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OCR-Ergebnis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/OcrResult'
+        '429':
+          description: Rate-Limit (20/Minute pro Tenant)
+        '502':
+          description: OCR-Fehler
+
+  /api/v1/receipts/{id}/categorize:
+    post:
+      summary: Kategorisierung via Claude (M04)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Kategorisierung
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      receipt:
+                        $ref: '#/components/schemas/Receipt'
+                      categorization:
+                        $ref: '#/components/schemas/Categorization'
+                      mock:
+                        type: boolean
+        '429':
+          description: Rate-Limit (20/Minute pro Tenant)
+        '502':
+          description: Claude-Fehler
+
+  /api/v1/customers/{customer_id}/profile:
+    get:
+      summary: Kunden-Profil laden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: customer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Profil
+
+  /api/v1/routing/plan:
+    post:
+      summary: Routing-Plan aus Customer-Profile berechnen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Plan
+
+  /api/v1/reports/receipts:
+    get:
+      summary: PDF-Belegübersicht für den Tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: date_from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: date_to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, processing, done, error] }
+      responses:
+        '200':
+          description: PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ── Receipts: Export-Endpoints ──────────────────────────────────────────────
+
+  /api/v1/receipts/{id}/exports/lexoffice:
+    post:
+      summary: Beleg nach Lexoffice exportieren (M05)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Export erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/ExportResult'
+        '400':
+          description: Beleg nicht exportierbar (fehlende Felder)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500':
+          description: Lexoffice API-Fehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/receipts/{id}/exports/sevdesk:
+    post:
+      summary: Beleg nach sevDesk exportieren (M06)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Export erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/ExportResult'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500':
+          description: sevDesk API-Fehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/receipts/{id}/exports/datev:
+    post:
+      summary: Beleg in DATEV-Format exportieren (M04)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Export erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/ExportResult'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500':
+          description: DATEV-Fehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/receipts/{id}/review:
+    post:
+      summary: Beleg zur manuellen Pruefung markieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optionaler Grund fuer die Pruefung
+      responses:
+        '200':
+          description: Status auf requires_review gesetzt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Receipt'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Customers: Profil + Exports ──────────────────────────────────────────────
+
+  /api/v1/customers/{id}/profile:
+    put:
+      summary: Kunden-Profil aktualisieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                skr_type:
+                  type: string
+                  enum: [SKR03, SKR04]
+                enabled_modules:
+                  type: object
+                  description: Map von Modul-Key auf boolean
+                whatsapp_number:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Profil aktualisiert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/CustomerProfile'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/customers/{id}/exports/sevdesk:
+    get:
+      summary: Alle sevDesk-Exporte fuer einen Kunden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Exportliste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExportResult'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Stats ────────────────────────────────────────────────────────────────────
+
+  /api/v1/customers/{customer_id}/stats:
+    get:
+      summary: Aggregierte Statistiken fuer einen Kunden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: customer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Statistiken
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/CustomerStats'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Advisor-Portal (M06) ─────────────────────────────────────────────────────
+
+  /api/v1/advisor/overview:
+    get:
+      summary: Steuerberater-Uebersicht aller Mandanten
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      responses:
+        '200':
+          description: Uebersicht
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdvisorCustomerSummary'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/advisor/receipts/pending:
+    get:
+      summary: Alle ausstehenden Belege zur Pruefung
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, maximum: 200 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Ausstehende Belege
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Receipt'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/advisor/receipts/bulk-approve:
+    post:
+      summary: Mehrere Belege gleichzeitig genehmigen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                    format: uuid
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Genehmigt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  approved_count: { type: integer }
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/advisor/receipts/{id}/comment:
+    post:
+      summary: Kommentar zu einem Beleg hinzufuegen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Kommentar gespeichert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Communications (M09) ─────────────────────────────────────────────────────
+
+  /api/v1/communications:
+    get:
+      summary: Kommunikations-Eintraege auflisten
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: query
+          name: customer_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: channel
+          schema: { type: string, enum: [email, whatsapp, sms] }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Communication'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/communications/build:
+    post:
+      summary: Kommunikations-Nachricht aufbauen (ohne senden)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, template_key, channel]
+              properties:
+                customer_id:
+                  type: string
+                  format: uuid
+                template_key:
+                  type: string
+                  description: "z.B. missing_receipt, overdue_reminder"
+                channel:
+                  type: string
+                  enum: [email, whatsapp, sms]
+                context:
+                  type: object
+                  description: Template-Variablen
+      responses:
+        '200':
+          description: Aufgebaute Nachricht (Vorschau)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/CommunicationPreview'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/communications/send:
+    post:
+      summary: Kommunikations-Nachricht aufbauen und senden
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, template_key, channel]
+              properties:
+                customer_id:
+                  type: string
+                  format: uuid
+                template_key:
+                  type: string
+                channel:
+                  type: string
+                  enum: [email, whatsapp, sms]
+                context:
+                  type: object
+      responses:
+        '200':
+          description: Nachricht gesendet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Communication'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500':
+          description: Sendefehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Plugin-System ────────────────────────────────────────────────────────────
+
+  /api/v1/plugins:
+    get:
+      summary: Registrierte Plugins auflisten
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      responses:
+        '200':
+          description: Plugin-Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plugin'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+    post:
+      summary: Plugin registrieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, webhook_url, events]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                webhook_url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                  description: "z.B. [receipt.created, receipt.exported]"
+                hmac_secret:
+                  type: string
+                  description: Optional. Falls gesetzt, wird HMAC-Signatur im Webhook mitgeschickt.
+      responses:
+        '201':
+          description: Plugin registriert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Plugin'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/plugins/{id}:
+    put:
+      summary: Plugin aktualisieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                webhook_url: { type: string, format: uri }
+                events:
+                  type: array
+                  items: { type: string }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Plugin aktualisiert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/Plugin'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '404':
+          description: Plugin nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+    delete:
+      summary: Plugin deregistrieren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Geloescht
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '404':
+          description: Plugin nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/plugins/{id}/executions:
+    get:
+      summary: Ausfuehrungsprotokoll eines Plugins
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+        - in: query
+          name: success
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Executions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PluginExecution'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── DSGVO ────────────────────────────────────────────────────────────────────
+
+  /api/v1/dsgvo/delete-request:
+    post:
+      summary: DSGVO-Loeschanfrage anlegen
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, reason]
+              properties:
+                customer_id:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+                  description: Begruendung fuer die Loeschanfrage
+      responses:
+        '201':
+          description: Anfrage angelegt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/DeletionRequest'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/dsgvo/delete-request/{id}:
+    get:
+      summary: Status einer DSGVO-Loeschanfrage
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Anfrage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/DeletionRequest'
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '404':
+          description: Anfrage nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/dsgvo/delete-request/{id}/execute:
+    post:
+      summary: DSGVO-Loeschung ausfuehren
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Loeschung erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  deleted_records: { type: integer }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '404':
+          description: Anfrage nicht gefunden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500':
+          description: Loeschfehler
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/dsgvo/export-data:
+    get:
+      summary: Datenschutz-Export (Artikel 20 DSGVO)
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - in: query
+          name: customer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Alle personenbezogenen Daten als JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: object
+                    description: Vollstaendiger Datensatz des Kunden
+        '400':
+          description: customer_id fehlt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /api/v1/dsgvo/pii-inventory:
+    get:
+      summary: Inventar aller PII-Felder im System
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+      responses:
+        '200':
+          description: PII-Inventar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        table: { type: string }
+                        column: { type: string }
+                        pii_type: { type: string }
+                        encrypted: { type: boolean }
+        '401':
+          description: Ungueltige HMAC-Signatur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  # ── Webhooks ─────────────────────────────────────────────────────────────────
+
+  /webhooks/email/inbound:
+    post:
+      summary: Eingehende E-Mail (Mailgun/Postmark Webhook)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Mailgun oder Postmark Inbound-Payload
+      responses:
+        '200':
+          description: Empfangen und verarbeitet
+        '400':
+          description: Ungueltiges Payload-Format
+
+  # ── Neue Schemas fuer die oben aufgefuehrten Endpoints ──────────────────────

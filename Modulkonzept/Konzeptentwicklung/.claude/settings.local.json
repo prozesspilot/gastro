@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(node -e \"const f=require\\('fs'\\);const d=JSON.parse\\(f.readFileSync\\('/Users/donandrejo/Documents/ProzessPilot/prozesspilot/n8n/workflows/WF-INPUT-WHATSAPP.json','utf8'\\)\\);console.log\\('nodes:',d.nodes.length\\);console.log\\('node names:',d.nodes.map\\(n=>n.name\\)\\);console.log\\('connection sources:',Object.keys\\(d.connections\\)\\);\")",
+      "Bash(npx vitest *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(docker compose *)",
+      "Bash(ps -p 28614 -o pid,command)",
+      "Bash(env)",
+      "Bash(kill 28614)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s http://localhost:3000/ready)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3000/api/v1/internal/whatsapp/verify -H 'content-type: application/json' -d '{\"raw_body_b64\":\"e30=\",\"signature\":\"sha256=deadbeef\"}')",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3000/api/v1/internal/whatsapp/resolve -H 'content-type: application/json' -d '{\"phone_number_id\":\"123\",\"from\":\"4917612345678\"}')",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3000/api/v1/internal/whatsapp/media -H 'content-type: application/json' -d '{\"media_id\":\"x\",\"customer_id\":\"y\"}')",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3000/api/v1/internal/whatsapp/send-template -H 'content-type: application/json' -d '{\"customer_id\":\"y\",\"to\":\"+49\",\"template_name\":\"confirmation_received_de\"}')",
+      "Bash(npm run *)",
+      "Bash(docker exec *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/internal/whatsapp/resolve -H 'content-type: application/json' -d '{\"phone_number_id\":\"123\",\"from\":\"4917612345678\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/internal/whatsapp/resolve -H 'content-type: application/json' -d '{\"phone_number_id\":\"123456789012345\",\"from\":\"4915155555555\"}' -H 'x-trace-id: trc_smoke_001')",
+      "Bash(curl -fsS http://localhost:3000/health)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/internal/whatsapp/resolve -H 'content-type: application/json' -H 'x-trace-id: trc_smoke_002' -d '{\"phone_number_id\":\"123456789012345\",\"from\":\"4915155555555\"}')",
+      "Bash(docker cp *)",
+      "Bash(curl -s -i -X POST http://localhost:5678/webhook/wa -H 'content-type: application/json' -d '{\"a\":1}')",
+      "Bash(curl -s -i -X POST http://localhost:5678/webhook-test/wa -H 'content-type: application/json' -d '{\"a\":1}')",
+      "Bash(curl -fsS http://localhost:5678/healthz)",
+      "Bash(openssl dgst *)",
+      "Bash(curl -s -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:5678/webhook/wa-input-webhook -d '{}' -H 'content-type: application/json')",
+      "Bash(curl -s -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:5678/webhook/n1-trigger-meta-webhook -d '{}' -H 'content-type: application/json')",
+      "Read(//Users/donandrejo/Documents/ProzessPilot/**)",
+      "Bash(echo \"---EXIT $?---\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"const lib = require\\('pdf-lib'\\); console.log\\('version:', require\\('pdf-lib/package.json'\\).version\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(npx biome *)",
+      "Bash(npm test *)"
+    ]
+  }
+}

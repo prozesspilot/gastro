@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend — Build, Migrate, Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: prozesspilot_test
+          POSTGRES_USER: pp
+          POSTGRES_PASSWORD: pp
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: cd backend && npm ci
+
+      - name: TypeScript Build
+        run: cd backend && npm run build
+
+      - name: Run migrations
+        run: cd backend && npm run migrate
+        env:
+          DATABASE_URL: postgresql://pp:pp@localhost:5432/prozesspilot_test
+          PP_AUTH_DISABLED: '1'
+          REDIS_URL: redis://localhost:6379
+          PP_PGCRYPTO_KEY: test_pgcrypto_key_for_ci_only
+
+      - name: Run tests
+        run: cd backend && npm test
+        env:
+          DATABASE_URL: postgresql://pp:pp@localhost:5432/prozesspilot_test
+          PP_AUTH_DISABLED: '1'
+          SMTP_ENABLED: 'false'
+          LEXOFFICE_API_BASE: 'http://localhost:9999'
+          SEVDESK_API_BASE: 'http://localhost:9999'
+          REDIS_URL: redis://localhost:6379
+          PP_PGCRYPTO_KEY: test_pgcrypto_key_for_ci_only
+          CLAUDE_API_KEY: test_key_not_real
+          NODE_ENV: test
+
+  webapp:
+    name: Webapp — TypeScript Check + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install dependencies
+        run: cd webapp && npm ci
+
+      - name: TypeScript check
+        run: cd webapp && npx tsc --noEmit
+
+      - name: Build
+        run: cd webapp && npm run build

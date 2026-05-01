@@ -1,0 +1,220 @@
+{
+  "id": "wf-error-handler-0000-0000-000000000099",
+  "name": "WF-ERROR-HANDLER",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "n1-trigger",
+      "name": "Webhook: error-handler",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "error-handler",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "wf-error-handler-webhook"
+    },
+    {
+      "id": "n2-classify",
+      "name": "Function: Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 400],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Klassifikation nach errorType (M01/M02/M03/M07/Master).\n// Bestimmt: target_status, escalate (Operator-Notify), retry, customer_notify.\nconst input = $json.body || $json;\nconst errorType = String(input.errorType || 'UNKNOWN').toUpperCase();\nconst stage = String(input.stage || '').toUpperCase();\n\nlet targetStatus = 'error';\nlet retry = false;\nlet escalate = true;\nlet customerNotify = false;\n\nswitch (errorType) {\n  case 'OCR_FAILED':\n  case 'CATEGORY_FAILED':\n    targetStatus = 'requires_review';\n    retry = false;\n    escalate = true;\n    customerNotify = true;\n    break;\n  case 'ARCHIVE_FAILED':\n    targetStatus = 'error';\n    retry = true;\n    escalate = true;\n    customerNotify = false;\n    break;\n  case 'WEBHOOK_FAILED':\n    // Webhook-Failures stoppen die Pipeline NICHT\n    targetStatus = '';\n    retry = false;\n    escalate = false;\n    customerNotify = false;\n    break;\n  default:\n    targetStatus = 'error';\n    escalate = true;\n}\n\nreturn [{\n  json: {\n    receiptId:      input.receiptId,\n    customerId:     input.customerId || input.tenantId,\n    stage:          stage || null,\n    errorType:      errorType,\n    error:          input.error || input.errorMessage || 'unknown',\n    target_status:  targetStatus,\n    retry:          retry,\n    escalate:       escalate,\n    customer_notify: customerNotify,\n    trace_id:       input.traceId || input.trace_id || null\n  }\n}];"
+      }
+    },
+    {
+      "id": "n3-log-error",
+      "name": "HTTP: POST /errors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",  "value": "application/json" },
+            { "name": "x-customer-id", "value": "={{$json.customerId}}" },
+            { "name": "x-trace-id",    "value": "={{$json.trace_id}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_id\":   \"{{$json.customerId}}\",\n  \"receipt_id\":    \"{{$json.receiptId}}\",\n  \"stage\":         \"{{$json.stage || ''}}\",\n  \"error_type\":    \"{{$json.errorType}}\",\n  \"error_message\": \"{{ String($json.error).replace(/\\\"/g, '\\\\\\\"') }}\",\n  \"trace_id\":      \"{{$json.trace_id || ''}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n4-if-status-change",
+      "name": "IF: target_status set",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            { "id": "has-status", "leftValue": "={{$('Function: Classify Error').item.json.target_status}}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n5-update-status",
+      "name": "HTTP: Receipt transition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 280],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Function: Classify Error').item.json.receiptId}}/transition",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type",  "value": "application/json" },
+            { "name": "x-customer-id", "value": "={{$('Function: Classify Error').item.json.customerId}}" },
+            { "name": "x-trace-id",    "value": "={{$('Function: Classify Error').item.json.trace_id || ''}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_id\": \"{{$('Function: Classify Error').item.json.customerId}}\",\n  \"status\":      \"{{$('Function: Classify Error').item.json.target_status}}\",\n  \"reason\":      \"{{$('Function: Classify Error').item.json.errorType}}: {{ String($('Function: Classify Error').item.json.error).replace(/\\\"/g, '\\\\\\\"').slice(0, 200) }}\",\n  \"trace_id\":    \"{{$('Function: Classify Error').item.json.trace_id || ''}}\"\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n6-skip-status",
+      "name": "Set: Skipped Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1200, 520],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={ \"skipped\": true, \"reason\": \"webhook_failed_no_status_change\" }",
+        "options": {}
+      }
+    },
+    {
+      "id": "n7-if-escalate",
+      "name": "IF: escalate to operator",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            { "id": "do-escalate", "leftValue": "={{$('Function: Classify Error').item.json.escalate}}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n8-notify-operator",
+      "name": "HTTP: Notify Operator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 280],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/notifications/operator",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\":      \"email\",\n  \"subject\":      \"Pipeline-Fehler: {{$('Function: Classify Error').item.json.errorType}}\",\n  \"workflow\":     \"WF-MASTER-RECEIPT\",\n  \"node\":         \"{{$('Function: Classify Error').item.json.stage}}\",\n  \"receipt_id\":   \"{{$('Function: Classify Error').item.json.receiptId}}\",\n  \"trace_id\":     \"{{$('Function: Classify Error').item.json.trace_id || ''}}\",\n  \"error\":        {\n    \"type\":    \"{{$('Function: Classify Error').item.json.errorType}}\",\n    \"message\": \"{{ String($('Function: Classify Error').item.json.error).replace(/\\\"/g, '\\\\\\\"').slice(0, 500) }}\"\n  }\n}",
+        "options": {
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n9-skip-escalate",
+      "name": "Set: No Escalation",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1680, 520],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={ \"escalated\": false }",
+        "options": {}
+      }
+    },
+    {
+      "id": "n10-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1920, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\":            true,\n  \"errorType\":     \"{{$('Function: Classify Error').item.json.errorType}}\",\n  \"target_status\": \"{{$('Function: Classify Error').item.json.target_status}}\",\n  \"escalated\":     {{$('Function: Classify Error').item.json.escalate}},\n  \"retry\":         {{$('Function: Classify Error').item.json.retry}}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: error-handler": {
+      "main": [[{ "node": "Function: Classify Error", "type": "main", "index": 0 }]]
+    },
+    "Function: Classify Error": {
+      "main": [[{ "node": "HTTP: POST /errors", "type": "main", "index": 0 }]]
+    },
+    "HTTP: POST /errors": {
+      "main": [[{ "node": "IF: target_status set", "type": "main", "index": 0 }]]
+    },
+    "IF: target_status set": {
+      "main": [
+        [{ "node": "HTTP: Receipt transition", "type": "main", "index": 0 }],
+        [{ "node": "Set: Skipped Status",      "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP: Receipt transition": {
+      "main": [[{ "node": "IF: escalate to operator", "type": "main", "index": 0 }]]
+    },
+    "Set: Skipped Status": {
+      "main": [[{ "node": "IF: escalate to operator", "type": "main", "index": 0 }]]
+    },
+    "IF: escalate to operator": {
+      "main": [
+        [{ "node": "HTTP: Notify Operator", "type": "main", "index": 0 }],
+        [{ "node": "Set: No Escalation",   "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP: Notify Operator": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    },
+    "Set: No Escalation": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {}
+}

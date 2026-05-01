@@ -1,0 +1,6 @@
+{
+  "sha256": "aabbccdd1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+  "raw_text": "Duplikat-Beleg",
+  "expected_status": "received",
+  "is_duplicate_test": true
+}

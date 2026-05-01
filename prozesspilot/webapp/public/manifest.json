@@ -1,0 +1,26 @@
+{
+  "name": "ProzessPilot",
+  "short_name": "PP",
+  "description": "Modulare Steuerberater-Suite für die automatisierte Belegverarbeitung",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#060910",
+  "background_color": "#060910",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

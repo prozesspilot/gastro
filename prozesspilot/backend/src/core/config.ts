@@ -1,0 +1,73 @@
+import { z } from 'zod';
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce.number().default(3000),
+  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'silent']).default('info'),
+
+  DATABASE_URL: z.string().default('postgres://pp:pp@localhost:5432/prozesspilot'),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  MINIO_ENDPOINT: z.string().default('http://localhost:9000'),
+  MINIO_ACCESS_KEY: z.string().default('pp'),
+  MINIO_SECRET_KEY: z.string().default('pp-secret'),
+  MINIO_BUCKET: z.string().default('prozesspilot-raw'),
+
+  PP_HMAC_SECRET: z.string().default(''),
+  PP_HMAC_TIMESTAMP_SKEW: z.coerce.number().default(300),
+  // '1' = HMAC-Bypass aktiv. In Production VERBOTEN — Backend prüft und beendet sich.
+  PP_AUTH_DISABLED: z.string().transform((v) => v === '1').default('0'),
+
+  PP_PGCRYPTO_KEY: z.string().default(''),
+
+  N8N_BASE_URL: z.string().default('http://localhost:5678'),
+  N8N_BASIC_AUTH_USER: z.string().default('admin'),
+  N8N_BASIC_AUTH_PASSWORD: z.string().default(''),
+  // Shared secret für eingehende n8n-Webhooks (HMAC-SHA256)
+  N8N_WEBHOOK_SECRET: z.string().default(''),
+
+  CLAUDE_API_KEY: z.string().default(''),
+  CLAUDE_MODEL:   z.string().default('claude-sonnet-4-6'),
+  GOOGLE_VISION_KEY_FILE: z.string().default(''),
+  // M01 §15 — Timeout für OCR-Adapter (Default 15 s).
+  OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+
+  // D10: Opt-in Loki-Transport (npm install pino-loki, dann LOKI_URL setzen)
+  LOKI_URL: z.string().optional(),
+
+  // ── M10: WhatsApp Eingang ────────────────────────────────────────────────
+  // Meta App Secret — wird zur Validierung der X-Hub-Signature-256 genutzt.
+  WHATSAPP_APP_SECRET:        z.string().default(''),
+  // Initiale GET-Verify-Challenge bei Registrierung des Webhooks.
+  WHATSAPP_VERIFY_TOKEN:      z.string().default(''),
+  // Graph-API-Version (z. B. v19.0). Pro Customer überschreibbar via credential meta.
+  WHATSAPP_GRAPH_API_VERSION: z.string().default('v19.0'),
+  // Bucket für Original-Belege (M10 verwendet ihn implizit über MINIO_BUCKET;
+  // separate Variable folgt der M10-Spec §14 für mögliche zukünftige Trennung).
+  STORAGE_RAW_BUCKET:         z.string().default('prozesspilot-raw'),
+
+  // ── M07: Google Sheets / Google Drive OAuth ─────────────────────────────
+  // Shared OAuth2-Client für Google Drive (M02) und Google Sheets (M07).
+  // Pro Customer wird nur Refresh-Token + ggf. Access-Token in
+  // customer_credentials hinterlegt; Client-ID/Secret sind global.
+  GOOGLE_OAUTH_CLIENT_ID:     z.string().default(''),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(''),
+});
+
+export type Config = z.infer<typeof envSchema>;
+
+function loadConfig(): Config {
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    console.error('Ungültige ENV-Konfiguration:', result.error.format());
+    process.exit(1);
+  }
+  const cfg = result.data;
+  if (cfg.NODE_ENV === 'production' && cfg.PP_AUTH_DISABLED) {
+    console.error('FATAL: PP_AUTH_DISABLED=1 ist in Production verboten');
+    process.exit(1);
+  }
+  return cfg;
+}
+
+export const config = loadConfig();

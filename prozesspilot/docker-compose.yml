@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pp
+      POSTGRES_PASSWORD: pp
+      POSTGRES_DB: prozesspilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pp -d prozesspilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-pp}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-pp-secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  n8n:
+    image: n8nio/n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme}
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Europe/Berlin
+      # M10: Backend-URL für die HTTP-Nodes (host.docker.internal trifft den Mac-Host).
+      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:3000}
+      # HMAC-Secret für Backend-Calls (Function: Extract Message liest $env.PP_HMAC_SECRET)
+      PP_HMAC_SECRET: ${PP_HMAC_SECRET}
+      PP_AUTH_DISABLED: ${PP_AUTH_DISABLED:-0}
+      # Erlaubt $env.* in Expressions und Code-Nodes (sonst "access to env vars denied")
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Lokale Entwicklung ohne HTTPS — secure Cookie deaktivieren
+      N8N_SECURE_COOKIE: "false"
+      # Erlaubt require('crypto') im Code-Node (für HMAC-Signaturen in Function: Extract Message)
+      NODE_FUNCTION_ALLOW_BUILTIN: "crypto"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  n8n_data:

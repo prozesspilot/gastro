@@ -1,0 +1,223 @@
+{
+  "name": "WF-CRON-M09-EXPECTED",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1],
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000001",
+      "name": "Cron Montag 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/customers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $env.PP_TENANT_ID }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000002",
+      "name": "GET /customers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000003",
+      "name": "Loop ueber Kunden",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/communications/expected-check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{ $env.PP_TENANT_ID }}"
+            },
+            {
+              "name": "x-pp-timestamp",
+              "value": "={{ Math.floor(Date.now() / 1000) }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "customer_id",
+              "value": "={{ $json.id ?? $json.customer_id }}"
+            },
+            {
+              "name": "check_date",
+              "value": "={{ new Date().toISOString().split('T')[0] }}"
+            },
+            {
+              "name": "week_number",
+              "value": "={{ Math.ceil((new Date().getDay() + new Date().getDate()) / 7) }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000004",
+      "name": "POST /communications/expected-check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok ?? true }}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000005",
+      "name": "IF Fehler",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "subject": "ProzessPilot Expected-Check Fehler fuer Kunde {{ $('Loop ueber Kunden').item.json.name ?? $('Loop ueber Kunden').item.json.id }}",
+        "message": "Der Expected-Check fuer Kunde {{ $('Loop ueber Kunden').item.json.name ?? 'unbekannt' }} (ID: {{ $('Loop ueber Kunden').item.json.id ?? $('Loop ueber Kunden').item.json.customer_id }}) ist fehlgeschlagen.\n\nFehler: {{ $json.error?.message ?? 'Unbekannter Fehler' }}\n\nBitte pruefen Sie die Kunden-Konfiguration.",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000006",
+      "name": "Notify bei Fehler",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1500, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron Montag 09:00": {
+      "main": [
+        [
+          {
+            "node": "GET /customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /customers": {
+      "main": [
+        [
+          {
+            "node": "Loop ueber Kunden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop ueber Kunden": {
+      "main": [
+        [
+          {
+            "node": "POST /communications/expected-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /communications/expected-check": {
+      "main": [
+        [
+          {
+            "node": "IF Fehler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Fehler": {
+      "main": [
+        [
+          {
+            "node": "Notify bei Fehler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "id": "wf-cron-m09-expected",
+  "tags": [
+    {
+      "createdAt": "2026-05-01T00:00:00.000Z",
+      "updatedAt": "2026-05-01T00:00:00.000Z",
+      "id": "tag-m09",
+      "name": "M09"
+    }
+  ]
+}

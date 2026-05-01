@@ -1,0 +1,434 @@
+════════════════════════════════════════════════════════════════
+MEGA-AUFGABE: PRODUCTION READY — ALLES FERTIGSTELLEN
+════════════════════════════════════════════════════════════════
+
+Dies ist deine finale Mission für ProzessPilot. Nach dieser Aufgabe ist das
+Produkt produktionsreif. Arbeite Block für Block durch. Keine Pausen, keine
+Rückfragen. Bei Problemen: entscheide selbst und mach weiter.
+
+════════════════════════════════════════════════════════════════
+BLOCK A — Production Docker Setup (Deployment-fertig)
+════════════════════════════════════════════════════════════════
+
+Das bestehende docker-compose.yml ist nur für Dev (Postgres, Redis, MinIO).
+Wir brauchen ein vollständiges Production-Setup.
+
+1. Erstelle /prozesspilot/backend/Dockerfile:
+   ```dockerfile
+   FROM node:20-alpine AS builder
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci --ignore-scripts
+   COPY . .
+   RUN npm run build
+
+   FROM node:20-alpine AS runtime
+   WORKDIR /app
+   ENV NODE_ENV=production
+   COPY package*.json ./
+   RUN npm ci --omit=dev --ignore-scripts
+   COPY --from=builder /app/dist ./dist
+   EXPOSE 3000
+   HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+     CMD wget -qO- http://localhost:3000/health || exit 1
+   USER node
+   CMD ["node", "dist/server.js"]
+   ```
+
+2. Erstelle /prozesspilot/webapp/Dockerfile:
+   ```dockerfile
+   FROM node:20-alpine AS builder
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci --ignore-scripts
+   COPY . .
+   ARG VITE_API_URL=http://localhost:3000
+   ENV VITE_API_URL=$VITE_API_URL
+   RUN npm run build
+
+   FROM nginx:1.25-alpine AS runtime
+   COPY --from=builder /app/dist /usr/share/nginx/html
+   COPY nginx.conf /etc/nginx/conf.d/default.conf
+   EXPOSE 80
+   CMD ["nginx", "-g", "daemon off;"]
+   ```
+
+3. Erstelle /prozesspilot/webapp/nginx.conf:
+   ```nginx
+   server {
+     listen 80;
+     root /usr/share/nginx/html;
+     index index.html;
+
+     # SPA fallback
+     location / {
+       try_files $uri $uri/ /index.html;
+     }
+
+     # API proxy
+     location /api/ {
+       proxy_pass http://backend:3000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_read_timeout 60s;
+     }
+
+     # Health
+     location /nginx-health {
+       return 200 'ok';
+       add_header Content-Type text/plain;
+     }
+
+     gzip on;
+     gzip_types text/plain text/css application/json application/javascript;
+   }
+   ```
+
+4. Erstelle /prozesspilot/docker-compose.prod.yml:
+   Vollständiges Production-Setup mit:
+   - postgres:16 (gleiche Config wie dev, aber kein Port nach außen)
+   - redis:7-alpine
+   - minio/minio
+   - backend: (build: ./backend, env_file: .env.prod, depends_on: postgres/redis/minio, restart: always)
+   - webapp: (build: ./webapp, ports: "80:80"/"443:443", depends_on: backend, restart: always)
+   - n8n: (image: n8nio/n8n, volumes: n8n_data, env_file: .env.prod, restart: always)
+   Volumes: postgres_data, redis_data, minio_data, n8n_data
+   Networks: internal (backend-seitig), external (webapp nach außen)
+
+5. Erstelle /prozesspilot/.env.example (falls nicht vorhanden oder ergänze fehlende Werte):
+   Alle ENV-Variablen alphabetisch geordnet mit Kommentaren:
+   ```
+   # Datenbank
+   DATABASE_URL=postgresql://pp:changeme@postgres:5432/prozesspilot
+
+   # Backend
+   NODE_ENV=production
+   PORT=3000
+   PP_HMAC_SECRET=change-this-to-a-random-64-char-string
+   PP_AUTH_DISABLED=0
+   APP_VERSION=1.0.0
+
+   # S3 / MinIO
+   PP_S3_ENDPOINT=http://minio:9000
+   PP_S3_BUCKET=prozesspilot-receipts
+   PP_S3_ACCESS_KEY=pp
+   PP_S3_SECRET_KEY=changeme
+
+   # Google Vision (OCR)
+   GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/google-credentials.json
+
+   # Claude API (Kategorisierung)
+   ANTHROPIC_API_KEY=sk-ant-...
+
+   # Lexoffice
+   LEXOFFICE_API_BASE=https://api.lexoffice.io/v1
+   LEXOFFICE_DEFAULT_TIMEOUT_MS=15000
+
+   # sevDesk
+   SEVDESK_API_BASE=https://my.sevdesk.de/api/v1
+   SEVDESK_DEFAULT_TIMEOUT_MS=15000
+
+   # Sentry
+   SENTRY_DSN=https://xxx@oNNN.ingest.sentry.io/NNN
+
+   # SMTP (für M09 Lieferanten-Kommunikation)
+   SMTP_HOST=smtp.example.com
+   SMTP_PORT=587
+   SMTP_USER=noreply@example.com
+   SMTP_PASS=changeme
+   SMTP_FROM=ProzessPilot <noreply@example.com>
+
+   # Grafana
+   GRAFANA_ADMIN_PASSWORD=changeme
+
+   # Backup
+   BACKUP_DIR=/backups/postgres
+   RETENTION_DAYS=90
+   AWS_BACKUP_BUCKET=prozesspilot-backup
+   ```
+
+NACH BLOCK A: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK B — OpenAPI Spec vervollständigen
+════════════════════════════════════════════════════════════════
+
+Die Datei /prozesspilot/docs/openapi.yaml existiert, ist aber unvollständig.
+Lies sie zuerst vollständig. Dann ergänze alle fehlenden Endpoints.
+
+Folgende Endpoints MÜSSEN dokumentiert sein (prüfe welche fehlen):
+
+  Receipts:
+    POST   /api/v1/receipts                          (Upload)
+    GET    /api/v1/receipts                          (Liste, ?status=&limit=&offset=)
+    GET    /api/v1/receipts/{receiptId}              (Detail)
+    POST   /api/v1/receipts/{receiptId}/exports/lexoffice
+    POST   /api/v1/receipts/{receiptId}/exports/sevdesk
+    POST   /api/v1/receipts/{receiptId}/exports/datev
+    POST   /api/v1/receipts/{receiptId}/review       (Manuelle Review-Freigabe)
+
+  Customers:
+    GET    /api/v1/customers/{customerId}
+    PUT    /api/v1/customers/{customerId}/profile
+    GET    /api/v1/customers/{customerId}/exports/sevdesk
+
+  Stats:
+    GET    /api/v1/stats/summary
+
+  Advisor Portal:
+    GET    /api/v1/advisor/overview
+    GET    /api/v1/advisor/receipts/pending
+    POST   /api/v1/advisor/receipts/bulk-approve
+    POST   /api/v1/advisor/receipts/{id}/comment
+
+  Communications (M09):
+    POST   /api/v1/communications/build
+    POST   /api/v1/communications/send
+    GET    /api/v1/communications
+
+  Plugins:
+    POST   /api/v1/plugins
+    GET    /api/v1/plugins
+    PUT    /api/v1/plugins/{pluginId}
+    DELETE /api/v1/plugins/{pluginId}
+    GET    /api/v1/plugins/{pluginId}/executions
+
+  DSGVO:
+    POST   /api/v1/dsgvo/delete-request
+    GET    /api/v1/dsgvo/delete-request/{id}
+    POST   /api/v1/dsgvo/delete-request/{id}/execute
+    GET    /api/v1/dsgvo/export-data
+    GET    /api/v1/dsgvo/pii-inventory
+
+  Webhooks:
+    POST   /webhooks/email/inbound
+    GET    /health
+
+Für jeden fehlenden Endpoint: vollständiges YAML mit requestBody, responses (200, 400, 401, 500), und $ref auf bestehende schemas.
+Neue Schemas in components/schemas ergänzen (Receipt, Communication, Plugin, DeletionRequest usw.)
+
+Danach: Validiere das YAML mit:
+  npx @redocly/cli lint /Users/donandrejo/Documents/ProzessPilot/prozesspilot/docs/openapi.yaml 2>/dev/null || echo "redocly nicht installiert — manuell prüfen"
+
+════════════════════════════════════════════════════════════════
+BLOCK C — Integration Test Suite
+════════════════════════════════════════════════════════════════
+
+Bestehende Tests: /backend/src/__tests__/ (receipts.test.ts, tenant-isolation.test.ts)
+Ziel: Echte Integration Tests die eine Test-DB nutzen.
+
+1. Erstelle /backend/src/__tests__/integration/setup.ts:
+   ```ts
+   // Test-DB Setup: erstellt Schema, führt alle Migrationen aus, gibt Pool zurück
+   import pg from 'pg';
+   import fs from 'node:fs';
+   import path from 'node:path';
+
+   const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://pp:pp@localhost:5432/pp_test';
+
+   export async function setupTestDb(): Promise<pg.Pool> {
+     const pool = new pg.Pool({ connectionString: TEST_DB });
+     // Alle Migrations-Dateien alphabetisch ausführen
+     const migrationsDir = path.resolve(__dirname, '../../../migrations');
+     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+     for (const file of files) {
+       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+       await pool.query(sql).catch(() => {}); // idempotent
+     }
+     return pool;
+   }
+
+   export async function cleanTestDb(pool: pg.Pool): Promise<void> {
+     await pool.query(`
+       TRUNCATE receipts, tenants, customers, customer_profiles,
+                communications, plugin_registry CASCADE
+     `);
+   }
+   ```
+
+2. Erstelle /backend/src/__tests__/integration/receipt-pipeline.test.ts:
+   Testet den vollständigen Receipt-Flow ohne echte externe Services (Google Vision + Claude gemockt):
+   ```ts
+   // Testet: POST /receipts → Status received → extracting → extracted → categorized → archived
+   // Mocks: OCR-Service (gibt Fake-Extraktionsdaten zurück), Claude (gibt Fake-Kategorie zurück)
+   ```
+   - Setup: Test-DB, Test-Tenant, Test-Customer
+   - Test 1: Receipt hochladen → status=received
+   - Test 2: OCR triggern (gemockt) → status=extracted, extraction.fields befüllt
+   - Test 3: Kategorisierung (gemockt) → status=categorized, categorization befüllt
+   - Test 4: Archivierung → status=archived
+   - Test 5: Idempotenz — gleiches File nochmal hochladen → 409 Conflict (falls sha256-Check existiert)
+   - Test 6: Tenant-Isolation — Receipt von Tenant A nicht sichtbar für Tenant B
+
+3. Erstelle /backend/src/__tests__/integration/plugin-dispatcher.test.ts:
+   - Startet einen lokalen HTTP-Server als Fake-Plugin-Endpoint (nutze node:http)
+   - Registriert Plugin via API
+   - Triggert Plugin-Event
+   - Prüft dass Fake-Endpoint den korrekten Payload + HMAC-Signature erhalten hat
+
+4. In /backend/package.json scripts ergänzen (falls nicht vorhanden):
+   "test:integration": "TEST_DATABASE_URL=postgresql://pp:pp@localhost:5432/pp_test vitest run src/__tests__/integration"
+
+NACH BLOCK C: cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+
+════════════════════════════════════════════════════════════════
+BLOCK D — Webapp: Letzter Schliff & fehlende Features
+════════════════════════════════════════════════════════════════
+
+1. Erstelle /webapp/src/pages/NotFoundPage.tsx:
+   Schöne 404-Seite im dark-mode Design:
+   - "404 — Seite nicht gefunden" als Headline
+   - Kleiner erklärungstext
+   - Button "Zum Dashboard" → navigate('/')
+   In App.tsx: `<Route path="*" element={<NotFoundPage />} />` (ersetzt Navigate-Fallback)
+
+2. In /webapp/src/pages/DashboardPage.tsx:
+   Falls die Seite aktuell nur statische Tasks-Liste zeigt: ergänze oben eine
+   Live-Status-Leiste die GET /api/v1/stats/summary aufruft und zeigt:
+   - Belege heute eingegangen
+   - Belege in Verarbeitung (requires_review)
+   - Erfolgreich exportiert (diese Woche)
+   - Letzter Fehler (wenn vorhanden)
+   Mit Skeleton-Loading während der Fetch läuft.
+
+3. In /webapp/src/pages/ReceiptsPage.tsx:
+   Prüfe ob Filter vorhanden sind. Falls nicht: ergänze Filter-Bar oben:
+   - Status-Filter (Dropdown: alle | received | extracted | categorized | archived | exported | error)
+   - Datumsbereich (von/bis)
+   - Suchfeld (Lieferant-Name)
+   Filter-State in URL-Params speichern (?status=error&search=Metro)
+
+4. Erstelle /webapp/src/components/EmptyState.tsx:
+   Wiederverwendbare Komponente für leere Listen:
+   ```tsx
+   interface EmptyStateProps {
+     icon?: string;       // Emoji oder Icon
+     title: string;
+     description?: string;
+     action?: { label: string; onClick: () => void };
+   }
+   ```
+   Dark-mode Design, zentriert, subtil.
+   Nutze EmptyState in ReceiptsPage, CommunicationsPage und PluginsPage wenn Liste leer ist.
+
+5. In /webapp/src/App.tsx:
+   Stelle sicher dass alle neuen Pages importiert sind:
+   - AdvisorPortalPage, CommunicationsPage, PluginsPage (von Terminal 3)
+   - NotFoundPage (neu)
+   Route für /settings/dsgvo falls SettingsPage DSGVO-Tab hat.
+
+6. In /webapp/src/components/Layout.tsx:
+   Prüfe ob alle Nav-Links vorhanden sind. Falls fehlend, ergänze:
+   - Steuerberater-Portal → /advisor
+   - Lieferanten → /communications
+   - Plugins → /plugins
+   Gruppiere die Navigation logisch:
+   Gruppe "Belege": Dashboard, Belege hochladen, Belegliste, Stats
+   Gruppe "Verwaltung": Kunden, Steuerberater-Portal, Lieferanten
+   Gruppe "System": Plugins, Berichte, Einstellungen
+
+════════════════════════════════════════════════════════════════
+BLOCK E — n8n Workflow Exports (JSON)
+════════════════════════════════════════════════════════════════
+
+Erstelle fertige n8n-Workflow-JSONs die direkt importiert werden können.
+Pfad: /prozesspilot/n8n/workflows/
+
+Prüfe welche Workflows bereits als JSON vorhanden sind:
+  ls /Users/donandrejo/Documents/ProzessPilot/prozesspilot/n8n/workflows/
+
+Erstelle FEHLENDE Workflows als JSON:
+
+1. WF-M09-SUPPLIER-COMM.json:
+   n8n-Workflow für Lieferanten-Kommunikation:
+   Nodes:
+   - Webhook Trigger: empfängt pp.receipt.requires_review Event vom Backend
+   - IF: trigger === 'requires_review'
+   - HTTP Request: POST http://backend:3000/api/v1/communications/build (mit receipt_id, reason)
+   - IF: response.skip !== true
+   - HTTP Request: POST http://backend:3000/api/v1/communications/send (mit communication_id)
+   - Respond to Webhook: { ok: true }
+
+   Gültiges n8n-Workflow-JSON Format (Version 1):
+   ```json
+   {
+     "name": "WF-M09-SUPPLIER-COMM",
+     "nodes": [...],
+     "connections": {...},
+     "active": false,
+     "settings": { "executionOrder": "v1" },
+     "id": "wf-m09-supplier-comm",
+     "meta": { "templateCredsSetupCompleted": true }
+   }
+   ```
+
+2. WF-PLUGIN-DISPATCHER.json:
+   Cron-basierter Workflow der täglich Plugin-Executions-Fehler summarisiert:
+   - Cron: täglich 08:00
+   - HTTP Request: GET http://backend:3000/api/v1/plugins (liste alle Plugins)
+   - Loop über Plugins
+   - HTTP Request: GET Executions (letzte 24h mit success=false)
+   - IF: Fehler vorhanden → HTTP Request an Slack/Mail Notifikation
+
+3. WF-CRON-M09-EXPECTED.json:
+   Wöchentliche Erinnerungen für fehlende Belege (M09 Cron-Variante):
+   - Cron: Montag 09:00
+   - HTTP Request: GET http://backend:3000/api/v1/customers (alle aktiven Kunden)
+   - Loop: für jeden Kunden → POST /communications/expected-check
+
+4. Erstelle /prozesspilot/n8n/README.md:
+   - Wie Workflows importiert werden (n8n UI → Import from File)
+   - Welche Credentials im n8n konfiguriert werden müssen (Backend URL, HMAC Secret)
+   - Reihenfolge der Aktivierung (erst WF-INPUT-WHATSAPP, dann WF-MASTER-RECEIPT, dann die anderen)
+
+════════════════════════════════════════════════════════════════
+BLOCK F — Health Check & Graceful Shutdown verbessern
+════════════════════════════════════════════════════════════════
+
+1. Prüfe /backend/src/server.ts ob ein /health Endpoint existiert.
+   Falls nicht oder unvollständig: ergänze in app.ts einen echten Health-Check:
+   ```ts
+   app.get('/health', async (request, reply) => {
+     // DB-Verbindung prüfen
+     const dbOk = await pool.query('SELECT 1').then(() => true).catch(() => false);
+     const status = dbOk ? 200 : 503;
+     return reply.status(status).send({
+       ok: dbOk,
+       version: process.env.APP_VERSION ?? 'dev',
+       timestamp: new Date().toISOString(),
+       uptime: Math.floor(process.uptime()),
+       checks: {
+         database: dbOk ? 'ok' : 'error',
+       },
+     });
+   });
+   ```
+
+2. Stelle sicher dass Graceful Shutdown in server.ts korrekt ist:
+   - SIGTERM + SIGINT → app.close()
+   - Laufende Requests abwarten (Fastify macht das automatisch)
+   - DB-Pool schließen nach app.close()
+
+════════════════════════════════════════════════════════════════
+BLOCK G — tasks.ts: Alles auf done setzen was fertig ist
+════════════════════════════════════════════════════════════════
+
+Datei: /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp/src/data/tasks.ts
+
+Prüfe welche Tasks noch done: false haben. Setze alle auf done: true die durch
+diese Aufgabe oder frühere Terminals erledigt wurden:
+- id: 500  (Load Tests — bereits durch anderen Terminal erledigt, falls noch false)
+- id: 506  (Runbook — bereits durch anderen Terminal erledigt, falls noch false)
+- Alle anderen Tasks die durch diese Aufgabe erledigt wurden
+
+════════════════════════════════════════════════════════════════
+ABSCHLUSS: FINALER BUILD
+════════════════════════════════════════════════════════════════
+
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/backend && npm run build
+cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot/webapp && npm run build
+
+Wenn beide Builds grün sind: Gib eine Zusammenfassung aus was du erstellt hast.
+Wenn Build-Fehler: beheben und nochmal bauen. Nicht aufgeben.
+
+ERFOLG = beide Builds laufen durch + alle 7 Blöcke abgeschlossen.

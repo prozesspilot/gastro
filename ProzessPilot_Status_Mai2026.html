@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProzessPilot – Status Update Mai 2026</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', Arial, sans-serif; font-size: 10.5pt; color: #1a1a2e; background: #f4f6fb; line-height: 1.6; }
+  .top-bar { background: #1a1a2e; color: white; padding: 14px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+  .logo { font-size: 18pt; font-weight: 700; }
+  .logo span { color: #4d9fff; }
+  .top-meta { font-size: 8.5pt; color: rgba(255,255,255,0.55); text-align: right; line-height: 1.8; }
+  .tab-nav { background: white; border-bottom: 2px solid #e8eaf0; padding: 0 40px; display: flex; position: sticky; top: 57px; z-index: 99; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow-x: auto; }
+  .tab-btn { padding: 14px 22px; font-size: 9pt; font-weight: 600; color: #888; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s; display: flex; align-items: center; gap: 7px; }
+  .tab-btn:hover { color: #0066cc; }
+  .tab-btn.active { color: #0066cc; border-bottom-color: #0066cc; }
+  .tab-num { background: #e8eaf0; color: #888; font-size: 7.5pt; font-weight: 700; padding: 1px 6px; border-radius: 10px; transition: all 0.2s; }
+  .tab-btn.active .tab-num { background: #0066cc; color: white; }
+  .tab-content { display: none; max-width: 920px; margin: 0 auto; padding: 36px 40px 60px; }
+  .tab-content.active { display: block; }
+  .section { margin-bottom: 36px; }
+  .section-header { background: #f0f4ff; border-left: 4px solid #0066cc; padding: 8px 14px; margin-bottom: 16px; border-radius: 0 4px 4px 0; }
+  .section-header h2 { font-size: 11pt; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 0.5px; }
+  .page-title { background: #1a1a2e; color: white; padding: 22px 28px; border-radius: 6px; margin-bottom: 32px; }
+  .page-title h1 { font-size: 16pt; font-weight: 700; margin-bottom: 5px; }
+  .page-title p { font-size: 9.5pt; opacity: 0.65; }
+  h3 { font-size: 10.5pt; font-weight: 700; color: #1a1a2e; margin: 20px 0 8px 0; padding-bottom: 4px; border-bottom: 1px solid #e8eaf0; }
+  p { margin-bottom: 8px; font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 9.5pt; }
+  thead tr { background: #1a1a2e; color: white; }
+  thead th { padding: 9px 12px; text-align: left; font-weight: 600; font-size: 9pt; }
+  tbody tr:nth-child(even) { background: #f7f9fc; }
+  tbody tr:hover { background: #eef2ff; }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid #e8eaf0; vertical-align: top; }
+  td.green { color: #16a34a; font-weight: 600; }
+  td.amber { color: #d97706; font-weight: 600; }
+  td.red { color: #dc2626; font-weight: 600; }
+  td code { background: #f0f4ff; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt; font-family: monospace; color: #333; }
+  .status-ok { background: #dcfce7; color: #16a34a; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .status-risk { background: #fee2e2; color: #dc2626; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .status-wip { background: #fef3c7; color: #d97706; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .status-miss { background: #f0f0f0; color: #666; font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .note { background: #fff8e1; border-left: 3px solid #f59e0b; padding: 8px 12px; font-size: 9pt; color: #555; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .warning { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; font-size: 9pt; color: #555; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .tip { background: #f0f7ff; border-left: 3px solid #0066cc; padding: 8px 12px; font-size: 9pt; color: #333; margin: 10px 0; border-radius: 0 4px 4px 0; }
+  .decision-box { background: #fffbeb; border: 1.5px solid #fbbf24; border-radius: 6px; padding: 16px 18px; margin: 16px 0; }
+  .decision-box .dt { font-weight: 700; color: #92400e; margin-bottom: 8px; font-size: 10pt; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 14px 0 28px; }
+  .kpi-card { background: white; border: 1.5px solid #e8eaf0; border-radius: 8px; padding: 18px 16px; text-align: center; }
+  .kpi-card .kpi-val { font-size: 26pt; font-weight: 700; line-height: 1.1; }
+  .kpi-card .kpi-label { font-size: 8.5pt; color: #666; margin-top: 4px; }
+  .kpi-card .kpi-sub { font-size: 8pt; color: #aaa; margin-top: 2px; }
+  .kpi-card.green .kpi-val { color: #16a34a; }
+  .kpi-card.amber .kpi-val { color: #d97706; }
+  .kpi-card.blue .kpi-val { color: #0066cc; }
+
+  .phase-block { border: 1.5px solid #e8eaf0; border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; background: white; }
+  .phase-block.done { border-color: #bbf7d0; background: #f0fdf4; }
+  .phase-block.active { border-color: #93c5fd; background: #eff6ff; }
+  .phase-block.pending { border-color: #e8eaf0; background: #fafafa; }
+  .phase-title { font-weight: 700; font-size: 11pt; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .phase-sub { font-size: 8.5pt; color: #666; margin-bottom: 12px; }
+  .phase-bar-wrap { background: #e8eaf0; border-radius: 6px; height: 8px; margin: 10px 0 4px; overflow: hidden; }
+  .phase-bar { height: 8px; border-radius: 6px; }
+  .phase-bar.full { background: #16a34a; }
+  .phase-bar.high { background: #22c55e; }
+  .phase-bar.mid { background: #f59e0b; }
+  .phase-bar.low { background: #d1d5db; }
+  .phase-pct { font-size: 8pt; color: #888; text-align: right; }
+
+  .task-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 9pt; }
+  .task-row:last-child { border-bottom: none; }
+  .task-check { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; font-size: 8pt; font-weight: 700; }
+  .task-check.done { background: #dcfce7; color: #16a34a; }
+  .task-check.open { background: #fef3c7; color: #d97706; }
+  .task-text { flex: 1; }
+  .task-meta { font-size: 8pt; color: #888; margin-top: 1px; }
+  .task-prio { font-size: 7.5pt; font-weight: 700; padding: 1px 6px; border-radius: 8px; flex-shrink: 0; }
+  .prio-high { background: #fee2e2; color: #dc2626; }
+  .prio-mid { background: #fef3c7; color: #d97706; }
+  .prio-low { background: #f0fdf4; color: #16a34a; }
+
+  .milestone-row { display: flex; align-items: flex-start; gap: 14px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .milestone-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .milestone-dot.done { background: #16a34a; }
+  .milestone-dot.active { background: #0066cc; }
+  .milestone-dot.pending { background: #d1d5db; }
+  .milestone-info { flex: 1; font-size: 9.5pt; font-weight: 600; }
+  .milestone-detail { font-size: 8.5pt; color: #555; margin-top: 1px; font-weight: 400; }
+
+  .scale-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+  .scale-card { background: #f7f9fc; border-radius: 6px; padding: 14px; text-align: center; }
+  .scale-card .sc-n { font-size: 8.5pt; color: #666; margin-bottom: 4px; }
+  .scale-card .sc-val { font-size: 15pt; font-weight: 700; }
+  .scale-card .sc-val.green { color: #16a34a; }
+  .scale-card .sc-val.amber { color: #d97706; }
+  .scale-card .sc-val.gray { color: #9ca3af; }
+  .scale-card .sc-sub { font-size: 8pt; color: #888; margin-top: 2px; }
+
+  .neu-badge { background: #dbeafe; color: #1d4ed8; font-size: 7.5pt; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">Prozess<span>Pilot</span></div>
+  <div class="top-meta">Management Status Update · Andreas · 1. Mai 2026 · Version 2 · Vertraulich</div>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('tab1', this)">📊 Gesamtüberblick <span class="tab-num">1</span></button>
+  <button class="tab-btn" onclick="showTab('tab2', this)">🗺️ Phase-Status <span class="tab-num">2</span></button>
+  <button class="tab-btn" onclick="showTab('tab3', this)">🎯 Nächste Schritte <span class="tab-num">3</span></button>
+  <button class="tab-btn" onclick="showTab('tab4', this)">⚠️ Offene Punkte <span class="tab-num">4</span></button>
+</div>
+
+<!-- TAB 1: GESAMTÜBERBLICK -->
+<div id="tab1" class="tab-content active">
+  <div class="page-title">
+    <h1>📊 Projektfortschritt – Aktueller Stand</h1>
+    <p>Stand: 1. Mai 2026 · Version 2 · Beide Agenten abgeschlossen · 40 Aufgaben gesamt</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Kennzahlen auf einen Blick</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card green">
+        <div class="kpi-val">75%</div>
+        <div class="kpi-label">Gesamtfortschritt</div>
+        <div class="kpi-sub">30 von 40 Aufgaben erledigt</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-val">100%</div>
+        <div class="kpi-label">Phase 0 + Phase 2</div>
+        <div class="kpi-sub">Foundation + Standard vollständig</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-val">89%</div>
+        <div class="kpi-label">Phase 1 (MVP)</div>
+        <div class="kpi-sub">Nur WhatsApp-Webhook manuell offen</div>
+      </div>
+      <div class="kpi-card amber">
+        <div class="kpi-val">40%</div>
+        <div class="kpi-label">Phase 3 (Pro)</div>
+        <div class="kpi-sub">DATEV + Stats fertig · 3 offen</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Was hat sich seit dem letzten Update getan?</h2></div>
+    <table>
+      <thead><tr><th>Neu erledigt</th><th>Modul</th><th>Bewertung</th></tr></thead>
+      <tbody>
+        <tr><td><strong>M05 Lexoffice-Integration vollständig</strong></td><td>Voucher-Builder · Rate-Limiter 2 req/s · SKR→Lexoffice Mapping · WF-M05</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>M08 Monatsreporting vollständig</strong></td><td>PDF (Puppeteer) · Chart-Builder · Mail + WhatsApp Versand · WF-M08 Cron</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>M06 sevDesk-Integration</strong> <span class="neu-badge">NEU</span></td><td>Parallel zu Lexoffice · BookingAdapter-Interface · WF-M06</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>M04 DATEV-Export</strong></td><td>EXTF-CSV v700 · ZIP mit PDFs · Steuerberater-Mail · WF-M04 Cron</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>Stats-Dashboard (Webapp)</strong></td><td>Belege/Monat · Kategorien · Ø Verarbeitungszeit · Exportrate</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>CI/CD Pipeline</strong></td><td>GitHub Actions · Backend + Webapp Jobs · Postgres als Service · Migrations</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>ReportsPage + StatsPage (Webapp)</strong></td><td>Monatsberichte abrufbar · PDF-Download · Stats mit recharts</td><td><span class="status-ok">Fertig</span></td></tr>
+        <tr><td><strong>Test-Coverage erweitert</strong></td><td>Tenant-Isolation · M03-Tests · Hook-Runner vollständig</td><td><span class="status-ok">Fertig</span></td></tr>
+      </tbody>
+    </table>
+    <div class="tip"><strong>Phase 2 ist zu 100 % abgeschlossen.</strong> Das Standard-Paket (Lexoffice, Reporting, vollständige Webapp) ist fertig. Zusätzlich wurden sevDesk, DATEV und CI/CD bereits aus Phase 3/4 vorgezogen.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Aktueller Produktivstatus – Was ist einsatzbereit?</h2></div>
+    <table>
+      <thead><tr><th>Funktion</th><th>Bereit?</th><th>Anmerkung</th></tr></thead>
+      <tbody>
+        <tr><td>Beleg hochladen (Webapp + WhatsApp)</td><td class="green">✓ Ja</td><td>WhatsApp: Meta-Portal-Eintrag noch manuell nötig</td></tr>
+        <tr><td>OCR + KI-Kategorisierung</td><td class="green">✓ Ja</td><td>Google Vision + Claude Tool-Use, SKR03/04</td></tr>
+        <tr><td>Archivierung (S3/MinIO)</td><td class="green">✓ Ja</td><td>Mit Checksummen und Download-Link</td></tr>
+        <tr><td>Lexoffice-Export</td><td class="green">✓ Ja</td><td>Benötigt API-Key pro Kunde in DB</td></tr>
+        <tr><td>sevDesk-Export</td><td class="green">✓ Ja</td><td>Benötigt API-Token pro Kunde in DB</td></tr>
+        <tr><td>DATEV-Export (EXTF-CSV + ZIP)</td><td class="green">✓ Ja</td><td>Cron am 5. des Monats + manueller Aufruf</td></tr>
+        <tr><td>Monatsreporting (PDF)</td><td class="green">✓ Ja</td><td>Cron am 1. des Monats + Mail/WhatsApp-Versand</td></tr>
+        <tr><td>Hook-System (Webhooks)</td><td class="green">✓ Ja</td><td>Vor/Nach jeder Verarbeitungsstufe</td></tr>
+        <tr><td>Multi-Mandanten-Fähigkeit</td><td class="green">✓ Ja</td><td>Vollständige Tenant-Isolation geprüft</td></tr>
+        <tr><td>CI/CD Pipeline</td><td class="green">✓ Ja</td><td>GitHub Actions · Tests + Build auf jedem PR</td></tr>
+        <tr><td>Sentry / Grafana / Monitoring</td><td class="amber">Nein</td><td>Phase 4 – noch nicht gestartet</td></tr>
+        <tr><td>Backup-Strategie</td><td class="amber">Nein</td><td>Phase 4 – Pflicht vor echtem Produktivbetrieb</td></tr>
+        <tr><td>DSGVO-Dokumentation</td><td class="red">Nein</td><td>Pflicht vor erstem echten Kunden!</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 2: PHASE-STATUS -->
+<div id="tab2" class="tab-content">
+  <div class="page-title">
+    <h1>🗺️ Status nach Phase</h1>
+    <p>Alle 40 Aufgaben · Aktueller Stand nach beiden Agenten-Läufen</p>
+  </div>
+
+  <div class="section">
+
+    <div class="phase-block done">
+      <div class="phase-title">
+        <span>🏗️ Phase 0 — Foundation <small style="font-size:8.5pt; font-weight:400; color:#555; margin-left:6px;">Woche 1–2</small></span>
+        <span class="status-ok">100 % abgeschlossen</span>
+      </div>
+      <div class="phase-sub">Monorepo · PostgreSQL · Fastify · Multi-Tenant · React/Vite · n8n · Hook-Stub</div>
+      <div class="phase-bar-wrap"><div class="phase-bar full" style="width:100%"></div></div>
+      <div class="phase-pct">10 / 10 Aufgaben ✓</div>
+    </div>
+
+    <div class="phase-block done">
+      <div class="phase-title">
+        <span>🚀 Phase 1 — MVP Basic <small style="font-size:8.5pt; font-weight:400; color:#555; margin-left:6px;">Woche 3–6</small></span>
+        <span class="status-ok">89 % – 1 manueller Schritt</span>
+      </div>
+      <div class="phase-sub">M01 Eingang · M02 Archiv · M03 OCR · M04 Kategorisierung · M07 WhatsApp · E2E Test</div>
+      <div class="phase-bar-wrap"><div class="phase-bar high" style="width:89%"></div></div>
+      <div class="phase-pct">8 / 9 Aufgaben ✓ · 1 offen: WhatsApp-Webhook (manuell im Meta-Portal)</div>
+      <div style="margin-top:12px">
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M01 Eingangsverarbeitung · M02 Archivierung · M03 OCR · M04 KI-Kategorisierung</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M07 WhatsApp-Bestätigung · WF-MASTER-RECEIPT · Belege-Upload Webapp · E2E Test</div></div>
+        <div class="task-row"><div class="task-check open">!</div><div class="task-text">WF-INPUT-WHATSAPP mit Meta Developer Portal verbinden<div class="task-meta">Manuell: ngrok/öffentliche URL + Webhook-URL in Meta-Portal eintragen</div></div><span class="task-prio prio-high">Hoch</span></div>
+      </div>
+    </div>
+
+    <div class="phase-block done">
+      <div class="phase-title">
+        <span>⚡ Phase 2 — Standard <small style="font-size:8.5pt; font-weight:400; color:#555; margin-left:6px;">Woche 7–10</small></span>
+        <span class="status-ok">100 % abgeschlossen</span>
+      </div>
+      <div class="phase-sub">Hook-System echt · Lexoffice · Reporting · DB-Migrationen · Webapp vollständig</div>
+      <div class="phase-bar-wrap"><div class="phase-bar full" style="width:100%"></div></div>
+      <div class="phase-pct">9 / 9 Aufgaben ✓</div>
+      <div style="margin-top:12px">
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">Hook-System: echte DB-Queries, HTTP POST, Retry 3x, Execution-Log</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">DB-Migrationen 003–009: categories · lexoffice_category_map · hooks · error_log</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">WF-ERROR-HANDLER: OCR_FAILED / CATEGORY_FAILED / ARCHIVE_FAILED</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M05 Lexoffice: Voucher-Builder · Rate-Limiter · SKR→Lexoffice Mapping · WF-M05</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M08 Monatsreporting: PDF (Puppeteer) · Aggregationen · Mail + WhatsApp · WF-M08 Cron</div></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">Webapp: types.ts · ReceiptDetailPage · CustomerProfilePage · ReportsPage</div></div>
+      </div>
+    </div>
+
+    <div class="phase-block active">
+      <div class="phase-title">
+        <span>💎 Phase 3 — Pro <small style="font-size:8.5pt; font-weight:400; color:#555; margin-left:6px;">Woche 11–14</small></span>
+        <span class="status-wip">40 % – 2 von 5 fertig</span>
+      </div>
+      <div class="phase-sub">DATEV · sevDesk · Stats-Dashboard fertig · Steuerberater-Portal + M09 noch offen</div>
+      <div class="phase-bar-wrap"><div class="phase-bar mid" style="width:40%"></div></div>
+      <div class="phase-pct">2 / 5 Aufgaben ✓</div>
+      <div style="margin-top:12px">
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M04 DATEV-Export: EXTF-CSV v700 · ZIP · Steuerberater-Mail · WF-M04 Cron am 5.</div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">Webapp: Stats-Dashboard (Belege/Monat, Kategorien-Verteilung, Exportrate, recharts)<div class="task-meta">Von Terminal 1 gebaut</div></div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">M06 sevDesk-Integration <span class="neu-badge">NEU – nicht ursprünglich geplant</span><div class="task-meta">Von Terminal 2 vorgezogen: BookingAdapter-Interface · Client · Voucher-Builder · WF-M06</div></div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">M06 Steuerberater-Portal: Multi-Tenant-Ansicht (Bulk-Approve, Rollen)<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">M09 Lieferanten-Kommunikation: Auto-Antworten für fehlende Belege<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-low">Niedrig</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Plugin-System: externe Module per API registrieren<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-low">Niedrig</span></div>
+      </div>
+    </div>
+
+    <div class="phase-block active">
+      <div class="phase-title">
+        <span>🛡️ Phase 4 — Hardening <small style="font-size:8.5pt; font-weight:400; color:#555; margin-left:6px;">Woche 15–16</small></span>
+        <span class="status-wip">14 % – CI/CD fertig</span>
+      </div>
+      <div class="phase-sub">Security · DSGVO · Backup · Monitoring · CI/CD · Runbook</div>
+      <div class="phase-bar-wrap"><div class="phase-bar low" style="width:14%"></div></div>
+      <div class="phase-pct">1 / 7 Aufgaben ✓</div>
+      <div style="margin-top:12px">
+        <div class="task-row"><div class="task-check done">✓</div><div class="task-text">CI/CD Pipeline: GitHub Actions · Backend + Webapp Jobs · Postgres Service · Auto-Migrations</div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Load Tests: 100 gleichzeitige Uploads (k6/Artillery, p95 &lt; 2 s)<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Sentry + Grafana: Monitoring &amp; Alerting<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-mid">Mittel</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Backup-Strategie: pg_dump Cron · S3 Versioning · Restore-Test<div class="task-meta">Noch nicht gestartet – Pflicht vor Produktivbetrieb</div></div><span class="task-prio prio-high">Hoch</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Security Review: OWASP Top 10 · HMAC-Stärke · Dependency-Audit<div class="task-meta">Noch nicht gestartet – Pflicht vor Produktivbetrieb</div></div><span class="task-prio prio-high">Hoch</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">DSGVO-Compliance: PII-Inventar · Lösch-API · AV-Vertrag · Datenschutzerklärung<div class="task-meta">Pflicht vor erstem echten Kunden!</div></div><span class="task-prio prio-high">Hoch</span></div>
+        <div class="task-row"><div class="task-check open">○</div><div class="task-text">Runbook: Deployment · Rollback · On-Call-Playbook · Onboarding-Checkliste<div class="task-meta">Noch nicht gestartet</div></div><span class="task-prio prio-low">Niedrig</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: NÄCHSTE SCHRITTE -->
+<div id="tab3" class="tab-content">
+  <div class="page-title">
+    <h1>🎯 Nächste Schritte & Zeitplan</h1>
+    <p>Was steht als nächstes an – priorisiert nach Abhängigkeiten</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Fortschritt nach Phase</h2></div>
+    <div class="scale-grid">
+      <div class="scale-card"><div class="sc-n">Phase 0 + 1</div><div class="sc-val green">✓</div><div class="sc-sub">Foundation + MVP ready</div></div>
+      <div class="scale-card"><div class="sc-n">Phase 2</div><div class="sc-val green">100%</div><div class="sc-sub">Standard-Paket vollständig</div></div>
+      <div class="scale-card"><div class="sc-n">Phase 3</div><div class="sc-val amber">40%</div><div class="sc-sub">DATEV + sevDesk + Stats fertig</div></div>
+      <div class="scale-card"><div class="sc-n">Phase 4</div><div class="sc-val amber">14%</div><div class="sc-sub">CI/CD fertig · 6 offen</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Nächste Schritte – nach Priorität</h2></div>
+    <table>
+      <thead><tr><th>#</th><th>Aufgabe</th><th>Art</th><th>Warum jetzt</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><strong>WhatsApp-Webhook im Meta-Portal eintragen</strong></td><td class="amber">Manuell ~30 Min</td><td>Letzter Schritt für vollständige MVP-Pipeline</td></tr>
+        <tr><td>2</td><td><strong>DSGVO: AV-Vertrag + Datenschutzerklärung</strong></td><td class="red">Rechtlich – Pflicht</td><td>Vor erstem echten Kunden zwingend erforderlich</td></tr>
+        <tr><td>3</td><td><strong>Backup-Strategie: pg_dump Cron + S3 Versioning</strong></td><td class="amber">Terminal ~1–2 Std</td><td>Datenverlust-Risiko ohne Backup nicht akzeptabel</td></tr>
+        <tr><td>4</td><td><strong>Security Review: OWASP Top 10</strong></td><td class="amber">Terminal ~2–3 Std</td><td>Vor Produktivbetrieb – HMAC, SQL-Injection, Secrets</td></tr>
+        <tr><td>5</td><td><strong>Erster Pilot-Kunde onboarden</strong></td><td class="green">Business</td><td>API-Key + WhatsApp + DSGVO-Docs bereit?</td></tr>
+        <tr><td>6</td><td>M06 Steuerberater-Portal (Multi-Tenant-Ansicht)</td><td>Terminal ~2 Std</td><td>Pro-Paket – nach Pilot-Kunde sinnvoll</td></tr>
+        <tr><td>7</td><td>Sentry + Grafana Monitoring</td><td>Terminal ~1 Std</td><td>Sichtbarkeit im Produktivbetrieb</td></tr>
+        <tr><td>8</td><td>Load Tests (k6, 100 gleichzeitige Uploads)</td><td>Terminal ~1 Std</td><td>Skalierbarkeit vor größerem Rollout prüfen</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Bis zum ersten Kunden – Checkliste</h2></div>
+    <table>
+      <thead><tr><th>Punkt</th><th>Status</th><th>Zuständig</th></tr></thead>
+      <tbody>
+        <tr><td>MVP-Pipeline technisch fertig</td><td><span class="status-ok">Fertig</span></td><td>Andreas</td></tr>
+        <tr><td>Lexoffice / sevDesk / DATEV bereit</td><td><span class="status-ok">Fertig</span></td><td>Andreas</td></tr>
+        <tr><td>WhatsApp-Webhook konfiguriert</td><td><span class="status-wip">30 Min. Aufwand</span></td><td>Andreas</td></tr>
+        <tr><td>API-Key des Kunden in DB eingetragen</td><td><span class="status-wip">Beim Onboarding</span></td><td>Andreas</td></tr>
+        <tr><td>DSGVO: AV-Vertrag vorhanden</td><td><span class="status-risk">Noch offen – Pflicht!</span></td><td>Steve / Anwalt</td></tr>
+        <tr><td>Datenschutzerklärung auf Website</td><td><span class="status-risk">Noch offen – Pflicht!</span></td><td>Steve</td></tr>
+        <tr><td>Backup läuft täglich</td><td><span class="status-miss">Noch offen</span></td><td>Andreas</td></tr>
+        <tr><td>Monitoring / Alerting aktiv</td><td><span class="status-miss">Noch offen</span></td><td>Andreas</td></tr>
+        <tr><td>Produktiv-Server eingerichtet</td><td><span class="status-miss">Entscheidung nötig</span></td><td>Steve + Andreas</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Zeitprognose</h2></div>
+    <table>
+      <thead><tr><th>Meilenstein</th><th>Prognose</th><th>Voraussetzung</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 3 vollständig (inkl. Portal)</td><td class="amber">~2–3 Tage</td><td>2 Terminal-Läufe</td></tr>
+        <tr><td>Phase 4 vollständig (Hardening)</td><td class="amber">~3–5 Tage</td><td>2 Terminal-Läufe + DSGVO-Docs</td></tr>
+        <tr><td>Erster Pilot-Kunde live</td><td class="amber">~1–2 Wochen</td><td>DSGVO + Server + WhatsApp</td></tr>
+        <tr><td>Produktiv-Release (vollständig)</td><td class="amber">~3–4 Wochen</td><td>Alle Phase 4 Punkte erledigt</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 4: OFFENE PUNKTE -->
+<div id="tab4" class="tab-content">
+  <div class="page-title">
+    <h1>⚠️ Offene Punkte &amp; Entscheidungen</h1>
+    <p>Was das Management klären oder entscheiden muss</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Kritische Punkte – sofort klären</h2></div>
+    <table>
+      <thead><tr><th>Thema</th><th>Problem</th><th>Dringlichkeit</th></tr></thead>
+      <tbody>
+        <tr><td><strong>DSGVO &amp; Datenschutz</strong></td><td>Kein AV-Vertrag, keine Datenschutzerklärung. Ohne das dürfen keine echten Kundendaten verarbeitet werden.</td><td><span class="status-risk">Sofort</span></td></tr>
+        <tr><td><strong>Produktiv-Server</strong></td><td>Noch keine Entscheidung wo gehostet wird. Hetzner? AWS? Eigener Server? Beeinflusst DSGVO-Compliance (EU-Hosting).</td><td><span class="status-risk">Diese Woche</span></td></tr>
+        <tr><td><strong>WhatsApp Business Account</strong></td><td>Meta Business Account verifiziert? Template-Messages approved? Ohne das kein WhatsApp-Empfang.</td><td><span class="status-wip">Diese Woche</span></td></tr>
+      </tbody>
+    </table>
+    <div class="warning"><strong>Wichtig:</strong> Der erste echte Kunde darf ohne DSGVO-Dokumentation und AV-Vertrag nicht ongeboardet werden — unabhängig davon, wie gut das Produkt technisch läuft.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Offene Entscheidungen fürs Management</h2></div>
+    <table>
+      <thead><tr><th>Thema</th><th>Optionen</th><th>Auswirkung</th></tr></thead>
+      <tbody>
+        <tr><td>Hosting-Entscheidung</td><td>Hetzner (günstig, EU) · AWS (teurer, vertraut) · Eigener Server</td><td class="amber">Blockiert Produktiv-Release</td></tr>
+        <tr><td>Erster Pilot-Kunde</td><td>Lexoffice-Nutzer? sevDesk-Nutzer? DATEV-Kanzlei?</td><td class="green">Definiert Priorität Phase 3</td></tr>
+        <tr><td>Plugin-System Priorität</td><td>Jetzt bauen (Phase 3) oder nach erstem Kunden?</td><td class="green">Beeinflusst Sprint-Planung</td></tr>
+        <tr><td>M09 Lieferanten-Komm. Priorität</td><td>Vor oder nach Steuerberater-Portal?</td><td class="green">Beeinflusst Sprint-Planung</td></tr>
+        <tr><td>Monitoring-Tool</td><td>Sentry (gehostet) · eigene Grafana-Instanz · beide</td><td class="amber">Nötig vor Produktivbetrieb</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="decision-box">
+    <div class="dt">📌 Zusammenfassung für das Management</div>
+    <p style="font-size:9.5pt;">
+      75 % des Projekts sind abgeschlossen. Phase 2 ist vollständig fertig — das Standard-Paket (Lexoffice, sevDesk, DATEV, Monatsreporting) ist einsatzbereit. Technisch fehlen noch Phase 3 (Steuerberater-Portal, M09, Plugin-System) und Phase 4 (Security, DSGVO, Backup, Monitoring).<br><br>
+      <strong>Die wichtigste Entscheidung ist nicht technisch, sondern rechtlich:</strong> DSGVO-Dokumentation und AV-Vertrag müssen vor dem ersten echten Kunden vorliegen. Parallel dazu muss die Hosting-Entscheidung getroffen werden. Beides liegt beim Management — nicht bei der Entwicklung.
+    </p>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>Technische Schulden &amp; Bekannte Schwächen</h2></div>
+    <table>
+      <thead><tr><th>Punkt</th><th>Beschreibung</th><th>Priorität</th></tr></thead>
+      <tbody>
+        <tr><td>Kein Monitoring</td><td>Bei Fehlern in Produktion gibt es keine Alarmierung — Fehler bleiben unbemerkt</td><td class="red">Hoch</td></tr>
+        <tr><td>Kein Backup</td><td>Datenverlust bei Server-Ausfall möglich — täglich sichern muss vor Go-Live eingerichtet sein</td><td class="red">Hoch</td></tr>
+        <tr><td>Kein Security Review</td><td>OWASP-Prüfung steht noch aus — HMAC-Stärke, SQL-Injection, Rate-Limiting</td><td class="amber">Mittel</td></tr>
+        <tr><td>Kein Load-Test</td><td>Unbekannt ob System 100+ gleichzeitige Uploads hält</td><td class="amber">Mittel</td></tr>
+        <tr><td>puppeteer in Produktion</td><td>Chromium-Dependency für PDF-Rendering ist ressourcenintensiv — ggf. durch externe PDF-API ersetzen</td><td class="amber">Mittel</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function showTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>

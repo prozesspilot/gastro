@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ToastProvider, useToast } from './ToastProvider';
 
 // Test-Komponente die den Toast-Hook nutzt
@@ -13,13 +13,6 @@ function ToastTrigger({ type, message }: { type: string; message: string }) {
     <button onClick={() => toast(type as 'success' | 'error' | 'info' | 'warning', message)}>
       Toast auslösen
     </button>
-  );
-}
-
-function DismissTrigger({ id }: { id: number }) {
-  const { dismiss } = useToast();
-  return (
-    <button onClick={() => dismiss(id)}>Dismiss</button>
   );
 }
 

@@ -26,12 +26,9 @@ function renderWithRouter(receiptId: string) {
 }
 
 describe('ReceiptDetailPage', () => {
-  it('zeigt Skeleton während Laden', () => {
+  it('rendert ohne Crash', () => {
     // Default MSW handler reagiert sofort — trotzdem kurz pending
     renderWithRouter('receipt-test-id');
-    // Skeleton oder geladener Content
-    const skeleton = document.querySelector('[data-testid="skeleton"]');
-    // Da MSW sofort antwortet, könnte Content schon da sein
     // Wir prüfen dass kein Crash auftritt
     expect(document.body).toBeTruthy();
   });

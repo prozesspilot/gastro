@@ -196,6 +196,52 @@ export const healthHandlers = [
   ),
 ];
 
+// ── Communications ────────────────────────────────────────────────────────
+
+export const communicationHandlers = [
+  http.get(`${BASE}/communications`, () =>
+    HttpResponse.json({ ok: true, data: [] }),
+  ),
+];
+
+// ── Advisor ───────────────────────────────────────────────────────────────
+
+export const advisorHandlers = [
+  http.get(`${BASE}/advisor/overview`, () =>
+    HttpResponse.json({ ok: true, data: [] }),
+  ),
+
+  http.get(`${BASE}/advisor/receipts/pending`, () =>
+    HttpResponse.json({ ok: true, data: [] }),
+  ),
+];
+
+// ── Plugins ───────────────────────────────────────────────────────────────
+
+export const pluginHandlers = [
+  http.get(`${BASE}/plugins`, () =>
+    HttpResponse.json({ ok: true, data: { plugins: [] } }),
+  ),
+];
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+
+export const statsHandlers = [
+  http.get(`${BASE}/customers/:id/stats`, () =>
+    HttpResponse.json({
+      ok: true,
+      data: {
+        customer_id: 'cust-001',
+        receipts_by_month: [],
+        by_category: [],
+        top_suppliers: [],
+        export_rate: { lexoffice: 0, datev: 0 },
+        processing_times: { avg_ms: null, p95_ms: null },
+      },
+    }),
+  ),
+];
+
 // ── Alle Handler zusammen ─────────────────────────────────────────────────
 
 export const handlers = [
@@ -204,4 +250,8 @@ export const handlers = [
   ...tenantHandlers,
   ...categoryHandlers,
   ...healthHandlers,
+  ...communicationHandlers,
+  ...advisorHandlers,
+  ...pluginHandlers,
+  ...statsHandlers,
 ];

@@ -154,12 +154,11 @@ export const tenantHandlers = [
   http.get(`${BASE}/tenants`, () =>
     HttpResponse.json({
       ok: true,
-      data: {
-        items: [
-          { id: 'tenant-001', name: 'Demo-Tenant', slug: 'demo', created_at: '2024-01-01T00:00:00Z' },
-        ],
-        pagination: { total: 1, page: 1, limit: 50 },
-      },
+      // apiOkPaged: data ist das Array, pagination ist separat
+      data: [
+        { id: 'tenant-001', name: 'Demo-Tenant', slug: 'demo', created_at: '2024-01-01T00:00:00Z' },
+      ],
+      pagination: { total: 1, page: 1, limit: 50 },
     }),
   ),
 

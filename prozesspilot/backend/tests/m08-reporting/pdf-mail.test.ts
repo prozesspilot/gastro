@@ -14,7 +14,10 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderMonthlyReport } from '../../src/modules/m08-reporting/services/pdf-renderer';
-import { sendMonthlyReport, MailNotConfiguredError } from '../../src/modules/m08-reporting/services/mail-sender';
+import {
+  sendMonthlyReport,
+  MailNotConfiguredError,
+} from '../../src/modules/m08-reporting/services/mail-sender';
 import type { MonthlyTotals } from '../../src/modules/m08-reporting/services/aggregator';
 
 // ── Test-Fixtures ─────────────────────────────────────────────────────────────
@@ -27,16 +30,16 @@ function makeTotals(overrides: Partial<MonthlyTotals> = {}): MonthlyTotals {
     gross_sum: 12345.67,
     net_sum: 10375.35,
     top_categories: [
-      { id: 'wareneinkauf_food', label: 'Wareneinkauf Lebensmittel', n: 18, gross_sum: 5000.00 },
-      { id: 'betriebskosten_energie', label: 'Energie', n: 3, gross_sum: 2000.00 },
-      { id: 'miete', label: 'Miete', n: 1, gross_sum: 2975.00 },
-      { id: 'kfz', label: 'KFZ', n: 5, gross_sum: 890.00 },
+      { id: 'wareneinkauf_food', label: 'Wareneinkauf Lebensmittel', n: 18, gross_sum: 5000.0 },
+      { id: 'betriebskosten_energie', label: 'Energie', n: 3, gross_sum: 2000.0 },
+      { id: 'miete', label: 'Miete', n: 1, gross_sum: 2975.0 },
+      { id: 'kfz', label: 'KFZ', n: 5, gross_sum: 890.0 },
       { id: 'sonstige_aufwand', label: 'Sonstige', n: 15, gross_sum: 1480.67 },
     ],
     top_suppliers: [
-      { supplier: 'Metro AG', n: 12, gross_sum: 4000.00 },
-      { supplier: 'Stadtwerke GmbH', n: 3, gross_sum: 2000.00 },
-      { supplier: 'Hausverwaltung Schmidt', n: 1, gross_sum: 2975.00 },
+      { supplier: 'Metro AG', n: 12, gross_sum: 4000.0 },
+      { supplier: 'Stadtwerke GmbH', n: 3, gross_sum: 2000.0 },
+      { supplier: 'Hausverwaltung Schmidt', n: 1, gross_sum: 2975.0 },
     ],
     trend_pct: 5.2,
     ...overrides,
@@ -137,11 +140,11 @@ describe('M08 PDF-Renderer (pdf-lib)', () => {
 
 describe('M08 Mail-Sender', () => {
   beforeEach(() => {
-    delete process.env.SMTP_HOST;
+    Reflect.deleteProperty(process.env, 'SMTP_HOST');
   });
 
   afterEach(() => {
-    delete process.env.SMTP_HOST;
+    Reflect.deleteProperty(process.env, 'SMTP_HOST');
   });
 
   it('wirft MailNotConfiguredError wenn SMTP_HOST nicht gesetzt', async () => {
@@ -160,9 +163,9 @@ describe('M08 Mail-Sender', () => {
   });
 
   it('wirft auch ohne Empfänger wenn SMTP nicht konfiguriert', async () => {
-    await expect(
-      sendMonthlyReport('', '2026-04', Buffer.alloc(0), makeTotals()),
-    ).rejects.toThrow(MailNotConfiguredError);
+    await expect(sendMonthlyReport('', '2026-04', Buffer.alloc(0), makeTotals())).rejects.toThrow(
+      MailNotConfiguredError,
+    );
   });
 });
 
@@ -170,7 +173,7 @@ describe('M08 Mail-Sender', () => {
 
 describe('M08 PDF + Mail Integration', () => {
   it('erstellt PDF und übergibt an Sender (SMTP nicht konfiguriert → erwartet Fehler)', async () => {
-    delete process.env.SMTP_HOST;
+    Reflect.deleteProperty(process.env, 'SMTP_HOST');
 
     const totals = makeTotals();
     const pdf = await renderMonthlyReport({
@@ -183,8 +186,8 @@ describe('M08 PDF + Mail Integration', () => {
     expect(pdf.slice(0, 5).toString('ascii')).toBe('%PDF-');
 
     // Ohne SMTP → MailNotConfiguredError
-    await expect(
-      sendMonthlyReport('berater@example.com', '2026-04', pdf, totals),
-    ).rejects.toThrow(MailNotConfiguredError);
+    await expect(sendMonthlyReport('berater@example.com', '2026-04', pdf, totals)).rejects.toThrow(
+      MailNotConfiguredError,
+    );
   });
 });

@@ -58,12 +58,15 @@ interface GoldenCase {
     };
     custom?: {
       industry_hint?: string;
-      supplier_overrides?: Record<string, {
-        category: string;
-        category_label: string;
-        skr_account: string;
-        tax_key: string;
-      }>;
+      supplier_overrides?: Record<
+        string,
+        {
+          category: string;
+          category_label: string;
+          skr_account: string;
+          tax_key: string;
+        }
+      >;
     };
   };
   expected: GoldenExpected;
@@ -71,15 +74,19 @@ interface GoldenCase {
 
 // ── Mock-Anthropic-Antwort ────────────────────────────────────────────────────
 
-function buildMockResponse(supplierName: string, expected: GoldenExpected): AnthropicMessageResponse {
+function buildMockResponse(
+  supplierName: string,
+  expected: GoldenExpected,
+): AnthropicMessageResponse {
   const category = expected.category ?? 'sonstige_aufwand';
   const skr_account = expected.skr_account ?? '6300';
   // For confidence, use a value that satisfies the golden case expectation
-  const confidence = expected.confidence_min !== undefined
-    ? Math.max(expected.confidence_min, 0.80)  // return something >= min
-    : expected.confidence_max !== undefined
-      ? Math.min(expected.confidence_max, 0.60) // return something <= max
-      : 0.85;
+  const confidence =
+    expected.confidence_min !== undefined
+      ? Math.max(expected.confidence_min, 0.8) // return something >= min
+      : expected.confidence_max !== undefined
+        ? Math.min(expected.confidence_max, 0.6) // return something <= max
+        : 0.85;
 
   const label_map: Record<string, string> = {
     wareneinkauf_food: 'Wareneinkauf Lebensmittel',

@@ -27,17 +27,19 @@ const WRITE_GOLDEN = process.env.WRITE_GOLDEN === '1';
 
 // ── Test-Fixtures — gleiche Struktur wie bestehende DATEV-Tests ──────────────
 
-function makeReceipt(overrides: Partial<{
-  receipt_id: string;
-  vendor_name: string;
-  doc_number: string;
-  doc_date: string;
-  total_gross: number;
-  total_net: number;
-  tax_rate: number;
-  tax_amount: number;
-  skr_account: string;
-}> = {}): Receipt {
+function makeReceipt(
+  overrides: Partial<{
+    receipt_id: string;
+    vendor_name: string;
+    doc_number: string;
+    doc_date: string;
+    total_gross: number;
+    total_net: number;
+    tax_rate: number;
+    tax_amount: number;
+    skr_account: string;
+  }> = {},
+): Receipt {
   const {
     receipt_id = 'rcpt-golden-001',
     vendor_name = 'Metro AG',
@@ -96,10 +98,7 @@ const testPeriod: DatevPeriod = { year: 2026, month: 4 };
  * EXTF-Header-Format: "EXTF";700;21;"Buchungsstapel";9;<TIMESTAMP>;...
  */
 function normalizeExtfTimestamp(text: string): string {
-  return text.replace(
-    /^(﻿?"EXTF";700;21;"Buchungsstapel";\d+;)\d{14}(;)/m,
-    '$1XXXXXXXXXXXXXX$2',
-  );
+  return text.replace(/^(﻿?"EXTF";700;21;"Buchungsstapel";\d+;)\d{14}(;)/m, '$1XXXXXXXXXXXXXX$2');
 }
 
 function assertGolden(filename: string, csv: Buffer): void {
@@ -120,7 +119,7 @@ function assertGolden(filename: string, csv: Buffer): void {
 
 describe('F5 — DATEV CSV Golden-Tests Format-510', () => {
   it('Utility: formatDecimalDE ersetzt Punkt durch Komma', () => {
-    expect(formatDecimalDE(1190.00)).toBe('1190,00');
+    expect(formatDecimalDE(1190.0)).toBe('1190,00');
     expect(formatDecimalDE(100.5)).toBe('100,50');
     expect(formatDecimalDE(0)).toBe('0,00');
   });
@@ -157,11 +156,11 @@ describe('F5 — DATEV CSV Golden-Tests Format-510', () => {
     // DATEV Format-510 Validierung
     expect(text).toContain('"EXTF"');
     expect(text).toContain('700');
-    expect(text).toMatch(/1190,00/);         // Dezimaltrenner = Komma
-    expect(text).toContain('3100');           // SKR-Konto
-    expect(text).toContain('1504');           // Belegdatum 15.04
+    expect(text).toMatch(/1190,00/); // Dezimaltrenner = Komma
+    expect(text).toContain('3100'); // SKR-Konto
+    expect(text).toContain('1504'); // Belegdatum 15.04
     // BU-Schlüssel 19% (Wert "9" in der CSV-Zeile)
-    expect(text).toMatch(/;9;/);             // BU-Schlüssel 19% als unquoted value
+    expect(text).toMatch(/;9;/); // BU-Schlüssel 19% als unquoted value
     expect(rows_count).toBe(1);
 
     assertGolden('case_01_lebensmittel.csv', csv);
@@ -191,7 +190,7 @@ describe('F5 — DATEV CSV Golden-Tests Format-510', () => {
     const text = csv.toString('utf-8');
 
     expect(text).toContain('4240');
-    expect(text).toContain('3004');  // Belegdatum 30.04
+    expect(text).toContain('3004'); // Belegdatum 30.04
     expect(text).toMatch(/714,00/);
     expect(rows_count).toBe(1);
 

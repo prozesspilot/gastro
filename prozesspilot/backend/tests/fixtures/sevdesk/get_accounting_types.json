@@ -1,0 +1,41 @@
+{
+  "description": "sevDesk API: GET /AccountingType — List Accounting Types",
+  "request": {
+    "method": "GET",
+    "path": "/AccountingType",
+    "headers": {
+      "Authorization": "SEVDESK_API_TOKEN"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "objects": [
+        {
+          "id": "200",
+          "objectName": "AccountingType",
+          "name": "Wareneinkauf 7% (SKR03 3200)",
+          "accountNumber": "3200"
+        },
+        {
+          "id": "201",
+          "objectName": "AccountingType",
+          "name": "Wareneinkauf 19% (SKR03 3100)",
+          "accountNumber": "3100"
+        },
+        {
+          "id": "202",
+          "objectName": "AccountingType",
+          "name": "Energie (SKR03 4240)",
+          "accountNumber": "4240"
+        },
+        {
+          "id": "203",
+          "objectName": "AccountingType",
+          "name": "Miete (SKR03 4210)",
+          "accountNumber": "4210"
+        }
+      ]
+    }
+  }
+}

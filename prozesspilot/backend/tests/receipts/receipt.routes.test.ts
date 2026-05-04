@@ -3,26 +3,34 @@
  *
  * ERFORDERT laufende Postgres-Instanz.
  * Tenant + Customer werden vor jedem Test frisch angelegt und danach bereinigt.
+ *
+ * Ausführung: PP_E2E=1 npm test
  */
 
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app';
 
+// Skip all DB integration tests when no Postgres is available
+const E2E = process.env.PP_E2E === '1';
+
 let app: FastifyInstance;
 let tenantId: string;
 let customerId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
 });
 
 afterAll(async () => {
+  if (!E2E) return;
   await app.close();
 });
 
 beforeEach(async () => {
+  if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
     [`test-receipts-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Test-Mandant'],
@@ -40,6 +48,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
 });
 
@@ -58,7 +67,7 @@ async function createTestReceipt(overrides: Record<string, unknown> = {}) {
 
 // ── POST /receipts ───────────────────────────────────────────────────────
 
-describe('POST /api/v1/receipts', () => {
+describe.skipIf(!E2E)('POST /api/v1/receipts', () => {
   it('legt einen neuen Receipt an und gibt 201 zurück', async () => {
     const res = await createTestReceipt();
     const body = res.json();
@@ -97,7 +106,7 @@ describe('POST /api/v1/receipts', () => {
 
 // ── GET /receipts ─────────────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts', () => {
   it('gibt paginierte Liste zurück', async () => {
     await createTestReceipt({ original_name: 'a.pdf' });
     await createTestReceipt({ original_name: 'b.pdf' });
@@ -128,7 +137,7 @@ describe('GET /api/v1/receipts', () => {
 
 // ── GET /receipts/:id ─────────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/:id', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/:id', () => {
   it('gibt den Receipt zurück wenn gefunden', async () => {
     const created = (await createTestReceipt()).json();
     const id = created.data.id;
@@ -156,7 +165,7 @@ describe('GET /api/v1/receipts/:id', () => {
 
 // ── PUT /receipts/:id/status ──────────────────────────────────────────────
 
-describe('PUT /api/v1/receipts/:id/status', () => {
+describe.skipIf(!E2E)('PUT /api/v1/receipts/:id/status', () => {
   it('aktualisiert den Status', async () => {
     const created = (await createTestReceipt()).json();
     const id = created.data.id;
@@ -202,7 +211,7 @@ describe('PUT /api/v1/receipts/:id/status', () => {
 
 // ── GET /receipts/stats ───────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/stats', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/stats', () => {
   it('gibt aggregierte Statistik zurück', async () => {
     await createTestReceipt();
     await createTestReceipt({ source: 'whatsapp' });
@@ -253,7 +262,7 @@ describe('GET /api/v1/receipts/stats', () => {
 
 // ── PUT /receipts/bulk-status ─────────────────────────────────────────────
 
-describe('PUT /api/v1/receipts/bulk-status', () => {
+describe.skipIf(!E2E)('PUT /api/v1/receipts/bulk-status', () => {
   it('aktualisiert mehrere Receipts gleichzeitig', async () => {
     const r1 = (await createTestReceipt()).json();
     const r2 = (await createTestReceipt()).json();
@@ -331,7 +340,7 @@ describe('PUT /api/v1/receipts/bulk-status', () => {
 
 // ── GET /receipts/export ──────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/export', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/export', () => {
   it('liefert CSV mit allen Receipts', async () => {
     await createTestReceipt({ original_name: 'beleg-1.pdf' });
     await createTestReceipt({ original_name: 'beleg-2.pdf' });
@@ -361,7 +370,7 @@ describe('GET /api/v1/receipts/export', () => {
 
 // ── Filter & Pagination ───────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts mit Filtern', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts mit Filtern', () => {
   it('filtert nach status=pending', async () => {
     const r1 = (await createTestReceipt()).json();
     const r2 = (await createTestReceipt()).json();
@@ -401,7 +410,7 @@ describe('GET /api/v1/receipts mit Filtern', () => {
 
 // ── POST / Validierung — Customer in fremdem Tenant ──────────────────────
 
-describe('POST /api/v1/receipts mit fremdem Customer', () => {
+describe.skipIf(!E2E)('POST /api/v1/receipts mit fremdem Customer', () => {
   it('gibt 404 zurück wenn customer nicht im Tenant existiert', async () => {
     const { rows } = await app.db.query<{ id: string }>(
       `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
@@ -427,7 +436,7 @@ describe('POST /api/v1/receipts mit fremdem Customer', () => {
 
 // ── GET /:id Tenant-Isolation ────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/:id Tenant-Isolation', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/:id Tenant-Isolation', () => {
   it('gibt 404 zurück wenn Receipt zum anderen Tenant gehört', async () => {
     const created = (await createTestReceipt()).json();
     const id = created.data.id;
@@ -452,7 +461,7 @@ describe('GET /api/v1/receipts/:id Tenant-Isolation', () => {
 
 // ── Deduplication ─────────────────────────────────────────────────────────
 
-describe('POST /api/v1/receipts mit file_sha256 (Deduplication)', () => {
+describe.skipIf(!E2E)('POST /api/v1/receipts mit file_sha256 (Deduplication)', () => {
   const sha = 'a'.repeat(64);
 
   it('verschiedene SHA256 → beide 201', async () => {
@@ -510,7 +519,7 @@ describe('POST /api/v1/receipts mit file_sha256 (Deduplication)', () => {
 
 // ── Volltextsuche ─────────────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts mit search-Parameter', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts mit search-Parameter', () => {
   it('findet Receipt anhand original_name', async () => {
     await createTestReceipt({ original_name: 'Lieferschein Bahn.pdf' });
     await createTestReceipt({ original_name: 'Rechnung Foo.pdf' });
@@ -557,7 +566,7 @@ describe('GET /api/v1/receipts mit search-Parameter', () => {
 
 // ── GET /:id/upload-url ───────────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/:id/upload-url', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/:id/upload-url', () => {
   it('gibt eine uploadUrl zurück', async () => {
     const created = (await createTestReceipt()).json();
     const res = await app.inject({
@@ -582,7 +591,7 @@ describe('GET /api/v1/receipts/:id/upload-url', () => {
 
 // ── POST /:id/reprocess (A1) ─────────────────────────────────────────────
 
-describe('POST /api/v1/receipts/:id/reprocess', () => {
+describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
   it('setzt Status auf received zurück', async () => {
     // Receipt anlegen und Status auf done setzen
     const created = (await createTestReceipt()).json();
@@ -627,7 +636,7 @@ describe('POST /api/v1/receipts/:id/reprocess', () => {
 
 // ── GET /:id/download (A1) ───────────────────────────────────────────────
 
-describe('GET /api/v1/receipts/:id/download', () => {
+describe.skipIf(!E2E)('GET /api/v1/receipts/:id/download', () => {
   it('gibt 404 wenn kein storage_key gesetzt', async () => {
     // Receipt anlegen — hat keinen storage_key
     const created = (await createTestReceipt()).json();

@@ -12,21 +12,28 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app';
 
+// Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
+const E2E = process.env.PP_E2E === '1';
+
+
 // ── Test-Setup ──────────────────────────────────────────────────────────────
 
 let app: FastifyInstance;
 let tenantId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
 });
 
 afterAll(async () => {
+  if (!E2E) return;
   await app.close();
 });
 
 beforeEach(async () => {
+  if (!E2E) return;
   // Frischen Test-Mandanten anlegen
   const { rows } = await app.db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
@@ -36,6 +43,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   // Testdaten bereinigen (kaskadiert auf customers)
   await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
 });
@@ -57,7 +65,7 @@ async function createTestCustomer(overrides: Record<string, unknown> = {}) {
 
 // ── POST /api/v1/customers ──────────────────────────────────────────────────
 
-describe('POST /api/v1/customers', () => {
+describe.skipIf(!E2E)('POST /api/v1/customers', () => {
   it('legt einen neuen Kunden an und gibt 201 zurück', async () => {
     const res  = await createTestCustomer();
     const body = res.json();
@@ -120,8 +128,9 @@ describe('POST /api/v1/customers', () => {
 
 // ── GET /api/v1/customers ───────────────────────────────────────────────────
 
-describe('GET /api/v1/customers', () => {
+describe.skipIf(!E2E)('GET /api/v1/customers', () => {
   beforeEach(async () => {
+    if (!E2E) return;
     await createTestCustomer({ name: 'Kunde A' });
     await createTestCustomer({ name: 'Kunde B', external_id: 'EXT-B' });
   });
@@ -164,7 +173,7 @@ describe('GET /api/v1/customers', () => {
 
 // ── GET /api/v1/customers/:id ───────────────────────────────────────────────
 
-describe('GET /api/v1/customers/:id', () => {
+describe.skipIf(!E2E)('GET /api/v1/customers/:id', () => {
   it('gibt den Kunden zurück wenn gefunden', async () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;
@@ -189,7 +198,7 @@ describe('GET /api/v1/customers/:id', () => {
 
 // ── PATCH /api/v1/customers/:id ─────────────────────────────────────────────
 
-describe('PATCH /api/v1/customers/:id', () => {
+describe.skipIf(!E2E)('PATCH /api/v1/customers/:id', () => {
   it('aktualisiert den Namen', async () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;
@@ -231,7 +240,7 @@ describe('PATCH /api/v1/customers/:id', () => {
 
 // ── DELETE /api/v1/customers/:id ────────────────────────────────────────────
 
-describe('DELETE /api/v1/customers/:id', () => {
+describe.skipIf(!E2E)('DELETE /api/v1/customers/:id', () => {
   it('deaktiviert den Kunden (soft delete) und gibt 204 zurück', async () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;

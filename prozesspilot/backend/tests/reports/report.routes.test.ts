@@ -6,20 +6,27 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app';
 
+// Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
+const E2E = process.env.PP_E2E === '1';
+
+
 let app: FastifyInstance;
 let tenantId: string;
 let customerId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
 });
 
 afterAll(async () => {
+  if (!E2E) return;
   await app.close();
 });
 
 beforeEach(async () => {
+  if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
     [`test-rep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Report Mandant'],
@@ -36,6 +43,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
 });
 
@@ -43,7 +51,7 @@ function headers() {
   return { 'content-type': 'application/json', 'x-pp-tenant-id': tenantId };
 }
 
-describe('GET /api/v1/reports/receipts', () => {
+describe.skipIf(!E2E)('GET /api/v1/reports/receipts', () => {
   it('liefert PDF mit Content-Type application/pdf', async () => {
     await app.inject({
       method:  'POST',

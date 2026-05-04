@@ -1,0 +1,67 @@
+{
+  "description": "sevDesk API: POST /Voucher/Factory/saveVoucher — Success Response",
+  "request": {
+    "method": "POST",
+    "path": "/Voucher/Factory/saveVoucher",
+    "headers": {
+      "Authorization": "SEVDESK_API_TOKEN",
+      "Content-Type": "application/json"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "objects": {
+        "voucher": {
+          "id": "12345",
+          "objectName": "Voucher",
+          "create": "2026-01-15T10:00:00+00:00",
+          "update": "2026-01-15T10:00:00+00:00",
+          "sewUser": { "id": "1", "objectName": "SevUser" },
+          "sevClient": { "id": "100", "objectName": "SevClient" },
+          "createUser": { "id": "1", "objectName": "SevUser" },
+          "voucherDate": "2026-01-15T00:00:00+00:00",
+          "supplier": null,
+          "supplierName": "Metro AG",
+          "description": "Wareneingang 2026-01-15",
+          "payDate": null,
+          "status": 50,
+          "sumNet": "1000.00",
+          "sumTax": "190.00",
+          "sumGross": "1190.00",
+          "sumDiscounts": "0.00",
+          "sumNetForeignCurrency": "0.00",
+          "sumTaxForeignCurrency": "0.00",
+          "sumGrossForeignCurrency": "0.00",
+          "sumDiscountsForeignCurrency": "0.00",
+          "paymentDeadline": null,
+          "deliveryDate": "2026-01-15T00:00:00+00:00",
+          "deliveryDateUntil": null,
+          "document": null,
+          "costCentre": null,
+          "comment": null,
+          "propertyIsObject": false
+        },
+        "voucherPos": [
+          {
+            "id": "99001",
+            "objectName": "VoucherPos",
+            "accountingType": { "id": "200", "objectName": "AccountingType" },
+            "estimatedAccountingType": null,
+            "taxRate": "19.00",
+            "net": false,
+            "isAsset": false,
+            "sumNet": "1000.00",
+            "sumTax": "190.00",
+            "sumGross": "1190.00",
+            "sumNetAccounting": "1000.00",
+            "sumTaxAccounting": "190.00",
+            "sumGrossAccounting": "1190.00",
+            "sumDiscount": "0.00",
+            "comment": null
+          }
+        ]
+      }
+    }
+  }
+}

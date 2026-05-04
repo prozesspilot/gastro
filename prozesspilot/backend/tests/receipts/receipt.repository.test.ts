@@ -17,22 +17,28 @@ import {
   updateReceiptStatus,
 } from '../../src/modules/receipts/receipt.repository';
 
+// Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
+const E2E = process.env.PP_E2E === '1';
+
 let app: FastifyInstance;
 let db: Pool;
 let tenantId: string;
 let customerId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
   db = app.db;
 });
 
 afterAll(async () => {
+  if (!E2E) return;
   await app.close();
 });
 
 beforeEach(async () => {
+  if (!E2E) return;
   const { rows: tRows } = await db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
     [`test-repo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Repo Test'],
@@ -50,10 +56,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   await db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
 });
 
-describe('createReceipt', () => {
+describe.skipIf(!E2E)('createReceipt', () => {
   it('legt einen Receipt mit Default-Werten an', async () => {
     const r = await createReceipt(db, tenantId, { customer_id: customerId });
     expect(r.tenant_id).toBe(tenantId);
@@ -64,7 +71,7 @@ describe('createReceipt', () => {
   });
 });
 
-describe('getReceipt', () => {
+describe.skipIf(!E2E)('getReceipt', () => {
   it('gibt null zurück wenn nicht im Tenant', async () => {
     const r = await createReceipt(db, tenantId, { customer_id: customerId });
 
@@ -89,7 +96,7 @@ describe('getReceipt', () => {
   });
 });
 
-describe('listReceipts', () => {
+describe.skipIf(!E2E)('listReceipts', () => {
   it('paginiert + filtert nach status', async () => {
     await createReceipt(db, tenantId, { customer_id: customerId });
     const r2 = await createReceipt(db, tenantId, { customer_id: customerId });
@@ -104,7 +111,7 @@ describe('listReceipts', () => {
   });
 });
 
-describe('updateReceiptStatus', () => {
+describe.skipIf(!E2E)('updateReceiptStatus', () => {
   it('setzt error_message bei status=error', async () => {
     const r = await createReceipt(db, tenantId, { customer_id: customerId });
     const updated = await updateReceiptStatus(db, tenantId, r.id, 'error', 'Boom');
@@ -118,7 +125,7 @@ describe('updateReceiptStatus', () => {
   });
 });
 
-describe('getReceiptStats', () => {
+describe.skipIf(!E2E)('getReceiptStats', () => {
   it('zählt korrekt nach status und source', async () => {
     await createReceipt(db, tenantId, { customer_id: customerId });
     const r2 = await createReceipt(db, tenantId, { customer_id: customerId, source: 'whatsapp' });
@@ -136,7 +143,7 @@ describe('getReceiptStats', () => {
   });
 });
 
-describe('bulkUpdateStatus', () => {
+describe.skipIf(!E2E)('bulkUpdateStatus', () => {
   it('aktualisiert mehrere IDs in einer Transaktion', async () => {
     const r1 = await createReceipt(db, tenantId, { customer_id: customerId });
     const r2 = await createReceipt(db, tenantId, { customer_id: customerId });
@@ -151,7 +158,7 @@ describe('bulkUpdateStatus', () => {
   });
 });
 
-describe('listReceiptsForExport', () => {
+describe.skipIf(!E2E)('listReceiptsForExport', () => {
   it('mappt categorization aus metadata', async () => {
     const r = await createReceipt(db, tenantId, { customer_id: customerId });
     await db.query(

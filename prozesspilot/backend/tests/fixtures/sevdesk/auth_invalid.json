@@ -1,0 +1,19 @@
+{
+  "description": "sevDesk API: 401 Unauthorized — Invalid Token",
+  "request": {
+    "method": "POST",
+    "path": "/Voucher/Factory/saveVoucher",
+    "headers": {
+      "Authorization": "INVALID_TOKEN"
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "message": "Authentication failed. Token invalid or expired.",
+        "code": 4010
+      }
+    }
+  }
+}

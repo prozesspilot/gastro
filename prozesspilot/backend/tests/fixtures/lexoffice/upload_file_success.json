@@ -1,0 +1,18 @@
+{
+  "description": "Lexoffice API: POST /v1/vouchers/:id/files — File Upload Success",
+  "request": {
+    "method": "POST",
+    "path": "/v1/vouchers/e9066f04-8cc7-4616-93f8-ac9ecc8479e8/files",
+    "headers": {
+      "Authorization": "Bearer LEXOFFICE_API_KEY",
+      "Content-Type": "multipart/form-data"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "e9066f04-8cc7-4616-93f8-ac9ecc8479e8",
+      "version": 2
+    }
+  }
+}

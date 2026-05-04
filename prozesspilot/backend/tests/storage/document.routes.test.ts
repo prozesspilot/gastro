@@ -24,19 +24,25 @@ vi.mock('../../src/core/storage/storage.service', () => ({
 
 import { buildApp } from '../../src/app';
 
+// Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
+const E2E = process.env.PP_E2E === '1';
+
+
 // ── Test-Setup ────────────────────────────────────────────────────────────────
 
 let app: FastifyInstance;
 let tenantId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
 });
 
-afterAll(async () => { await app.close(); });
+afterAll(async () => { if (!E2E) return; await app.close(); });
 
 beforeEach(async () => {
+  if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
     [`test-doc-tenant-${Date.now()}`, 'Doc-Test-Mandant'],
@@ -45,6 +51,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
   vi.clearAllMocks();
 });
@@ -61,7 +68,7 @@ function headers(contentType = 'application/pdf', filename = 'test.pdf') {
 
 // ── POST /api/v1/documents/upload ─────────────────────────────────────────────
 
-describe('POST /api/v1/documents/upload', () => {
+describe.skipIf(!E2E)('POST /api/v1/documents/upload', () => {
   it('lädt PDF hoch und gibt 201 zurück', async () => {
     const res = await app.inject({
       method:  'POST',
@@ -116,8 +123,9 @@ describe('POST /api/v1/documents/upload', () => {
 
 // ── GET /api/v1/documents ─────────────────────────────────────────────────────
 
-describe('GET /api/v1/documents', () => {
+describe.skipIf(!E2E)('GET /api/v1/documents', () => {
   beforeEach(async () => {
+    if (!E2E) return;
     // Zwei Dokumente vorab hochladen
     for (const name of ['doc-a.pdf', 'doc-b.pdf']) {
       await app.inject({
@@ -145,7 +153,7 @@ describe('GET /api/v1/documents', () => {
 
 // ── GET /api/v1/documents/:id ─────────────────────────────────────────────────
 
-describe('GET /api/v1/documents/:id', () => {
+describe.skipIf(!E2E)('GET /api/v1/documents/:id', () => {
   it('gibt Dokument zurück wenn vorhanden', async () => {
     const upload = await app.inject({
       method:  'POST',
@@ -178,7 +186,7 @@ describe('GET /api/v1/documents/:id', () => {
 
 // ── GET /api/v1/documents/:id/download-url ────────────────────────────────────
 
-describe('GET /api/v1/documents/:id/download-url', () => {
+describe.skipIf(!E2E)('GET /api/v1/documents/:id/download-url', () => {
   it('gibt presigned URL zurück', async () => {
     const upload = await app.inject({
       method:  'POST',

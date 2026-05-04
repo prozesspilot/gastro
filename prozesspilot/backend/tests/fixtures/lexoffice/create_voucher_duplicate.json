@@ -1,0 +1,22 @@
+{
+  "description": "Lexoffice API: POST /v1/vouchers — Duplicate Idempotency Key",
+  "request": {
+    "method": "POST",
+    "path": "/v1/vouchers",
+    "headers": {
+      "Authorization": "Bearer LEXOFFICE_API_KEY",
+      "Content-Type": "application/json"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "e9066f04-8cc7-4616-93f8-ac9ecc8479e8",
+      "resourceUri": "https://api.lexoffice.io/v1/vouchers/e9066f04-8cc7-4616-93f8-ac9ecc8479e8",
+      "createdDate": "2026-01-15T10:00:00.000Z",
+      "updatedDate": "2026-01-15T10:00:00.000Z",
+      "version": 1
+    }
+  },
+  "note": "Lexoffice is idempotent on duplicate submissions — same response"
+}

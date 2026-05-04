@@ -1,0 +1,35 @@
+{
+  "description": "Lexoffice API: GET /v1/voucherlist — Categories Response",
+  "request": {
+    "method": "GET",
+    "path": "/v1/voucherlist",
+    "headers": {
+      "Authorization": "Bearer LEXOFFICE_API_KEY"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "id": "00000000-0000-4000-8000-000000003100",
+        "name": "Wareneingang Lebensmittel",
+        "type": "expense"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000003200",
+        "name": "Wareneingang Getränke",
+        "type": "expense"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000004240",
+        "name": "Energie",
+        "type": "expense"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000004210",
+        "name": "Miete",
+        "type": "expense"
+      }
+    ]
+  }
+}

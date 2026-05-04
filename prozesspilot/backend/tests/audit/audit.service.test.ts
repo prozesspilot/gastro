@@ -7,19 +7,26 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { buildApp } from '../../src/app';
 import { log } from '../../src/core/audit/audit.service';
 
+// Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
+const E2E = process.env.PP_E2E === '1';
+
+
 let app: FastifyInstance;
 let tenantId: string;
 
 beforeAll(async () => {
+  if (!E2E) return;
   app = await buildApp();
   await app.ready();
 });
 
 afterAll(async () => {
+  if (!E2E) return;
   await app.close();
 });
 
 beforeEach(async () => {
+  if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
     `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
     [`test-audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Audit Test'],
@@ -28,10 +35,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (!E2E) return;
   await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
 });
 
-describe('audit.log', () => {
+describe.skipIf(!E2E)('audit.log', () => {
   it('schreibt korrekt in audit_log', async () => {
     await log(app.db, tenantId, 'receipt', 'rec-123', 'status_changed', { old: 'pending', new: 'done' });
 

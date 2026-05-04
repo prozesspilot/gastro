@@ -1,0 +1,36 @@
+{
+  "description": "Metro AG Lieferantenrechnung → wareneinkauf_food, SKR03 3100",
+  "input": {
+    "supplier_name": "Metro AG",
+    "supplier_vat_id": "DE812497015",
+    "document_date": "2026-01-15",
+    "total_gross": 1190.0,
+    "total_net": 1000.0,
+    "currency": "EUR",
+    "tax_lines": [
+      { "rate": 0.19, "base": 1000.0, "amount": 190.0 }
+    ],
+    "items": [
+      { "description": "Mehl Type 405 (25kg)", "qty": 10, "unit_price": 35.0 },
+      { "description": "Olivenöl extra vergine (5L)", "qty": 20, "unit_price": 22.5 }
+    ]
+  },
+  "profile": {
+    "routing": {
+      "skr_chart": "SKR03",
+      "tax_keys_map": { "0.19": "9", "0.07": "8", "0.00": "0" },
+      "low_confidence_threshold": 0.75
+    },
+    "custom": {
+      "industry_hint": "gastgewerbe"
+    }
+  },
+  "expected": {
+    "category": "wareneinkauf_food",
+    "category_label": "Wareneinkauf Lebensmittel",
+    "skr_account": "3100",
+    "tax_key": "9",
+    "confidence_min": 0.75,
+    "status": "categorized"
+  }
+}

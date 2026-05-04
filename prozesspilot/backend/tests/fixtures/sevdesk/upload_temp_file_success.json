@@ -1,0 +1,21 @@
+{
+  "description": "sevDesk API: POST /TempFile — Upload Temp File Success",
+  "request": {
+    "method": "POST",
+    "path": "/TempFile",
+    "headers": {
+      "Authorization": "SEVDESK_API_TOKEN",
+      "Content-Type": "multipart/form-data"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "objects": {
+        "id": "temp_file_abc123",
+        "objectName": "TempFile",
+        "filename": "beleg-2026-01-15.pdf"
+      }
+    }
+  }
+}

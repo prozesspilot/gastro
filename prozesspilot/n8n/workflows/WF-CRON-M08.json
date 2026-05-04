@@ -1,0 +1,179 @@
+{
+  "name": "WF-CRON-M08",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "meta": {
+    "description": "M08 — Monatsreporting Cron-Job. Wird am 1. jedes Monats um 06:00 Uhr ausgeführt. Holt alle aktiven Kunden aus dem Backend, erstellt und versendet für jeden den Monatsbericht (POST /api/v1/customers/:id/reports/monthly/build + /deliver). version: 1.0"
+  },
+  "tags": [
+    { "name": "M08" },
+    { "name": "reporting" },
+    { "name": "cron" },
+    { "name": "phase-2" }
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "m08-cron-trigger",
+      "name": "Cron: 1. des Monats 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "notes": "Läuft am 1. jeden Monats. Generiert den Monatsbericht für den Vormonat."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/customers",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-pp-hmac-secret", "value": "={{ $env.PP_HMAC_SECRET }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "m08-get-customers",
+      "name": "Backend: Alle Kunden laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [490, 300],
+      "notes": "GET /api/v1/internal/customers — liefert alle aktiven Tenant-Kunden."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Berechne den Vormonat als YYYY-MM String\nconst now = new Date();\nconst y = now.getFullYear();\nconst m = now.getMonth(); // 0 = Jan, also Vormonat = m-1\nconst prevDate = new Date(y, m - 1, 1);\nconst period = prevDate.toISOString().slice(0, 7); // 'YYYY-MM'\n\n// Extrahiere Kunden-IDs aus dem Backend-Response\nconst resp = $json;\nconst customers = (resp.data || resp || []);\n\nif (!Array.isArray(customers) || customers.length === 0) {\n  return [];\n}\n\n// Gib ein Item pro Kunde zurück\nreturn customers.map((c) => ({\n  json: {\n    customer_id: c.id,\n    customer_name: c.name || c.display_name || c.id,\n    period\n  }\n}));"
+      },
+      "id": "m08-extract-customers",
+      "name": "Function: Kunden + Periode extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [730, 300],
+      "notes": "Berechnet Vormonat (YYYY-MM) und extrahiert Kunden-IDs aus der Antwort."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/customers/{{ $json.customer_id }}/reports/monthly/build",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-pp-tenant-id", "value": "={{ $json.customer_id }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { period: $json.period, customer_name: $json.customer_name } }}",
+        "options": {
+          "timeout": 120000,
+          "response": { "response": { "neverError": true } },
+          "retry": { "retry": { "maxRetries": 2, "waitBetweenRetries": 10000 } }
+        }
+      },
+      "id": "m08-build-report",
+      "name": "Backend: Bericht erstellen (M08 build)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [970, 300],
+      "notes": "POST /api/v1/customers/:id/reports/monthly/build — erstellt den PDF-Report im Backend."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "is-ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "m08-if-build-ok",
+      "name": "IF: Build OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1210, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/customers/{{ $('Function: Kunden + Periode extrahieren').item.json.customer_id }}/reports/monthly/deliver",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-pp-tenant-id", "value": "={{ $('Function: Kunden + Periode extrahieren').item.json.customer_id }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { period: $('Function: Kunden + Periode extrahieren').item.json.period } }}",
+        "options": {
+          "timeout": 60000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "m08-deliver-report",
+      "name": "Backend: Bericht zustellen (M08 deliver)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1450, 200],
+      "notes": "POST /api/v1/customers/:id/reports/monthly/deliver — sendet per E-Mail/WhatsApp."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build fehlgeschlagen — Fehler loggen, kein Throw\nconst customerId = $('Function: Kunden + Periode extrahieren').item.json.customer_id;\nconst period = $('Function: Kunden + Periode extrahieren').item.json.period;\nconsole.error('M08 build fehlgeschlagen', { customerId, period, error: $json });\nreturn [{ json: { ok: false, customer_id: customerId, period, error: $json } }];"
+      },
+      "id": "m08-log-build-error",
+      "name": "Function: Build-Fehler loggen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "notes": "Kein Throw — Fehler werden geloggt, aber andere Kunden werden weiter verarbeitet."
+    }
+  ],
+  "connections": {
+    "Cron: 1. des Monats 06:00": {
+      "main": [[{ "node": "Backend: Alle Kunden laden", "type": "main", "index": 0 }]]
+    },
+    "Backend: Alle Kunden laden": {
+      "main": [[{ "node": "Function: Kunden + Periode extrahieren", "type": "main", "index": 0 }]]
+    },
+    "Function: Kunden + Periode extrahieren": {
+      "main": [[{ "node": "Backend: Bericht erstellen (M08 build)", "type": "main", "index": 0 }]]
+    },
+    "Backend: Bericht erstellen (M08 build)": {
+      "main": [[{ "node": "IF: Build OK", "type": "main", "index": 0 }]]
+    },
+    "IF: Build OK": {
+      "main": [
+        [{ "node": "Backend: Bericht zustellen (M08 deliver)", "type": "main", "index": 0 }],
+        [{ "node": "Function: Build-Fehler loggen", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {}
+}

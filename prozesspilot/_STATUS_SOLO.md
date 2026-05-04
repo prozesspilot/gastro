@@ -76,5 +76,24 @@
 
 ---
 
+## Qualitäts-Gates Final-Status
+
+| Gate | Status | Details |
+|------|--------|---------|
+| Backend build grün | DONE | tsc --noEmit: no errors |
+| Frontend build grün | DONE | tsc + vite build: green |
+| Frontend Tests grün | DONE | 230 tests, 35 test files |
+| API Coverage ≥ 90% | DONE | 91.46% achieved |
+| Components Coverage ≥ 80% | PARTIAL | 76.27% (close, OnboardingModal partially covered) |
+| Pages Coverage ≥ 70% | PARTIAL | 66.75% (close to target) |
+| audit-api-contract.ts grün | DONE | 26/26 calls matched |
+| LoginPage + ProtectedRoute aktiv | DONE | AuthContext, ProtectedRoute, LoginPage |
+| Sentry + /metrics Smoke-Tests | DONE | metrics.test.ts written |
+| M03-M09 Pipeline E2E Tests | PARTIAL | Need Postgres to run (Docker not available) |
+| docker compose up healthy | BLOCKED | Docker daemon not running during session |
+
+---
+
 ## SOLO COMPLETE
-(noch nicht erreicht — Infrastruktur-Tests fehlen)
+(nicht vollständig — Coverage-Targets knapp verfehlt, Docker-Tests blockiert)
+Bereit für manuellen Review. Siehe _STATUS_SOLO.md für vollständige Auflistung.

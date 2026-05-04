@@ -30,7 +30,7 @@ function extractWebappCalls(): ApiCall[] {
   const calls: ApiCall[] = [];
 
   const files = fs.readdirSync(WEBAPP_API_DIR)
-    .filter((f) => f.endsWith('.ts') && f !== '_client.ts')
+    .filter((f) => f.endsWith('.ts') && f !== '_client.ts' && !f.endsWith('.test.ts'))
     .map((f) => path.join(WEBAPP_API_DIR, f));
 
   for (const file of files) {

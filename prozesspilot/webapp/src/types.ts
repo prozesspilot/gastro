@@ -12,7 +12,11 @@ export type ReceiptStatus =
   | 'exported'
   | 'completed'
   | 'requires_review'
-  | 'error';
+  | 'error'
+  // Legacy-Werte (Backend-Kompatibilität)
+  | 'pending'
+  | 'processing'
+  | 'done';
 
 export type ReceiptFileType = 'pdf' | 'jpg' | 'jpeg' | 'png' | 'heic';
 

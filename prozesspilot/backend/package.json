@@ -20,7 +20,7 @@
     "@anthropic-ai/sdk": "^0.32.0",
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.1039.0",
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/rate-limit": "^9.1.0",
     "@google-cloud/vision": "^4.3.0",
     "@sentry/node": "^10.51.0",
     "@sentry/profiling-node": "^10.51.0",

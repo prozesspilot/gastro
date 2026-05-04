@@ -37,17 +37,33 @@ KONTEXT — LIES DAS ZUERST
 7. prozesspilot/backend/src/ — Verzeichnisstruktur, was schon existiert
 8. prozesspilot/n8n/workflows/ — vorhandene Flows
 
+AUSGANGSLAGE (Stand der Bestandsaufnahme 04.05.2026)
+- 23 Test-Dateien existieren, fokussiert auf M01/M02/M10. M03–M09 sind unter-getestet.
+- src/server.ts und src/app.ts existieren, registrieren alle Routen unter /api/v1, HMAC-Guard aktiv.
+- core/sentry.ts und core/metrics.ts existieren (Init vorhanden), aber Sentry-DSN/Prometheus-Scrape nicht produktiv konfiguriert.
+- 18 n8n-Workflow-JSONs existieren, davon 9 mit *_clean.json-Variante → unklar ob Original oder Clean kanonisch ist.
+- Migrations sind TS-basiert (migrate.ts), keine .sql-Dateien. Schema-Versionierung prüfen.
+- docker-compose.yml fehlt im Repo-Root komplett — .env.example deckt aber alle Services ab (Postgres 16, Redis 7, MinIO, n8n).
+
 PRIORITÄTEN (in dieser Reihenfolge abarbeiten)
-1. Backend-Endpoints, die die Web-App schon aufruft, aber im Backend fehlen. Suche dafür in prozesspilot/webapp/src/api/ nach allen apiRequest-/apiBlob-Aufrufen, gleich sie mit den Fastify-Routen ab. Bekannte Lücken: POST /receipts/:id/reprocess, POST /integrations/lexoffice/test. Implementiere bis kein UI-Call mehr ins Leere läuft.
-2. Live-Integrationen: Lexoffice (M05) und sevDesk (M06) OAuth-Flows + echte Feld-Mappings. Wenn keine Echt-Credentials vorliegen: Recorded-Fixture-Tests mit nock/msw schreiben und Mocks der echten API-Antworten ablegen unter backend/tests/fixtures/.
-3. M03 KI-Kategorisierung: Prompt aus 06_Prompt_System.md gegen echtes Claude testen, Confidence-Schwellen kalibrieren, Vitest-Suite ergänzen.
-4. M08 Monatsreporting: PDF-Generator + Mail-Versand (Brevo/Resend o.ä. — eine Provider-Wahl treffen, in 00_Architektur einlesen) durchziehen, Cron-Workflow WF-CRON-M08 anlegen falls fehlt.
-5. M04 DATEV-Export: CSV-Format gegen offizielle Spec validieren, Goldene-Datei-Test.
-6. M09 Lieferanten-Kommunikation: Cron-Job WF-CRON-M09-EXPECTED komplett verdrahten, Mail-Templates testen.
-7. Plugin-System: Sandbox-Isolation produktionsreif (vm2 ist deprecated → isolated-vm oder Worker-Threads), Plugin-Loader härten.
-8. Observability: Sentry-SDK einbinden, Pino-Transport für strukturierte Logs, /metrics-Endpoint für Prometheus.
-9. Load-Tests mit k6 oder autocannon: WF-MASTER-RECEIPT bei 100 Belegen/Minute, Berichte unter infra/loadtests/.
-10. DSGVO-Workflows: Lösch- und Export-Routen testen, Audit-Log dokumentieren.
+1. KONKRETE Backend-Endpoints schließen, die die Web-App ruft aber das Backend nicht hat. Bestätigte Lücken aus der API-Audit:
+   - GET /receipts/:id (Detail-View)
+   - PUT /receipts/:id/status (Status-Update)
+   - POST /receipts/:id/reprocess (Re-Run der Pipeline)
+   - GET /receipts/:id/download (Datei-Download mit Content-Disposition)
+   - GET /customers/:id (Detail-View)
+   Zusätzlich: gesamten webapp/src/api/ scannen und gegen src/app.ts + alle modules/*/routes.ts abgleichen, weitere Lücken sofort schließen. Jeder Endpoint mit Zod-Schema, Tenant-Filter, mind. einem Smoke-Test.
+2. docker-compose.yml im Repo-Root anlegen mit Postgres 16, Redis 7, MinIO, n8n und Backend-Service. Healthchecks, Volumes, Netzwerk. .env.example als Quelle nutzen. Lokales `docker compose up` muss alle Services starten und Backend-Smoke-Tests grün laufen.
+3. n8n-Workflows konsolidieren: pro WF-M*.json entweder Original oder *_clean.json zur kanonischen Datei machen, Duplikate löschen. WF-CRON-M08 anlegen falls fehlt. README in n8n/workflows/ mit Übersicht.
+4. M05 Lexoffice + M06 sevDesk produktionsreif: OAuth-Flow vollständig implementieren (Token-Refresh, Encrypted-Storage in customer_integrations Tabelle), Recorded-Fixture-Tests mit nock unter backend/tests/fixtures/. Echtes Feld-Mapping gegen offizielle API-Docs validieren.
+5. M03 KI-Kategorisierung: Prompt aus 06_Prompt_System.md gegen echtes Claude testen, Confidence-Schwellen kalibrieren, Goldene-Test-Datensätze unter backend/tests/golden/categorization/.
+6. M08 Monatsreporting produktiv: PDF-Generator-Wahl treffen (puppeteer vs. pdfkit, dokumentieren in infra/decisions/), Mail-Provider wählen (Brevo/Resend/SES), End-to-End-Test pro Kunde.
+7. M04 DATEV-Export: CSV-Format gegen offizielle Spec (DATEV-Format 510 / 700) validieren, Golden-File-Tests pro Buchungsfall.
+8. M09 Lieferanten-Kommunikation: Cron-Job WF-CRON-M09-EXPECTED verdrahten, Inbound-Mail-Parsing (m09-supplier-comm/email.inbound) gegen Fixture-Mails testen.
+9. Plugin-System härten: Sandbox-Isolation auf isolated-vm umstellen (vm2 ist deprecated/unsicher), Resource-Limits, Audit-Log für Plugin-Executions.
+10. Observability + Load-Tests: Sentry-DSN aus .env aktivieren und Error-Reporting testen, /metrics-Endpoint mit echten Prometheus-Scrapes verifizieren, k6-Load-Test für WF-MASTER-RECEIPT bei 100 Belegen/Minute, Reports in infra/loadtests/.
+11. Test-Coverage auf alle Module ausweiten: M03–M09 brauchen mindestens je einen E2E-Test analog zu m01/e2e und m10/e2e.
+12. DSGVO-Workflows: Lösch- und Export-Routen mit Multi-Tenant-Fixture testen, Audit-Log dokumentieren.
 
 ARBEITSSCHLEIFE (immer wieder durchlaufen)
 1. Lies _STATUS_BACKEND.md im Repo-Root (anlegen falls nicht da).
@@ -87,9 +103,12 @@ WAS DU NICHT MACHST
 
 STOP-BEDINGUNG
 Du hörst auf, wenn ALLE folgenden Punkte zutreffen:
-- Alle 10 Punkte der Prioritätsliste sind im Status als done markiert ODER explizit als out-of-scope dokumentiert.
+- Alle 12 Punkte der Prioritätsliste sind im Status als done markiert ODER explizit als out-of-scope dokumentiert.
 - pnpm vitest run grün, pnpm tsc --noEmit grün, biome ohne Fehler.
-- Alle Backend-Endpoints, die webapp/src/api/ aufruft, existieren.
+- Alle Backend-Endpoints, die webapp/src/api/ aufruft, existieren — bestätigt durch automatisierten Audit-Skript-Lauf, der webapp/src/api/ vs. registrierte Routen vergleicht.
+- docker compose up startet alle Services lokal grün.
+- Sentry und /metrics-Endpoint produktiv aktiv und mit Smoke-Test verifiziert.
+- M03–M09 haben jeweils mindestens einen E2E-Test.
 - _STATUS_BACKEND.md trägt den Schlusseintrag „BACKEND COMPLETE — bereit für Produktion".
 Erst dann darfst du beenden. Ansonsten arbeitest du die Schleife weiter ab.
 
@@ -116,17 +135,35 @@ KONTEXT — LIES DAS ZUERST
 5. prozesspilot/webapp/src/ — alle pages/, components/, api/, hooks/, types.ts
 6. prozesspilot/webapp/src/index.css — aktueller Vanilla-CSS-Stand
 
+AUSGANGSLAGE (Stand der Bestandsaufnahme 04.05.2026)
+- 15 Pages existieren und sind routet, alle als echte Komponenten mit Logik (keine Skelette).
+- src/api/ ist sauber modularisiert (10 Module: receipts, customers, tenants, reports, stats, advisor, plugins, dsgvo, communications, categories), mit ApiError-Wrapper und Tenant-Header über _client.ts.
+- 0 Test-Dateien — weder Vitest noch Playwright, kein Storybook, kein @testing-library installiert. KOMPLETTES Test-Setup fehlt und ist die größte Risiko-Lücke.
+- Designsystem nicht etabliert: nur Vanilla-CSS in src/index.css. Keine Tailwind/shadcn/Radix/Mantine.
+- Auth: keine LoginPage, keine Token-Verwaltung, kein ProtectedRoute. Tenant-ID wird über localStorage (pp_tenant_id) gesetzt.
+- Komponenten vorhanden aber teils unfertig: GlobalSearch.tsx, useKeyboardShortcut.ts, OnboardingModal.tsx — Funktionalität prüfen.
+- Backend-Endpoints, die das Frontend ruft aber im Backend NOCH FEHLEN (Stand jetzt — Agent A arbeitet daran):
+  - GET /receipts/:id, PUT /receipts/:id/status, POST /receipts/:id/reprocess, GET /receipts/:id/download, GET /customers/:id
+  Bei Aufruf liefert das Backend 404 → entsprechende Pages mit klarer Fehlermeldung absichern, NICHT mit Mocks im Prod-Code arbeiten.
+
 PRIORITÄTEN (in dieser Reihenfolge abarbeiten)
-1. Designsystem etablieren. Aktuell ist alles Vanilla-CSS. Wähle EINEN Ansatz und ziehe ihn konsequent durch (Empfehlung: Tailwind 4 + shadcn/ui-Komponenten oder CSS-Modules + radix-ui — du entscheidest, dokumentierst die Entscheidung in webapp/DESIGN_DECISIONS.md). Migriere Layout.tsx, StatusBadge, ConfidenceBadge, CategoryBadge, EmptyState, Skeleton zuerst. Danach pages/ Seite für Seite.
-2. Auth-Flow. Falls kein LoginPage existiert: anlegen, Token im sessionStorage halten, Auth-Header automatisch in _client.ts setzen. ProtectedRoute-Wrapper für alle authentifizierten Pages.
-3. Frontend-Tests mit Vitest + React Testing Library. Erste Welle: alle Komponenten in components/. Zweite Welle: Pages mit kritischer Logik (ReceiptDetailPage, CustomerProfilePage, UploadPage). Ziel: 70 % Statement-Coverage in src/components und src/api.
-4. E2E-Tests mit Playwright: Happy-Path Receipt-Upload → Liste → Detail → Re-Process. Multi-Tenant-Switch. DSGVO-Lösch-Flow.
-5. UX-Polish: globale Suche (GlobalSearch.tsx existiert — Funktionalität prüfen und fertigstellen), Tastatur-Shortcuts (useKeyboardShortcut existiert), Drag&Drop-Upload, Dark-Mode, Responsive-Layout < 768px.
-6. Accessibility-Pass: alle interaktiven Elemente keyboard-bedienbar, sr-only-Labels wo nötig, Kontrast 4.5:1, axe-core in CI.
-7. Empty- und Error-States für jede Page durchdeklinieren. Loading-Skeletons konsistent.
-8. i18n vorbereiten: deutsche Strings in eine zentrale messages.de.ts ziehen, react-i18next einbauen, Englisch-Stub anlegen.
-9. Performance: Bundle-Analyse, Code-Splitting per Route, React.lazy für selten genutzte Seiten (PluginsPage, AdvisorPortalPage).
-10. Storybook (oder Histoire) für isolierte Komponenten-Demos, hilft auch dem Designsystem-Schritt.
+1. TEST-INFRASTRUKTUR aufsetzen — VOR allem anderen, weil ohne Tests jede weitere Migration unbemerkt brechen kann. Konkret: Vitest 2 + jsdom + @testing-library/react + @testing-library/user-event + @testing-library/jest-dom installieren, vitest.config.ts schreiben, eine Smoke-Suite die das Setup verifiziert, vitest-coverage (v8 provider) konfiguriert. Scripts test, test:watch, test:coverage in package.json.
+2. PLAYWRIGHT für E2E aufsetzen: @playwright/test installieren, playwright.config.ts mit gegen lokalen Dev-Server, ein erster Smoke-Test der die Hauptnavigation durchklickt.
+3. DESIGNSYSTEM wählen und etablieren. Empfehlung: Tailwind 4 + shadcn/ui (gibt fertige a11y-konforme Komponenten und passt zu Vite-React schmerzfrei). Alternativ: radix-ui + CSS-Modules. Entscheidung in webapp/DESIGN_DECISIONS.md begründen. Migrations-Reihenfolge:
+   a) Layout.tsx (Sidebar + Topbar + Tenant-Switcher)
+   b) Atomare Komponenten: StatusBadge, ConfidenceBadge, CategoryBadge, Skeleton, EmptyState, ConfirmModal, ToastProvider, ErrorBoundary
+   c) Pages in der Reihenfolge der Nutzungsfrequenz: Dashboard → Receipts → ReceiptDetail → Upload → Customers → CustomerProfile → Reports → Stats → Tenants → Advisor → Communications → Plugins → Settings → NotFound
+4. AUTH-FLOW + LOGIN-PAGE. LoginPage.tsx (Email + Passwort, später SSO-ready), Token in sessionStorage (nicht localStorage — XSS-Schutz), Auth-Header automatisch in _client.ts setzen, 401-Response triggert Logout + Redirect. ProtectedRoute-Wrapper um alle authentifizierten Routes. Tenant-ID-Resolution nach erfolgreichem Login.
+5. ROBUSTHEIT der bestehenden Pages: Loading-Skeletons, Empty-States, Error-States systematisch für JEDE Page durchdeklinieren. Besonders ReceiptDetailPage und CustomerProfilePage, die heute bei den noch fehlenden Backend-Endpoints (siehe oben) generisch crashen.
+6. FRONTEND-TESTS Welle 1 — Komponenten: jede Datei in src/components/ bekommt eine Test-Datei. Snapshot-Tests sind erlaubt für reine Display-Komponenten, aber kritische Logik (ConfirmModal, ToastProvider, ErrorBoundary, GlobalSearch) braucht Behavior-Tests. Ziel: 80 % Coverage in src/components/.
+7. FRONTEND-TESTS Welle 2 — API-Layer: jeder API-Modul-File in src/api/ bekommt einen Test mit msw (Mock Service Worker). Edge-Cases: 4xx, 5xx, Netzwerk-Timeout, leere Listen, Pagination. Ziel: 90 % Coverage in src/api/.
+8. FRONTEND-TESTS Welle 3 — Pages: ReceiptDetailPage, CustomerProfilePage, UploadPage, AdvisorPortalPage, PluginsPage. Mit msw für API-Stubs. Ziel: 70 % Coverage in src/pages/.
+9. E2E-TESTS Playwright: Happy-Path Receipt-Upload → Liste → Detail → Re-Process. Multi-Tenant-Switch. DSGVO-Lösch-Flow. Plugin-Aktivierung. Advisor-Bulk-Approve.
+10. UX-POLISH: GlobalSearch.tsx fertig verdrahten (cmd+k), Tastatur-Shortcuts dokumentieren in einer Hilfe-Modal, Drag&Drop-Upload in UploadPage, Dark-Mode (CSS-Variablen über data-theme), Responsive < 768px.
+11. ACCESSIBILITY-Pass: jedes interaktive Element keyboard-bedienbar, sr-only-Labels, Kontrast ≥ 4.5:1, axe-core in CI als Test-Gate, Skip-to-content-Link in Layout.
+12. i18n vorbereiten: deutsche Strings in messages.de.ts, react-i18next einbauen, Englisch-Stub anlegen, Locale-Switcher in Topbar.
+13. PERFORMANCE: vite-bundle-visualizer prüfen, Code-Splitting per Route mit React.lazy für selten genutzte Pages (PluginsPage, AdvisorPortalPage, CommunicationsPage), Image-Lazy-Loading.
+14. STORYBOOK 8 (oder Histoire): isolierte Komponenten-Demos für Designsystem-Pflege, ein Story-File pro components/-Datei.
 
 ARBEITSSCHLEIFE (immer wieder durchlaufen)
 1. Lies _STATUS_WEBAPP.md im Repo-Root (anlegen falls nicht da). Lies _STATUS_BACKEND.md kurz mit, um zu sehen ob ein gewünschter Endpoint inzwischen geliefert wurde.
@@ -164,9 +201,11 @@ WAS DU NICHT MACHST
 
 STOP-BEDINGUNG
 Du hörst auf, wenn ALLE folgenden Punkte zutreffen:
-- Alle 10 Prioritätspunkte sind done oder out-of-scope dokumentiert.
+- Alle 14 Prioritätspunkte sind done oder out-of-scope dokumentiert.
 - pnpm vitest run, pnpm playwright test, pnpm tsc --noEmit, pnpm vite build alle grün.
-- Coverage ≥ 70 % in src/components und src/api.
+- Coverage ≥ 80 % in src/components, ≥ 90 % in src/api, ≥ 70 % in src/pages.
+- LoginPage + ProtectedRoute aktiv, sessionStorage-Token-Flow funktioniert.
+- Designsystem flächendeckend migriert, keine Vanilla-CSS-Reste außer global tokens.
 - Keine Backend-Bedarf-Einträge mehr offen, oder die offenen sind als „verschoben in v2" markiert.
 - _STATUS_WEBAPP.md trägt den Schlusseintrag „WEBAPP COMPLETE — bereit für Produktion".
 

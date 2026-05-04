@@ -24,7 +24,26 @@ const originalNameSchema = optionalStringSchema;
 const mimeTypeSchema = optionalStringSchema;
 
 /** Receipt-Status */
-const statusSchema = z.enum(['pending', 'processing', 'done', 'error']);
+const statusSchema = z.enum([
+  // Legacy (Backwards-Kompatibilität)
+  'pending',
+  'processing',
+  'done',
+  // Pipeline-Stati (Frontend M01–M08)
+  'received',
+  'extracting',
+  'extracted',
+  'categorizing',
+  'categorized',
+  'archiving',
+  'archived',
+  'exporting',
+  'exported',
+  'completed',
+  'requires_review',
+  // Fehler
+  'error',
+]);
 
 /** Quelle des Belegs */
 const sourceSchema = z.enum(['manual', 'whatsapp', 'email']).default('manual');
@@ -78,7 +97,7 @@ export const listReceiptsQuerySchema = z.object({
   /** Filtern nach Customer-ID (optional) */
   customer_id: uuidSchema.optional(),
   /** Filtern nach Status (optional) */
-  status:      z.enum(['pending', 'processing', 'done', 'error']).optional(),
+  status:      statusSchema.optional(),
   /** Volltextsuche (optional) — sucht in original_name, vendor, category, ocr_text */
   search:      z.string().trim().min(1).optional(),
   /** Pagination: Limit (default 20, max 100) */

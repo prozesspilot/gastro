@@ -2,11 +2,13 @@
  * D5 — Receipt-Routen
  *
  * Endpunkte:
- *   GET    /api/v1/receipts           Receipts auflisten (paginiert)
- *   POST   /api/v1/receipts           Receipt anlegen
- *   GET    /api/v1/receipts/:id       Einzelnen Receipt laden
- *   PUT    /api/v1/receipts/:id/status   Receipt-Status aktualisieren
- *   GET    /api/v1/receipts/:id/upload-url  Upload-URL generieren
+ *   GET    /api/v1/receipts                      Receipts auflisten (paginiert)
+ *   POST   /api/v1/receipts                      Receipt anlegen
+ *   GET    /api/v1/receipts/:id                  Einzelnen Receipt laden
+ *   PUT    /api/v1/receipts/:id/status            Receipt-Status aktualisieren
+ *   GET    /api/v1/receipts/:id/upload-url        Upload-URL generieren
+ *   POST   /api/v1/receipts/:id/reprocess         Re-Processing starten (A1)
+ *   GET    /api/v1/receipts/:id/download          Beleg-Datei herunterladen (A1)
  *
  * Alle Routen erfordern den Header x-pp-tenant-id (UUID).
  */
@@ -269,6 +271,114 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.send(apiOk(response));
+  });
+
+  // ── POST /receipts/:id/reprocess ──────────────────────────────────────────
+  // A1: Re-Processing eines Belegs starten — setzt Status auf 'received' zurück
+  // und emittiert ein SSE-Event, damit n8n/WF-MASTER den Beleg erneut verarbeitet.
+
+  app.post<{ Params: { id: string } }>('/:id/reprocess', async (req, reply) => {
+    const paramsParsed = receiptParamsSchema.safeParse(req.params);
+    if (!paramsParsed.success) {
+      return reply.code(400).send(zodToApiError(paramsParsed.error));
+    }
+
+    const existing = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
+    if (!existing) {
+      return reply.code(404).send(
+        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
+      );
+    }
+
+    // DECISION: Reprocess setzt Status auf 'received' zurück (Anfang der Pipeline)
+    // und löscht error_message. n8n-Trigger reagiert auf SSE-Event.
+    const receipt = await updateReceiptStatus(
+      app.db,
+      req.tenantId,
+      paramsParsed.data.id,
+      'received',
+      null,
+    );
+
+    void audit.log(app.db, req.tenantId, 'receipt', paramsParsed.data.id, 'reprocessed', {
+      previous_status: existing.status,
+    });
+
+    sseManager.emit(req.tenantId, 'receipt:reprocess', {
+      id:         paramsParsed.data.id,
+      status:     'received',
+      updated_at: receipt?.updated_at ?? new Date().toISOString(),
+    });
+
+    return reply.send(apiOk(receipt ?? existing));
+  });
+
+  // ── GET /receipts/:id/download ─────────────────────────────────────────────
+  // A1: Beleg-Datei herunterladen — liefert die Datei aus MinIO/S3.
+  // Falls kein storage_key gesetzt, 404.
+
+  app.get<{ Params: { id: string } }>('/:id/download', async (req, reply) => {
+    const paramsParsed = receiptParamsSchema.safeParse(req.params);
+    if (!paramsParsed.success) {
+      return reply.code(400).send(zodToApiError(paramsParsed.error));
+    }
+
+    const receipt = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
+    if (!receipt) {
+      return reply.code(404).send(
+        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
+      );
+    }
+
+    if (!receipt.storage_key) {
+      // DECISION: Kein storage_key = keine Datei im Objekt-Store — 404 statt 500,
+      // weil das ein erwartbarer Zustand (Receipt ohne Upload) ist.
+      return reply.code(404).send(
+        apiError('NO_FILE', 'Für diesen Beleg wurde noch keine Datei hochgeladen.'),
+      );
+    }
+
+    // Datei aus MinIO streamen über presigned URL oder direkten Proxy-Download.
+    // DECISION: Direkter Proxy-Download via @aws-sdk/client-s3 für Dev;
+    // in Produktion über MinIO-presigned-URL oder nginx X-Accel-Redirect.
+    try {
+      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const { config } = await import('../../core/config');
+      const s3 = new S3Client({
+        endpoint: config.MINIO_ENDPOINT,
+        region: 'us-east-1',
+        credentials: {
+          accessKeyId:     config.MINIO_ACCESS_KEY,
+          secretAccessKey: config.MINIO_SECRET_KEY,
+        },
+        forcePathStyle: true,
+      });
+
+      const cmd = new GetObjectCommand({
+        Bucket: config.MINIO_BUCKET,
+        Key:    receipt.storage_key,
+      });
+      const obj = await s3.send(cmd);
+      const stream = obj.Body as { pipe?: (dest: unknown) => void; transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+      if (!stream) {
+        return reply.code(404).send(apiError('NO_FILE', 'Datei nicht gefunden im Storage.'));
+      }
+
+      const mimeType = receipt.mime_type ?? 'application/octet-stream';
+      const filename = encodeURIComponent(receipt.original_name ?? `receipt-${receipt.id}`);
+      reply.header('content-type', mimeType);
+      reply.header('content-disposition', `attachment; filename="${filename}"`);
+
+      const bytes = await stream.transformToByteArray!();
+      return reply.send(Buffer.from(bytes));
+    } catch (err: unknown) {
+      // S3-NoSuchKey → 404, andere Fehler → 500 via default error handler
+      const awsErr = err as { name?: string; Code?: string };
+      if (awsErr.name === 'NoSuchKey' || awsErr.Code === 'NoSuchKey') {
+        return reply.code(404).send(apiError('NO_FILE', 'Datei nicht im Storage gefunden.'));
+      }
+      throw err;
+    }
   });
 }
 

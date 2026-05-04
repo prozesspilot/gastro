@@ -26,6 +26,7 @@ import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
 // m04CategorizeRoutes intentionally omitted — m03CategorizationRoutes is the concept-compliant implementation
 // and both use the same route pattern (POST /:id/categorize), causing a Fastify collision.
 import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
+import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
 import { m05LexofficeRoutes, m05CustomerLexofficeRoutes, m05IntegrationRoutes } from './modules/m05-lexoffice/routes';
 import { m06SevdeskRoutes, m06CustomerSevdeskRoutes, m06IntegrationRoutes } from './modules/m06-sevdesk/routes';
 import { m04DatevRoutes } from './modules/m04-datev/routes';
@@ -159,7 +160,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   }
 
   // Öffentliche Endpoints — kein Auth (D1)
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, { prefix: '/api/v1' });
 
   // SSE-Endpoint — öffentlich (Webapp subscribt direkt, ohne HMAC)
   await app.register(sseRoutes, { prefix: '/api/v1' });
@@ -189,6 +190,8 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(m03OcrRoutes,            { prefix: '/receipts' });
       // Konzept-konformes M03 (ersetzt m04-categorize — selbes Route-Pattern)
       await apiApp.register(m03CategorizationRoutes, { prefix: '/receipts' });
+      // M03 Kategorien-Liste (GET /categories)
+      await apiApp.register(categoriesRoutes, { prefix: '/categories' });
       // M05 Lexoffice-Push (POST /receipts/:id/exports/lexoffice)
       await apiApp.register(m05LexofficeRoutes,             { prefix: '/receipts' });
       // M05 Customer-Exports (GET /customers/:id/exports/lexoffice)

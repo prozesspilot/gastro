@@ -19,7 +19,7 @@ afterAll(async () => {
 
 describe('GET /health', () => {
   it('liefert 200 mit ok=true', async () => {
-    const res = await app.inject({ method: 'GET', url: '/health' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/health' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.ok).toBe(true);
@@ -30,7 +30,7 @@ describe('GET /health', () => {
 
 describe('GET /ready', () => {
   it('liefert db, redis, migrations Felder', async () => {
-    const res = await app.inject({ method: 'GET', url: '/ready' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ready' });
     // Auch wenn Redis nicht erreichbar — Body muss korrekt strukturiert sein
     const body = res.json();
     expect(body.db).toBeDefined();

@@ -178,7 +178,7 @@ export default function UploadPage() {
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
       // Step 3 — done
-      await updateReceiptStatus(receipt.id, 'completed');
+      await updateReceiptStatus(receipt.id, 'done');
       setProgress(100);
 
       // Erfolg

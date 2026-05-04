@@ -19,7 +19,7 @@ function mapCustomer(raw: RawCustomer): Customer {
 }
 
 export async function getCustomers(tenantId: string): Promise<Customer[]> {
-  const raw = await apiRequest<unknown>('/customers?page=1&limit=200', { tenantId });
+  const raw = await apiRequest<unknown>('/customers?page=1&limit=100', { tenantId });
   const list = unwrap<RawCustomer[]>(raw);
   return list.map(mapCustomer);
 }

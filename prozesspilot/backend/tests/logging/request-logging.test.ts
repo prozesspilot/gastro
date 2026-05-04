@@ -29,7 +29,7 @@ describe('x-trace-id Response-Header', () => {
   it('wird automatisch gesetzt wenn nicht im Request vorhanden', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/health',
+      url:    '/api/v1/health',
     });
 
     expect(res.statusCode).toBe(200);
@@ -43,7 +43,7 @@ describe('x-trace-id Response-Header', () => {
 
     const res = await app.inject({
       method:  'GET',
-      url:     '/health',
+      url:     '/api/v1/health',
       headers: { 'x-trace-id': myTraceId },
     });
 
@@ -114,7 +114,7 @@ describe('Ready-Endpoint', () => {
   it('/ready gibt x-trace-id zurück', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/ready',
+      url:    '/api/v1/ready',
     });
 
     // /ready kann 200 oder 503 sein (je nach DB/Redis)

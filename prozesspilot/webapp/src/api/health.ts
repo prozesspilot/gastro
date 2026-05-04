@@ -1,11 +1,32 @@
+// Entspricht dem tatsächlichen Backend-Response von GET /api/v1/health
 export interface HealthResponse {
-  status: 'ok' | 'degraded' | 'down';
+  ok: boolean;
+  version?: string;
+  timestamp?: string;
   uptime?: number;
+  checks?: Record<string, string>;
+  // Legacy-Feld (falls Backend-Version das noch schickt)
+  status?: 'ok' | 'degraded' | 'down';
   [key: string]: unknown;
 }
 
+// Entspricht dem tatsächlichen Backend-Response von GET /api/v1/ready
 export interface ReadyResponse {
-  status: 'ok' | 'not_ready';
+  ok: boolean;
+  db?: {
+    connected: boolean;
+    pool_size?: number | null;
+    active_connections?: number | null;
+  };
+  redis?: {
+    connected: boolean;
+  };
+  migrations?: {
+    last_applied: string | null;
+    total: number;
+  };
+  // Legacy-Felder
+  status?: 'ok' | 'not_ready';
   checks?: Record<string, { status: 'ok' | 'fail'; message?: string }>;
   [key: string]: unknown;
 }
@@ -24,7 +45,8 @@ export async function fetchReady(): Promise<ReadyResponse> {
     method: 'GET',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Ready-Check fehlgeschlagen: ${res.status}`);
+  // 503 ist kein Fehler — Body enthält die strukturierten Check-Ergebnisse
+  if (!res.ok && res.status !== 503) throw new Error(`Ready-Check fehlgeschlagen: ${res.status}`);
   return res.json() as Promise<ReadyResponse>;
 }
 

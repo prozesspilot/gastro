@@ -122,17 +122,27 @@ export default function SettingsPage() {
     try {
       if (id === 'backend') {
         const h = await fetchHealth();
-        updateConn('backend', 'ok', `Status: ${h.status}${h.uptime ? ` · ${Math.round(h.uptime)}s uptime` : ''}`);
+        // Backend liefert { ok: boolean, uptime: number, version: string }
+        const statusLabel = h.ok ? 'ok' : 'degraded';
+        updateConn('backend', 'ok', `Status: ${statusLabel}${h.uptime ? ` · ${Math.round(h.uptime)}s uptime` : ''}`);
       } else if (id === 'n8n') {
-        const reachable = await pingUrl(N8N_URL);
+        // n8n wird über den Vite-Proxy geprüft (/n8n → localhost:5678),
+        // um Cross-Origin-Blockierungen im Browser zu umgehen.
+        const reachable = await pingUrl('/n8n/healthz');
         updateConn('n8n', reachable ? 'ok' : 'fail', reachable ? 'Erreichbar' : 'Nicht erreichbar');
       } else if (id === 'postgres' || id === 'redis') {
         const ready = await fetchReady();
-        const check = ready.checks?.[id];
-        if (check) {
-          updateConn(id, check.status === 'ok' ? 'ok' : 'fail', check.message ?? check.status);
+        if (id === 'postgres') {
+          // Backend liefert: ready.db.connected
+          const connected = ready.db?.connected ?? false;
+          const detail = connected
+            ? `Verbunden${ready.db?.active_connections != null ? ` · ${ready.db.active_connections} Verbindungen` : ''}`
+            : 'Nicht erreichbar';
+          updateConn('postgres', connected ? 'ok' : 'fail', detail);
         } else {
-          updateConn(id, ready.status === 'ok' ? 'ok' : 'fail', ready.status === 'ok' ? 'Verbunden' : 'Nicht bereit');
+          // Backend liefert: ready.redis.connected
+          const connected = ready.redis?.connected ?? false;
+          updateConn('redis', connected ? 'ok' : 'fail', connected ? 'Verbunden' : 'Nicht erreichbar');
         }
       }
     } catch (e) {
@@ -195,7 +205,7 @@ export default function SettingsPage() {
 
       // simulieren: kurze Verzögerung, dann auf completed
       await new Promise((r) => setTimeout(r, 800));
-      await updateReceiptStatus(receipt.id, 'completed');
+      await updateReceiptStatus(receipt.id, 'done');
 
       setTestMsg(`Test-Beleg #${receipt.id.substring(0, 8)} im Mandanten „${tenant.name}" angelegt und auf „completed" gesetzt.`);
     } catch (e) {

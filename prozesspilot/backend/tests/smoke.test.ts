@@ -15,7 +15,7 @@ describe('Smoke — /health', () => {
   });
 
   it('GET /health → 200 { ok: true, version: string, uptime: number }', async () => {
-    const res = await app.inject({ method: 'GET', url: '/health' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/health' });
 
     expect(res.statusCode).toBe(200);
 

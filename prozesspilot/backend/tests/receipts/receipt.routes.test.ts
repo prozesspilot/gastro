@@ -579,3 +579,77 @@ describe('GET /api/v1/receipts/:id/upload-url', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+// ── POST /:id/reprocess (A1) ─────────────────────────────────────────────
+
+describe('POST /api/v1/receipts/:id/reprocess', () => {
+  it('setzt Status auf received zurück', async () => {
+    // Receipt anlegen und Status auf done setzen
+    const created = (await createTestReceipt()).json();
+    const id = created.data.id;
+    await app.inject({
+      method:  'PUT',
+      url:     `/api/v1/receipts/${id}/status`,
+      headers: headers(),
+      payload: { status: 'done' },
+    });
+
+    // Re-Processing auslösen
+    const res = await app.inject({
+      method:  'POST',
+      url:     `/api/v1/receipts/${id}/reprocess`,
+      headers: headers(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+    expect(res.json().data.status).toBe('received');
+  });
+
+  it('gibt 404 bei unbekannter ID zurück', async () => {
+    const res = await app.inject({
+      method:  'POST',
+      url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/reprocess',
+      headers: headers(),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('gibt 400 bei ungültiger UUID zurück', async () => {
+    const res = await app.inject({
+      method:  'POST',
+      url:     '/api/v1/receipts/invalid-uuid/reprocess',
+      headers: headers(),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+// ── GET /:id/download (A1) ───────────────────────────────────────────────
+
+describe('GET /api/v1/receipts/:id/download', () => {
+  it('gibt 404 wenn kein storage_key gesetzt', async () => {
+    // Receipt anlegen — hat keinen storage_key
+    const created = (await createTestReceipt()).json();
+    const id = created.data.id;
+
+    const res = await app.inject({
+      method:  'GET',
+      url:     `/api/v1/receipts/${id}/download`,
+      headers: headers(),
+    });
+
+    // Kein storage_key → NO_FILE (404)
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NO_FILE');
+  });
+
+  it('gibt 404 bei unbekannter Receipt-ID zurück', async () => {
+    const res = await app.inject({
+      method:  'GET',
+      url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/download',
+      headers: headers(),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});

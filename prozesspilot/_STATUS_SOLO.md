@@ -10,50 +10,71 @@
 
 ---
 
-## Laufende Aufgaben
+## Abgeschlossene Aufgaben (2026-05-04)
 
-### A1 — Fehlende Backend-Endpoints [IN PROGRESS]
-Status der 5 genannten Endpoints:
-- GET /receipts/:id — **EXISTIERT** (receipt.routes.ts:187)
-- PUT /receipts/:id/status — **EXISTIERT** (receipt.routes.ts:206)
-- POST /receipts/:id/reprocess — **FEHLT** → implementieren
-- GET /receipts/:id/download — **FEHLT** → implementieren
-- GET /customers/:id — **EXISTIERT** (customer.routes.ts:81)
-
-Erster Fix: ReceiptStatus-Typ in webapp erweitert ('pending', 'processing', 'done') → Frontend-Build grün.
-
-### Nächste Schritte
-1. POST /receipts/:id/reprocess implementieren
-2. GET /receipts/:id/download implementieren  
-3. A2: Audit-Skript audit-api-contract.ts
-4. A3: M06-Advisor-Portal abspecken
-5. B1: Docker/DB-Setup prüfen
-6. C1: Vitest installieren + konfigurieren
-7. D1: Designsystem-Entscheidung
+| Task | Beschreibung | Status |
+|------|--------------|--------|
+| A1 | POST /receipts/:id/reprocess implementiert | DONE |
+| A1 | GET /receipts/:id/download implementiert | DONE |
+| A1 | GET /categories endpoint (M03) | DONE |
+| A2 | scripts/audit-api-contract.ts — alle 26 Calls matchen | DONE |
+| A3 | M06 Advisor-Portal: deprecated routes + neuer export endpoint | DONE |
+| B2 | Prometheus /metrics Smoke-Tests geschrieben | DONE |
+| B3 | n8n: 4 _clean.json-Duplikate gelöscht | DONE |
+| B3 | WF-CRON-M08.json erstellt (Monatsreporting Cron) | DONE |
+| B3 | n8n/workflows/README.md mit Konventionen | DONE |
+| C1 | Vitest 2 + jsdom + Testing Library + MSW installiert | DONE |
+| C1 | 138 Tests implementiert, alle grün | DONE |
+| C2 | Playwright + playwright.config.ts + Smoke E2E | DONE |
+| D1 | DESIGN_DECISIONS.md: CSS-Variablen beibehalten (ADR-001) | DONE |
+| D2 | LoginPage + AuthContext + ProtectedRoute implementiert | DONE |
+| E1 | Component-Tests: StatusBadge, ConfirmModal, EmptyState, ErrorBoundary, Skeleton, ToastProvider, CategoryBadge, ConfidenceBadge | DONE |
+| E2 | API-Tests: receipts, customers, health, tenants, reports, stats | DONE |
+| E3 | Page-Tests: LoginPage, ReceiptDetailPage, NotFoundPage | DONE |
 
 ---
 
-## Erledigte Aufgaben
+## Laufende Arbeit
 
-| Datum | Task | Beschreibung |
-|-------|------|--------------|
-| 2026-05-04 | Fix | ReceiptStatus-Typ erweitert (pending/processing/done) |
-| 2026-05-04 | Fix | StatusBadge auf Record<string,Spec> umgestellt |
-| 2026-05-04 | Fix | Frontend-Build grün |
+- Infra-Decisions ADRs: PDF-Engine, Mail-Provider, Plugin-Sandbox geschrieben
+- Backend Route-Tests: reprocess + download Routen getestet
+- Coverage: api ~86%, components ~49%, pages ~11%
+
+---
+
+## Noch ausstehend
+
+- B1: Docker compose up ohne DB nicht testbar (Docker-Daemon nicht aktiv)
+- F1/F2: Lexoffice/sevDesk OAuth (externe APIs, Mock-Adapter aktiv)
+- F3: Claude API Golden-Tests (Claude-API-Key fehlt)
+- F4: DATEV CSV Format-Validierung
+- G1: Playwright Happy-Path (benötigt laufende Infrastruktur)
+- G2: Backend E2E Pipeline-Tests (benötigt Postgres)
+- H1: isolated-vm für Plugin-System
+- H2: k6 Load-Tests
+- H3: DSGVO Multi-Tenant-Fixture
+- H4: Accessibility-Pass (axe-core)
+- H5: i18n (out-of-scope für aktuellen Sprint)
 
 ---
 
 ## Blocker
 
-(keine aktuell)
+- Docker-Daemon läuft nicht lokal → B1 nicht verifizierbar
+- API-Credentials fehlen (Claude, Google Vision) → F3 blockiert
 
 ---
 
 ## Entscheidungen
 
-- **ReceiptStatus-Erweiterung**: Legacy-Werte (pending/processing/done) in den Typ aufgenommen statt Laufzeit-Cast, damit TypeScript-Strict-Mode gilt und Pages ohne `as ReceiptStatus` auskommen. ADR: inline im Typ-Kommentar.
+- **ReceiptStatus**: Legacy-Werte aufgenommen
+- **Designsystem**: CSS-Variablen beibehalten, kein Tailwind-Migration jetzt
+- **Auth**: SessionStorage + Tenant-Select (kein JWT in Phase 1)
+- **PDF-Engine**: Puppeteer (infra/decisions/001-pdf-engine.md)
+- **Mail-Provider**: Resend (infra/decisions/002-mail-provider.md)
+- **Plugin-Sandbox**: isolated-vm statt vm2 (infra/decisions/003-plugin-sandbox.md)
 
 ---
 
 ## SOLO COMPLETE
-(noch nicht erreicht)
+(noch nicht erreicht — Infrastruktur-Tests fehlen)

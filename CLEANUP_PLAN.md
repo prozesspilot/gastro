@@ -267,6 +267,52 @@ git cherry-pick <commit-sha>
 
 ---
 
-## Section 7 — Abschluss-Sektion (wird nach Ausfuehrung von Phase 7 ergaenzt)
+## Section 7 — Abschluss-Sektion
 
-(noch leer)
+**Cleanup abgeschlossen am 2026-05-07.**
+
+### Tags
+- Pre-Cleanup-Snapshot: `pre-cleanup-20260507-1209`
+- Archive-Tags (vollstaendige History bleibt jederzeit ueber `git log <tag>` und `git checkout <tag>` abrufbar):
+  - `archive/autonom-main-2026-05-07`     → ehemals `autonom/main`
+  - `archive/autonom-solo-2026-05-07`     → ehemals `autonom/solo` (vor WIP-Rescue-Commit)
+  - `archive/autonom-backend-2026-05-07`  → ehemals `autonom/backend`
+  - `archive/autonom-webapp-2026-05-07`   → ehemals `autonom/webapp`
+
+### Branch-Zustand nachher
+- Genau ein Branch: `main` (basiert auf ehemaligem `autonom/solo` + WIP-Rescue-Commit + Cleanup-Doku-Commit)
+- `autonom/backend` und `autonom/webapp` wurden **NICHT** in main gemergt: zu starke strukturelle Divergenz (393 bzw. 206 Dateien differieren, Module haben divergierende Architektur). Beide bleiben ueber Tags wiederherstellbar — Cherry-Picks einzelner Commits sind weiterhin moeglich.
+
+### Worktree-Zustand nachher
+- Genau ein Worktree: `/Users/donandrejo/Documents/ProzessPilot` auf `main`.
+- Sekundaer-Worktrees `../ProzessPilot-backend` und `../ProzessPilot-webapp` entfernt.
+
+### Datei-Konsolidierung
+- `*_clean.json`-Duplikate: keine mehr im Repo (Suchergebnis leer).
+- Statusdateien archiviert nach `docs/archive/`:
+  - `2026-05-04_STATUS_SOLO.md` (vorher `prozesspilot/_STATUS_SOLO.md`)
+  - `2026-05-01_TERMINAL2_STATUS.md` (vorher `prozesspilot/TERMINAL2_STATUS.md`)
+  - `2026-05-01_WEBAPP_STATUS.md` (vorher `prozesspilot/webapp/src/WEBAPP_STATUS.md`)
+- `AGENT_SOLO.md` und `AGENTS_AUTONOM.md` mit Header-Hinweis "Letzte Aktualisierung: 2026-05-07. Status: archivierte Anleitung..." versehen.
+- Neue Dateien hinzugefuegt:
+  - `STRUCTURE.md` (Repo-Karte, kanonisch)
+  - `prozesspilot/n8n/workflows/README.md` ergaenzt um `WF-INPUT-IMAP` und `WF-INPUT-UPLOAD`.
+
+### Verifikations-Resultate
+
+| Pruefung                            | Ergebnis |
+|-------------------------------------|----------|
+| `git status` clean                  | OK |
+| `git branch -a` → nur `main`        | OK |
+| `git worktree list` → nur Hauptverzeichnis | OK |
+| `find . -name "*_clean.json"` leer  | OK |
+| `git log --oneline -10` Klar/Lesbar | OK |
+| Docker-Compose (postgres, redis, n8n, minio) healthy | OK (lief bereits) |
+| Backend `npm install` (silent)      | OK |
+| Backend `npm run dev` Boot          | OK — "Server listening at http://0.0.0.0:3000", "ProzessPilot Backend gestartet". Live-Requests `/api/v1/receipts/stats` 200/48ms und `/api/v1/receipts?customer_id=...` 200/9ms beobachtet, danach Server sauber gestoppt. |
+| Webapp `npm install` (silent)       | OK |
+| Webapp `npm run build`              | OK — `vite build` 1.70s, 80 Module, `dist/index.html` 0.92 kB, CSS 39.76 kB (gzip 8.00 kB), JS 351.05 kB (gzip 101.37 kB), keine Fehler. |
+
+### Hinweise an Nachfolge-Sessions
+- Der WIP-Rescue-Commit (`541507e`) bundles eine groessere Iteration. Wenn fachliche Trennung gewuenscht ist, kann dieser Commit per `git reset --soft` und Re-Commit zerlegt werden.
+- Die `archive/autonom-backend-2026-05-07` enthaelt unter anderem M03–M09 E2E-Tests, DATEV-Buchungsfaelle, customer_integrations + OAuth-Skeleton. Bei Bedarf einzelne Commits via `git log archive/autonom-backend-2026-05-07 --oneline` und `git cherry-pick <sha>` nachziehen.

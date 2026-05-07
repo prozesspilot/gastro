@@ -20,6 +20,8 @@ WF-{TYPE}-{MODULE}.json
 | Datei                        | Typ      | Status   | Beschreibung                              |
 |------------------------------|----------|----------|-------------------------------------------|
 | `WF-INPUT-WHATSAPP.json`     | Input    | Aktiv    | WhatsApp Business API Eingang             |
+| `WF-INPUT-IMAP.json`         | Input    | Aktiv    | IMAP-Postfach Eingang (E-Mail-Anhänge)    |
+| `WF-INPUT-UPLOAD.json`       | Input    | Aktiv    | Direkt-Upload via Webapp/API              |
 | `WF-MASTER-RECEIPT.json`     | Master   | Aktiv    | Haupt-Pipeline: Trigger → M01..M08        |
 | `WF-M01.json`                | Modul    | Aktiv    | Belegerfassung & OCR                      |
 | `WF-M02.json`                | Modul    | Aktiv    | Belegarchivierung (Google Drive/Dropbox)   |

@@ -1,3 +1,5 @@
+> Letzte Aktualisierung: 2026-05-07. Status: archivierte Anleitung aus paralleler Agenten-Phase. Aktueller Workflow: siehe `STRUCTURE.md`.
+
 # Solo-Agent — bringt ProzessPilot zu Ende
 
 Ein einzelner Agent statt der zwei aus `AGENTS_AUTONOM.md`. Er fasst alles an: Backend, Web-App, n8n, Infra, Tests, Doku. Scope ist auf **„Belegerfassung → Verarbeitung → Export"** reduziert; Steuerberater-Portal wird nur als Export-Empfänger gebaut, nicht als Workflow-Werkzeug.

@@ -1,3 +1,5 @@
+> Letzte Aktualisierung: 2026-05-07. Status: archivierte Anleitung aus paralleler Agenten-Phase. Aktueller Workflow: siehe `STRUCTURE.md`.
+
 # Autonome Agent-Prompts für ProzessPilot
 
 Zwei Agents, klare Trennung: **Agent A** macht Backend, n8n, Integrationen. **Agent B** macht die Web-App. Sie teilen sich nichts außer dem API-Vertrag.

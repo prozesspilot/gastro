@@ -26,55 +26,47 @@ const MOCK_SESSION = {
 // ── Test Suite ────────────────────────────────────────────────────────────────
 
 test.describe('G1 — Receipt-Flow', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript((session) => {
-      sessionStorage.setItem('pp_session', JSON.stringify(session));
-    }, MOCK_SESSION);
+  // Login-Tests dürfen KEINE Session haben (sonst redirected useEffect zur Startseite).
+  test.describe('ohne Session', () => {
+    test('Login-Page ist erreichbar', async ({ page }) => {
+      await page.goto('/login');
+      await expect(
+        page.getByRole('heading', { name: 'ProzessPilot' }).first(),
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
+    });
+
+    test('Login-Flow: Mandant auswählen und einloggen', async ({ page }) => {
+      await page.goto('/login');
+
+      await expect(
+        page.getByRole('heading', { name: 'ProzessPilot' }).first(),
+      ).toBeVisible({ timeout: 10_000 });
+
+      await expect(page.getByLabel(/mandant/i)).toBeVisible();
+      await expect(page.getByLabel(/passwort/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
+    });
   });
 
-  test('Login-Page ist erreichbar', async ({ page }) => {
-    await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'ProzessPilot' })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
-  });
+  test.describe('mit Mock-Session', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((session) => {
+        sessionStorage.setItem('pp_session', JSON.stringify(session));
+      }, MOCK_SESSION);
+    });
 
-  test('Upload-Page ist nach Login erreichbar', async ({ page }) => {
-    await page.goto('/upload');
+    test('Upload-Page ist nach Login erreichbar', async ({ page }) => {
+      await page.goto('/upload');
+      await page.waitForLoadState('domcontentloaded');
+      expect(page.url()).toContain('localhost');
+    });
 
-    // Entweder Upload-Page oder Redirect zu Login
-    const url = page.url();
-    // App loaded (keine 404)
-    expect(url).toContain('localhost');
-  });
-
-  test('Receipts-Liste-Page rendert', async ({ page }) => {
-    await page.goto('/receipts');
-
-    // Warte auf initiales Laden
-    await page.waitForLoadState('networkidle');
-
-    const url = page.url();
-    // Kein 500-Fehler
-    expect(url).toContain('localhost');
-  });
-
-  test('Login-Flow: Mandant auswählen und einloggen', async ({ page }) => {
-    await page.goto('/login');
-
-    // ProzessPilot Heading sichtbar
-    await expect(page.getByRole('heading', { name: 'ProzessPilot' })).toBeVisible({ timeout: 10_000 });
-
-    // Mandant-Dropdown sichtbar
-    const mandantInput = page.getByLabel(/mandant/i);
-    await expect(mandantInput).toBeVisible();
-
-    // Passwort-Feld sichtbar
-    const pwInput = page.getByLabel(/passwort/i);
-    await expect(pwInput).toBeVisible();
-
-    // Button sichtbar
-    const loginBtn = page.getByRole('button', { name: /anmelden/i });
-    await expect(loginBtn).toBeVisible();
+    test('Receipts-Liste-Page rendert', async ({ page }) => {
+      await page.goto('/receipts');
+      await page.waitForLoadState('domcontentloaded');
+      expect(page.url()).toContain('localhost');
+    });
   });
 });
 
@@ -87,7 +79,6 @@ test.describe('G1 — Multi-Tenant-Switch', () => {
   });
 
   test('Verschiedene Mandanten haben isolierte Sessions', async ({ context }) => {
-    // Page 1: Mandant A
     const page1 = await context.newPage();
     await page1.addInitScript(() => {
       sessionStorage.setItem('pp_session', JSON.stringify({
@@ -98,7 +89,6 @@ test.describe('G1 — Multi-Tenant-Switch', () => {
     });
     await page1.goto('/receipts');
 
-    // Page 2: Mandant B
     const page2 = await context.newPage();
     await page2.addInitScript(() => {
       sessionStorage.setItem('pp_session', JSON.stringify({
@@ -109,9 +99,8 @@ test.describe('G1 — Multi-Tenant-Switch', () => {
     });
     await page2.goto('/receipts');
 
-    // Beide Pages geladen (keine Fehler)
-    await page1.waitForLoadState('networkidle');
-    await page2.waitForLoadState('networkidle');
+    await page1.waitForLoadState('domcontentloaded');
+    await page2.waitForLoadState('domcontentloaded');
 
     expect(page1.url()).toContain('localhost');
     expect(page2.url()).toContain('localhost');
@@ -130,10 +119,8 @@ test.describe('G1 — DSGVO-Lösch-Flow', () => {
     }, MOCK_SESSION);
 
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
-
-    const url = page.url();
-    expect(url).toContain('localhost');
+    await page.waitForLoadState('domcontentloaded');
+    expect(page.url()).toContain('localhost');
   });
 });
 
@@ -146,9 +133,7 @@ test.describe('G1 — Steuerberater-Export-Download', () => {
     }, MOCK_SESSION);
 
     await page.goto('/advisor');
-    await page.waitForLoadState('networkidle');
-
-    const url = page.url();
-    expect(url).toContain('localhost');
+    await page.waitForLoadState('domcontentloaded');
+    expect(page.url()).toContain('localhost');
   });
 });

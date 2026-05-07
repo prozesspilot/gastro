@@ -7,7 +7,9 @@
           "interval": [
             {
               "field": "weeks",
-              "triggerAtDay": [1],
+              "triggerAtDay": [
+                1
+              ],
               "triggerAtHour": 9,
               "triggerAtMinute": 0
             }
@@ -18,7 +20,10 @@
       "name": "Cron Montag 09:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
-      "position": [250, 300]
+      "position": [
+        250,
+        300
+      ]
     },
     {
       "parameters": {
@@ -45,7 +50,10 @@
       "name": "GET /customers",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [500, 300]
+      "position": [
+        500,
+        300
+      ]
     },
     {
       "parameters": {
@@ -56,7 +64,10 @@
       "name": "Loop ueber Kunden",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 2,
-      "position": [750, 300]
+      "position": [
+        750,
+        300
+      ]
     },
     {
       "parameters": {
@@ -110,7 +121,10 @@
       "name": "POST /communications/expected-check",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1000, 300]
+      "position": [
+        1000,
+        300
+      ]
     },
     {
       "parameters": {
@@ -127,7 +141,10 @@
       "name": "IF Fehler",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1250, 300]
+      "position": [
+        1250,
+        300
+      ]
     },
     {
       "parameters": {
@@ -139,13 +156,17 @@
       "name": "Notify bei Fehler",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
-      "position": [1500, 200],
+      "position": [
+        1500,
+        200
+      ],
       "credentials": {
         "smtp": {
           "id": "smtp-cred",
           "name": "SMTP Credentials"
         }
-      }
+      },
+      "disabled": true
     }
   ],
   "connections": {

@@ -14,8 +14,10 @@ import type {
   Customer,
   CustomerProfile,
   EnabledModules,
+  ImapConfig,
   ModuleKey,
   NotificationLanguage,
+  OcrProvider,
   SkrType,
 } from '../types';
 import { MODULE_META } from '../types';
@@ -42,6 +44,15 @@ export default function CustomerProfilePage() {
   // Lexoffice-Konfig
   const [showApiKey, setShowApiKey] = useState(false);
   const [lexTestState, setLexTestState] = useState<{ ok?: boolean; message?: string; busy?: boolean }>({});
+
+  // IMAP-Konfig
+  const [showImapPassword, setShowImapPassword] = useState(false);
+
+  // OCR-Konfig
+  const [showOcrApiKey, setShowOcrApiKey] = useState(false);
+
+  // sevDesk-Konfig
+  const [showSevdeskToken, setShowSevdeskToken] = useState(false);
 
   // Tax-ID Maskierung (separate Edit-State)
   const [editingTaxId, setEditingTaxId] = useState(false);
@@ -460,6 +471,245 @@ export default function CustomerProfilePage() {
           </Section>
         )}
 
+        {/* ── Abschnitt 3b: OCR-Provider (nur sichtbar wenn M03 aktiv) ───── */}
+        {draft.enabled_modules.m03_extraction && (
+          <Section title="OCR-Konfiguration" subtitle="Welcher KI-Dienst liest die Belege aus?">
+            <div className="field">
+              <label>OCR-Provider</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['mindee', 'google_vision', 'openai'] as OcrProvider[]).map((p) => (
+                  <button
+                    type="button"
+                    key={p}
+                    className={draft.ocr_provider === p ? 'primary' : 'secondary'}
+                    onClick={() => patch((d) => { d.ocr_provider = p; })}
+                    style={{ flex: 1 }}
+                  >
+                    {p === 'mindee' ? 'Mindee' : p === 'google_vision' ? 'Google Vision' : 'OpenAI'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {draft.ocr_provider && (
+              <div className="field">
+                <label htmlFor="ocr_api_key">API-Key</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    id="ocr_api_key"
+                    type={showOcrApiKey ? 'text' : 'password'}
+                    value={draft.ocr_api_key ?? ''}
+                    onChange={(e) => patch((d) => { d.ocr_api_key = e.target.value; })}
+                    autoComplete="new-password"
+                    style={{ flex: 1 }}
+                    placeholder="sk-... / API-Key"
+                  />
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setShowOcrApiKey(!showOcrApiKey)}
+                    style={{ padding: '7px 12px' }}
+                  >
+                    {showOcrApiKey ? 'Verbergen' : 'Anzeigen'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {draft.ocr_provider === 'mindee' && 'Aus Mindee → Account → API Keys'}
+                  {draft.ocr_provider === 'google_vision' && 'Google Cloud Console → APIs & Services → Credentials'}
+                  {draft.ocr_provider === 'openai' && 'OpenAI Platform → API Keys'}
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* ── Abschnitt 3c: DATEV (nur sichtbar wenn M04 aktiv) ───────────── */}
+        {draft.enabled_modules.m04_categorization && (
+          <Section title="DATEV-Konfiguration" subtitle="Buchhalterische Kenndaten für den DATEV-Export">
+            <div className="field-grid-2">
+              <div className="field">
+                <label htmlFor="datev_berater_nr">DATEV-Berater-Nr.</label>
+                <input
+                  id="datev_berater_nr"
+                  value={draft.datev_berater_nr ?? ''}
+                  onChange={(e) => patch((d) => { d.datev_berater_nr = e.target.value; })}
+                  placeholder="12345"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="datev_mandanten_nr">DATEV-Mandanten-Nr.</label>
+                <input
+                  id="datev_mandanten_nr"
+                  value={draft.datev_mandanten_nr ?? ''}
+                  onChange={(e) => patch((d) => { d.datev_mandanten_nr = e.target.value; })}
+                  placeholder="67890"
+                />
+              </div>
+            </div>
+            <div className="field-grid-2">
+              <div className="field">
+                <label htmlFor="datev_export_email">Export-E-Mail (DATEV-Versand)</label>
+                <input
+                  id="datev_export_email"
+                  type="email"
+                  value={draft.datev_export_email ?? ''}
+                  onChange={(e) => patch((d) => { d.datev_export_email = e.target.value; })}
+                  placeholder="export@steuerberater.de"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="tax_advisor_email">Steuerberater-E-Mail</label>
+                <input
+                  id="tax_advisor_email"
+                  type="email"
+                  value={draft.tax_advisor_email ?? ''}
+                  onChange={(e) => patch((d) => { d.tax_advisor_email = e.target.value; })}
+                  placeholder="berater@kanzlei.de"
+                />
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Wohin wird der fertige DATEV-Export versendet?
+                </div>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* ── Abschnitt 3d: sevDesk (nur sichtbar wenn M06 aktiv) ─────────── */}
+        {draft.enabled_modules.m06_portal && (
+          <Section title="sevDesk-Konfiguration" subtitle="API-Token für sevDesk-Integration">
+            <div className="field">
+              <label htmlFor="sevdesk_api_token">API-Token</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  id="sevdesk_api_token"
+                  type={showSevdeskToken ? 'text' : 'password'}
+                  value={draft.sevdesk_api_token ?? ''}
+                  onChange={(e) => patch((d) => { d.sevdesk_api_token = e.target.value; })}
+                  autoComplete="new-password"
+                  style={{ flex: 1 }}
+                  placeholder="sevDesk API-Token"
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => setShowSevdeskToken(!showSevdeskToken)}
+                  style={{ padding: '7px 12px' }}
+                >
+                  {showSevdeskToken ? 'Verbergen' : 'Anzeigen'}
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                Aus sevDesk → Einstellungen → Benutzer → API-Token
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* ── Abschnitt 3e: IMAP (E-Mail-Eingang) ────────────────────────── */}
+        <Section title="E-Mail-Eingang (IMAP)" subtitle="Belege automatisch aus dem Postfach des Kunden abrufen">
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+            Wenn konfiguriert, ruft ProzessPilot regelmäßig neue E-Mails mit Anhängen (PDF, JPG, PNG) ab und verarbeitet sie als Belege.
+          </div>
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="imap_host">IMAP-Server</label>
+              <input
+                id="imap_host"
+                value={draft.imap?.host ?? ''}
+                onChange={(e) => patch((d) => {
+                  d.imap = { ...defaultImap(d.imap), host: e.target.value };
+                })}
+                placeholder="imap.gmail.com"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="imap_port">Port</label>
+              <input
+                id="imap_port"
+                type="number"
+                value={draft.imap?.port ?? 993}
+                onChange={(e) => patch((d) => {
+                  d.imap = { ...defaultImap(d.imap), port: Number(e.target.value) };
+                })}
+                placeholder="993"
+              />
+            </div>
+          </div>
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="imap_user">E-Mail / Benutzername</label>
+              <input
+                id="imap_user"
+                type="email"
+                value={draft.imap?.user ?? ''}
+                onChange={(e) => patch((d) => {
+                  d.imap = { ...defaultImap(d.imap), user: e.target.value };
+                })}
+                placeholder="kunde@gmail.com"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="imap_pass">Passwort / App-Passwort</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  id="imap_pass"
+                  type={showImapPassword ? 'text' : 'password'}
+                  value={draft.imap?.password ?? ''}
+                  onChange={(e) => patch((d) => {
+                    d.imap = { ...defaultImap(d.imap), password: e.target.value };
+                  })}
+                  autoComplete="new-password"
+                  style={{ flex: 1 }}
+                  placeholder="••••••••••••"
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => setShowImapPassword(!showImapPassword)}
+                  style={{ padding: '7px 12px' }}
+                >
+                  {showImapPassword ? 'Verbergen' : 'Anzeigen'}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="imap_folder">Ordner</label>
+              <input
+                id="imap_folder"
+                value={draft.imap?.folder ?? 'INBOX'}
+                onChange={(e) => patch((d) => {
+                  d.imap = { ...defaultImap(d.imap), folder: e.target.value };
+                })}
+                placeholder="INBOX"
+              />
+            </div>
+            <div className="field">
+              <label>TLS/SSL</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([true, false] as boolean[]).map((val) => (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    className={(draft.imap?.tls ?? true) === val ? 'primary' : 'secondary'}
+                    onClick={() => patch((d) => {
+                      d.imap = { ...defaultImap(d.imap), tls: val };
+                    })}
+                    style={{ flex: 1 }}
+                  >
+                    {val ? 'TLS aktiv (Port 993)' : 'Kein TLS (Port 143)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {draft.imap?.host && (
+            <div className="info-box" style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+              💡 Bei Gmail: Aktiviere 2FA und erstelle ein <strong>App-Passwort</strong> unter myaccount.google.com/apppasswords — kein normales Gmail-Passwort verwenden.
+            </div>
+          )}
+        </Section>
+
         {/* ── Abschnitt 4: Benachrichtigungen ─────────────────────────────── */}
         <Section title="Benachrichtigungen" subtitle="Sprache und Versand-Optionen">
           <div className="field">
@@ -571,4 +821,15 @@ function maskTaxId(taxId?: string): string {
   if (!taxId) return '';
   if (taxId.length <= 4) return taxId;
   return '••••••••' + taxId.slice(-3);
+}
+
+function defaultImap(existing?: ImapConfig): ImapConfig {
+  return {
+    host:     existing?.host     ?? '',
+    port:     existing?.port     ?? 993,
+    user:     existing?.user     ?? '',
+    password: existing?.password ?? '',
+    tls:      existing?.tls      ?? true,
+    folder:   existing?.folder   ?? 'INBOX',
+  };
 }

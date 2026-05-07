@@ -113,7 +113,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate aria-label="Login">
           {/* Tenant-Auswahl */}
           <div className="field" style={{ marginBottom: 20 }}>
             <label htmlFor="tenant-select" style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>

@@ -111,7 +111,8 @@ export default function ReceiptDetailPage() {
   }
 
   const canReprocess = receipt.status === 'error' || receipt.status === 'requires_review';
-  const canDownload = receipt.status === 'archived' || receipt.status === 'completed' || receipt.status === 'exported';
+  // Download möglich sobald eine Datei hochgeladen wurde (storage_key vorhanden)
+  const canDownload = !!receipt.original_path;
   const canMarkReview = receipt.status !== 'requires_review' && receipt.status !== 'error';
 
   const timeline = buildTimeline(receipt);

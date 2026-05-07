@@ -1,0 +1,632 @@
+{
+  "id": "wf-input-upload-00000000-0000-000000000020",
+  "name": "WF-INPUT-UPLOAD",
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "n1-webhook",
+      "name": "Trigger: Webhook Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "path": "receipt-received",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "webhookId": "receipt-received-webhook"
+    },
+    {
+      "id": "n2-normalize",
+      "name": "Code: Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Normalisiert den Webhook-Payload vom Backend.\n// Unterstuetzt sowohl snake_case als auch camelCase Felder.\nconst body = $json.body ?? $json;\n\nconst customerId = body.customer_id ?? body.customerId ?? '';\nconst receiptId  = body.receipt_id  ?? body.receiptId  ?? '';\nconst tenantId   = body.tenant_id   ?? body.tenantId   ?? '';\nconst traceId    = body.trace_id    ?? body.traceId    ?? `upload-${Date.now()}`;\n\nreturn [{\n  json: {\n    customer_id:   customerId,\n    receipt_id:    receiptId,\n    tenant_id:     tenantId,\n    trace_id:      traceId,\n    storage_key:   body.storage_key   ?? '',\n    original_name: body.original_name ?? '',\n    mime_type:     body.mime_type     ?? 'application/octet-stream',\n    size_bytes:    body.size_bytes    ?? 0\n  }\n}];"
+      }
+    },
+    {
+      "id": "n3-get-profile",
+      "name": "HTTP: get_profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.BACKEND_URL}}/api/v1/internal/profile/{{$json.customer_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-customer-id",
+              "value": "={{$json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$json.trace_id}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "continueOnFail": false
+    },
+    {
+      "id": "n4-route-plan",
+      "name": "HTTP: route_plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.BACKEND_URL}}/api/v1/routing/plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-customer-id",
+              "value": "={{$('Code: Normalize Payload').item.json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Code: Normalize Payload').item.json.trace_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"receipt_id\":\"{{$('Code: Normalize Payload').item.json.receipt_id}}\",\"customer_id\":\"{{$('Code: Normalize Payload').item.json.customer_id}}\"}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "continueOnFail": false
+    },
+    {
+      "id": "n5-split-steps",
+      "name": "Split: Steps",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        300
+      ],
+      "parameters": {
+        "fieldToSplitOut": "data.steps",
+        "options": {}
+      }
+    },
+    {
+      "id": "n5b-build-subwf-input",
+      "name": "Code: Build Sub-WF Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "\n// Baut das Input-Objekt das alle Sub-WF (M01, M02, ...) erwarten:\n//   { trace_id, receipt, customer_profile, idempotency_key, module }\nconst normalize   = $('Code: Normalize Payload').item.json;\nconst profileResp = $('HTTP: get_profile').item.json;\nconst step        = $json;\n\nconst receiptId  = normalize.receipt_id  || '';\nconst customerId = normalize.customer_id || '';\nconst tenantId   = normalize.tenant_id   || '';\nconst traceId    = normalize.trace_id    || `upload-${Date.now()}`;\nconst storageKey = normalize.storage_key || '';\n\n// Raw profile from DB (flat integrations keys)\nconst profile = (profileResp.data && profileResp.data.profile) || profileResp.data || {};\n\n// Normalize integrations: bridge flat DB format -> nested OCR format\n// DB stores: integrations.ocr_provider, integrations.ocr_api_key\n// extract handler expects: integrations.ocr.provider, integrations.ocr.config\nconst intgRaw     = profile.integrations || {};\nconst ocrProvider = intgRaw.ocr_provider || 'google_vision';\nconst ocrApiKey   = intgRaw.ocr_api_key  || null;\n\nconst intgNormalized = { ...intgRaw };\ndelete intgNormalized.ocr_provider;\ndelete intgNormalized.ocr_api_key;\nintgNormalized.ocr = {\n  provider: ocrProvider,\n  config:   ocrApiKey ? { api_key: ocrApiKey } : {}\n};\n\nconst customer_profile = {\n  customer_id:     customerId,\n  modules_enabled: profile.modules_enabled || [],\n  integrations:    intgNormalized,\n  routing:         profile.routing || {},\n  custom:          profile.custom  || {},\n};\n\n// Receipt object in the format M01..M07 expect\nconst receipt = {\n  receipt_id:    receiptId,\n  customer_id:   customerId,\n  tenant_id:     tenantId,\n  status:        'received',\n  source:        'upload',\n  storage_key:   storageKey,\n  file: {\n    storage_key:   storageKey,\n    original_name: normalize.original_name || '',\n    mime_type:     normalize.mime_type     || 'application/octet-stream',\n    size_bytes:    normalize.size_bytes    || 0\n  },\n  user_caption: ''\n};\n\nreturn [{\n  json: {\n    trace_id:        traceId,\n    receipt,\n    customer_profile,\n    idempotency_key:  `ik_${step.module}_${receiptId}`,\n    module:           step.module\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "n6-switch",
+      "name": "Switch: step.module",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1580,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M01",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M01"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M03",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M03"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M02",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M02"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M05",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M05"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M06",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M06"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.module}}",
+                    "rightValue": "M07",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M07"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "n7-call-m01",
+      "name": "Run: WF-M01",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        60
+      ],
+      "parameters": {
+        "workflowId": "WF-M01",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n8-call-m03",
+      "name": "Run: WF-M03",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        180
+      ],
+      "parameters": {
+        "workflowId": "WF-M03",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n9-call-m02",
+      "name": "Run: WF-M02",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        300
+      ],
+      "parameters": {
+        "workflowId": "WF-M02",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n10-call-m05",
+      "name": "Run: WF-M05",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        420
+      ],
+      "parameters": {
+        "workflowId": "WF-M05",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n11-call-m06",
+      "name": "Run: WF-M06",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        540
+      ],
+      "parameters": {
+        "workflowId": "WF-M06",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n12-call-m07",
+      "name": "Run: WF-M07",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        660
+      ],
+      "parameters": {
+        "workflowId": "WF-M07",
+        "mode": "each",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "n13-skip-default",
+      "name": "Set: Skipped",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1840,
+        780
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\"ok\":true,\"skipped\":true,\"module\":\"{{$json.module}}\"}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n14-finalize",
+      "name": "HTTP: finalize_receipt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        300
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Code: Normalize Payload').item.json.receipt_id}}/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-pp-tenant-id",
+              "value": "={{$('Code: Normalize Payload').item.json.tenant_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Code: Normalize Payload').item.json.trace_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"status\":\"done\"}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Trigger: Webhook Upload": {
+      "main": [
+        [
+          {
+            "node": "Code: Normalize Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Normalize Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP: get_profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: get_profile": {
+      "main": [
+        [
+          {
+            "node": "HTTP: route_plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: route_plan": {
+      "main": [
+        [
+          {
+            "node": "Split: Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split: Steps": {
+      "main": [
+        [
+          {
+            "node": "Code: Build Sub-WF Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Sub-WF Input": {
+      "main": [
+        [
+          {
+            "node": "Switch: step.module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: step.module": {
+      "main": [
+        [
+          {
+            "node": "Run: WF-M01",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M03",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M02",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M05",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M06",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M07",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set: Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M01": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M03": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M02": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M05": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M06": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M07": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Skipped": {
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

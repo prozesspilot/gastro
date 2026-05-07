@@ -1,0 +1,162 @@
+{
+  "name": "WF-INPUT-IMAP",
+  "active": false,
+  "nodes": [
+    {
+      "id": "imap-schedule-001",
+      "name": "Cron: alle 10 Minuten",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "imap-poll-001",
+      "name": "HTTP: IMAP Poll",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/imap/poll",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "imap-if-001",
+      "name": "IF: Neue Belege?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-receipts",
+              "leftValue": "={{ $json.data.processed }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "imap-split-001",
+      "name": "Split: Belege aufteilen",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [900, 240],
+      "parameters": {
+        "fieldToSplitOut": "data.receipts",
+        "options": {}
+      }
+    },
+    {
+      "id": "imap-master-001",
+      "name": "Execute: WF-MASTER-RECEIPT",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2,
+      "position": [1120, 240],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "WF-MASTER-RECEIPT",
+          "cachedResultName": "WF-MASTER-RECEIPT"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "imap-noop-001",
+      "name": "No-op: Nichts zu tun",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 400],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "noop-1",
+              "name": "status",
+              "value": "no_new_emails",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cron: alle 10 Minuten": {
+      "main": [
+        [{ "node": "HTTP: IMAP Poll", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP: IMAP Poll": {
+      "main": [
+        [{ "node": "IF: Neue Belege?", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF: Neue Belege?": {
+      "main": [
+        [{ "node": "Split: Belege aufteilen", "type": "main", "index": 0 }],
+        [{ "node": "No-op: Nichts zu tun",    "type": "main", "index": 0 }]
+      ]
+    },
+    "Split: Belege aufteilen": {
+      "main": [
+        [{ "node": "Execute: WF-MASTER-RECEIPT", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "wf-error-handler-0000-0000-000000000099"
+  }
+}

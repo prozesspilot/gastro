@@ -23,17 +23,26 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
-import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 
 const planInputSchema = z.object({
   receipt_id: z.string().min(1),
   customer_id: z.string().min(1),
 });
 
+// DECISION: The plan handler queries the modern receipts table (migration 013)
+// directly instead of via the _shared legacy repository (which uses receipt_id TEXT).
+interface ReceiptRow {
+  id: string;
+  customer_id: string;
+  status: string;
+  categorization?: unknown;
+}
+
 interface CustomerProfileRow {
   modules_enabled: unknown;
   integrations: unknown;
   routing: unknown;
+  custom: unknown;
 }
 
 interface CredentialRow {
@@ -63,7 +72,15 @@ export function buildPlanHandler() {
     const { receipt_id, customer_id } = parsed.data;
     const db: Pool = req.server.db;
 
-    const receipt = await receiptRepo.findById(db, receipt_id, customer_id);
+    // Query the modern receipts table (migration 013) — column is `id`, not `receipt_id`
+    const receiptResult = await db.query<ReceiptRow>(
+      `SELECT id, customer_id, status, metadata->>'categorization' AS categorization
+         FROM receipts
+        WHERE id = $1 AND customer_id = $2
+        LIMIT 1`,
+      [receipt_id, customer_id],
+    );
+    const receipt = receiptResult.rows[0] ?? null;
     if (!receipt) {
       return reply.code(404).send(
         apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customer_id}.`),
@@ -73,7 +90,7 @@ export function buildPlanHandler() {
     // customer_profiles aus 010 (TEXT customer_id-Welt). Wir tolerieren,
     // wenn das Profil nicht existiert, und fallen auf einen Basic-Plan zurück.
     const profileRow = await db.query<CustomerProfileRow>(
-      `SELECT modules_enabled, integrations, routing
+      `SELECT modules_enabled, integrations, routing, custom
          FROM customer_profiles
         WHERE customer_id = $1
         LIMIT 1`,
@@ -94,7 +111,19 @@ export function buildPlanHandler() {
     }
 
     const profile = profileRow.rows[0];
-    const enabled = new Set(asStringArray(profile.modules_enabled));
+    // Normalize module codes: support both 'M01' and 'm01_ingestion' formats
+    const rawModules = asStringArray(profile.modules_enabled);
+    const enabled = new Set(rawModules.flatMap((m) => {
+      const upper = m.toUpperCase();
+      // Map new-format codes to legacy M-codes
+      const legacyMap: Record<string, string> = {
+        'M01_INGESTION': 'M01', 'M02_ARCHIVING': 'M02', 'M03_EXTRACTION': 'M03',
+        'M04_CATEGORIZATION': 'M04', 'M05_LEXOFFICE': 'M05', 'M06_PORTAL': 'M06',
+        'M07_NOTIFICATIONS': 'M07', 'M08_REPORTING': 'M08', 'M09_SUPPLIER_COMM': 'M09',
+      };
+      const normalized = legacyMap[upper] ?? upper;
+      return [m, normalized]; // Keep both forms
+    }));
     const integrations = (profile.integrations ?? {}) as Record<string, unknown>;
     const routing = (profile.routing ?? {}) as Record<string, unknown>;
 
@@ -122,7 +151,13 @@ export function buildPlanHandler() {
     const kiOn = (routing as { ki_kategorisierung?: boolean }).ki_kategorisierung !== false;
     if (enabled.has('M03') && kiOn) {
       // Skip M03, wenn Receipt bereits eine Confidence hat, die hoch ist
-      const cat = receipt.categorization as { confidence?: number } | undefined;
+      // categorization is extracted as a JSON string from metadata JSONB
+      let cat: { confidence?: number } | undefined;
+      try {
+        cat = typeof receipt.categorization === 'string'
+          ? JSON.parse(receipt.categorization) as { confidence?: number }
+          : (receipt.categorization as { confidence?: number } | undefined);
+      } catch { cat = undefined; }
       const threshold = (routing as { low_confidence_threshold?: number }).low_confidence_threshold ?? 0.75;
       const alreadyCategorizedHighConf = cat?.confidence !== undefined && cat.confidence >= threshold;
       if (!alreadyCategorizedHighConf) {
@@ -130,19 +165,33 @@ export function buildPlanHandler() {
       }
     }
 
-    // Phase 3: M02 — Archivierung
-    if (enabled.has('M02') && hasIntegration(integrations, 'archive')) {
+    // Phase 3: M02 — Archivierung (MinIO/S3 ist global konfiguriert, keine per-Kunde-Integration nötig)
+    if (enabled.has('M02')) {
       steps.push({ module: 'M02', required: true });
     }
 
     // Phase 4: Exporte
-    if (enabled.has('M05') && credentialKinds.has('lexoffice_api_key')) {
+    // DECISION: Check both customer_credentials table AND integrations JSONB
+    // (new profiles store credentials in integrations, not customer_credentials table)
+    const hasLexofficeKey = credentialKinds.has('lexoffice_api_key')
+      || Boolean((integrations as { lexoffice_api_key?: unknown }).lexoffice_api_key);
+    const hasSevdeskKey = credentialKinds.has('sevdesk_api_key')
+      || Boolean((integrations as { sevdesk_api_token?: unknown }).sevdesk_api_token);
+
+    // M07 — WhatsApp-Benachrichtigung: läuft wenn whatsapp_number im custom-Profil gesetzt ist
+    const customData = (profileRow.rows[0].custom ?? {}) as Record<string, unknown>;
+    const hasWhatsapp = Boolean(
+      customData.whatsapp_number
+      || (integrations as { whatsapp_number?: unknown }).whatsapp_number,
+    );
+
+    if (enabled.has('M05') && hasLexofficeKey) {
       steps.push({ module: 'M05', required: false });
     }
-    if (enabled.has('M06') && credentialKinds.has('sevdesk_api_key')) {
+    if (enabled.has('M06') && hasSevdeskKey) {
       steps.push({ module: 'M06', required: false });
     }
-    if (enabled.has('M07') && hasIntegration(integrations, 'spreadsheet')) {
+    if (enabled.has('M07') && hasWhatsapp) {
       steps.push({ module: 'M07', required: false });
     }
 

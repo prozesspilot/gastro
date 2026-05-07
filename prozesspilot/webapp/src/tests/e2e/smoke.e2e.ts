@@ -15,13 +15,13 @@ import { test, expect } from '@playwright/test';
 test.describe('ProzessPilot Smoke-Tests', () => {
   test('App startet und zeigt Login-Page', async ({ page }) => {
     await page.goto('/');
-    // Erwartet: entweder Login-Page oder Dashboard (wenn Session existiert)
     const title = await page.title();
     expect(title).toBeTruthy();
 
-    // Entweder Login-Form oder Dashboard-Content muss sichtbar sein
-    const loginOrDashboard = page.getByText('ProzessPilot').or(page.getByText('Anmelden'));
-    await expect(loginOrDashboard).toBeVisible({ timeout: 10_000 });
+    // Heading "ProzessPilot" ist auf Login- und Dashboard-Layout sichtbar.
+    await expect(
+      page.getByRole('heading', { name: 'ProzessPilot' }).first(),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test('Login-Page hat Tenant-Auswahl und Passwort-Feld', async ({ page }) => {

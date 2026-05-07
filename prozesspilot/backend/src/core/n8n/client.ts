@@ -85,6 +85,26 @@ export async function triggerWebhook(
 }
 
 /**
+ * Löst die Receipt-Pipeline aus — ruft WF-INPUT-UPLOAD via Webhook auf.
+ * Best-effort: wirft nie, loggt nur bei Fehler.
+ *
+ * @param payload  customer_id, receipt_id, tenant_id, storage_key etc.
+ */
+export async function triggerReceiptPipeline(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    logger.info({ receiptId: payload.receipt_id }, 'n8n-Pipeline triggern: receipt-received');
+    await triggerWebhook('receipt-received', payload);
+  } catch (err) {
+    logger.warn(
+      { err, receiptId: payload.receipt_id },
+      'n8n receipt-received Webhook fehlgeschlagen (best-effort, wird ignoriert)',
+    );
+  }
+}
+
+/**
  * Lädt alle Workflows aus der n8n-REST-API.
  */
 export async function getWorkflows(): Promise<unknown[]> {

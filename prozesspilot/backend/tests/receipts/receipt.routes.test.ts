@@ -608,6 +608,7 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
       method:  'POST',
       url:     `/api/v1/receipts/${id}/reprocess`,
       headers: headers(),
+      payload: {},
     });
 
     expect(res.statusCode).toBe(200);
@@ -620,6 +621,7 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
       method:  'POST',
       url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/reprocess',
       headers: headers(),
+      payload: {},
     });
     expect(res.statusCode).toBe(404);
   });
@@ -629,6 +631,7 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
       method:  'POST',
       url:     '/api/v1/receipts/invalid-uuid/reprocess',
       headers: headers(),
+      payload: {},
     });
     expect(res.statusCode).toBe(400);
   });

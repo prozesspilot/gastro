@@ -15,7 +15,10 @@
       "name": "Trigger: Sub-Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [240, 400],
+      "position": [
+        240,
+        400
+      ],
       "parameters": {
         "events": "workflow",
         "inputSource": "passthrough"
@@ -26,25 +29,51 @@
       "name": "HTTP: Backend create_receipt",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 400],
+      "position": [
+        480,
+        400
+      ],
       "parameters": {
         "method": "POST",
         "url": "={{$env.BACKEND_URL}}/api/v1/receipts",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "content-type",    "value": "application/json" },
-            { "name": "idempotency-key", "value": "={{ ($json.source && $json.source.external_id) || $json.trace_id }}" },
-            { "name": "x-customer-id",   "value": "={{$json.customer_id}}" },
-            { "name": "x-trace-id",      "value": "={{$json.trace_id}}" }
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "idempotency-key",
+              "value": "={{ ($json.source && $json.source.external_id) || $json.trace_id }}"
+            },
+            {
+              "name": "x-customer-id",
+              "value": "={{$json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$json.trace_id}}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"customer_id\": \"{{$json.customer_id}}\",\n  \"status\":      \"received\",\n  \"source\":      {{JSON.stringify($json.source)}},\n  \"file\":        {{JSON.stringify($json.file)}},\n  \"user_caption\": \"{{$json.user_caption || ''}}\",\n  \"trace_id\":    \"{{$json.trace_id}}\"\n}",
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } },
-          "retry":    { "retry":    { "maxRetries": 3, "waitBetweenRetries": 1500, "retryOnStatusCode": "500,502,503,504" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "retry": {
+            "retry": {
+              "maxRetries": 3,
+              "waitBetweenRetries": 1500,
+              "retryOnStatusCode": "500,502,503,504"
+            }
+          }
         }
       },
       "continueOnFail": false
@@ -54,19 +83,33 @@
       "name": "HTTP: Backend get_profile",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 400],
+      "position": [
+        720,
+        400
+      ],
       "parameters": {
         "method": "GET",
         "url": "={{$env.BACKEND_URL}}/api/v1/internal/profile/{{$('Trigger: Sub-Workflow').item.json.customer_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-customer-id", "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}" },
-            { "name": "x-trace-id",    "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}" }
+            {
+              "name": "x-customer-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}"
+            }
           ]
         },
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "continueOnFail": false
@@ -76,23 +119,40 @@
       "name": "HTTP: Backend route_plan",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 400],
+      "position": [
+        960,
+        400
+      ],
       "parameters": {
         "method": "POST",
         "url": "={{$env.BACKEND_URL}}/api/v1/routing/plan",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "content-type", "value": "application/json" },
-            { "name": "x-customer-id", "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}" },
-            { "name": "x-trace-id",    "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}" }
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-customer-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"receipt_id\":  \"{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}\",\n  \"customer_id\": \"{{$('Trigger: Sub-Workflow').item.json.customer_id}}\"\n}",
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "continueOnFail": false
@@ -102,7 +162,10 @@
       "name": "Split: Steps",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [1180, 400],
+      "position": [
+        1180,
+        400
+      ],
       "parameters": {
         "fieldToSplitOut": "data.steps",
         "options": {}
@@ -113,19 +176,33 @@
       "name": "HTTP: Reload Receipt",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1400, 400],
+      "position": [
+        1400,
+        400
+      ],
       "parameters": {
         "method": "GET",
         "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-customer-id", "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}" },
-            { "name": "x-trace-id",    "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}" }
+            {
+              "name": "x-customer-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}"
+            }
           ]
         },
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       }
     },
@@ -134,16 +211,121 @@
       "name": "Switch: step.module",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1620, 400],
+      "position": [
+        1620,
+        400
+      ],
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M01", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M01" },
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M03", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M03" },
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M02", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M02" },
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M05", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M05" },
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M06", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M06" },
-            { "conditions": { "options": { "caseSensitive": true }, "conditions": [{ "leftValue": "={{$('Split: Steps').item.json.module}}", "rightValue": "M07", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "M07" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M01",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M01"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M03",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M03"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M02",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M02"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M05",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M05"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M06",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M06"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$('Split: Steps').item.json.module}}",
+                    "rightValue": "M07",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "M07"
+            }
           ]
         },
         "options": {
@@ -156,7 +338,10 @@
       "name": "Run: WF-M01",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 100],
+      "position": [
+        1860,
+        100
+      ],
       "parameters": {
         "workflowId": "WF-M01",
         "mode": "each",
@@ -169,7 +354,10 @@
       "name": "Run: WF-M03",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 220],
+      "position": [
+        1860,
+        220
+      ],
       "parameters": {
         "workflowId": "WF-M03",
         "mode": "each",
@@ -182,7 +370,10 @@
       "name": "Run: WF-M02",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 340],
+      "position": [
+        1860,
+        340
+      ],
       "parameters": {
         "workflowId": "WF-M02",
         "mode": "each",
@@ -195,7 +386,10 @@
       "name": "Run: WF-M05",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 460],
+      "position": [
+        1860,
+        460
+      ],
       "parameters": {
         "workflowId": "WF-M05",
         "mode": "each",
@@ -208,7 +402,10 @@
       "name": "Run: WF-M06",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 580],
+      "position": [
+        1860,
+        580
+      ],
       "parameters": {
         "workflowId": "WF-M06",
         "mode": "each",
@@ -221,7 +418,10 @@
       "name": "Run: WF-M07",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 700],
+      "position": [
+        1860,
+        700
+      ],
       "parameters": {
         "workflowId": "WF-M07",
         "mode": "each",
@@ -234,7 +434,10 @@
       "name": "Set: Skipped (default)",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1860, 820],
+      "position": [
+        1860,
+        820
+      ],
       "parameters": {
         "mode": "raw",
         "jsonOutput": "={\n  \"ok\": true,\n  \"skipped\": true,\n  \"module\": \"{{$('Split: Steps').item.json.module}}\"\n}",
@@ -246,12 +449,26 @@
       "name": "IF: sub-result.ok",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2120, 400],
+      "position": [
+        2120,
+        400
+      ],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
           "conditions": [
-            { "id": "is-ok", "leftValue": "={{$json.ok}}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+            {
+              "id": "is-ok",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
           ],
           "combinator": "and"
         },
@@ -263,7 +480,10 @@
       "name": "Function: Classify Stage Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2360, 520],
+      "position": [
+        2360,
+        520
+      ],
       "parameters": {
         "language": "javaScript",
         "jsCode": "// Mappt Module + Fehlercode auf einen errorType, den der WF-ERROR-HANDLER\n// klassifizieren kann. Wird im Error-Branch des Master-Workflows aufgerufen.\nconst sub = $json || {};\nconst module = sub.module || ($('Split: Steps').item.json.module || 'master');\nconst errorCode = (sub.error && sub.error.code) || '';\nconst errorMsg  = (sub.error && sub.error.message) || 'sub-workflow failed';\n\nlet errorType = 'WEBHOOK_FAILED';\nswitch (module) {\n  case 'M01': errorType = 'OCR_FAILED';      break;\n  case 'M03': errorType = 'CATEGORY_FAILED'; break;\n  case 'M02': errorType = 'ARCHIVE_FAILED';  break;\n  case 'M05':\n  case 'M06':\n  case 'M07': errorType = 'EXPORT_FAILED';   break;\n  default:    errorType = 'PIPELINE_FAILED';\n}\nif (/timeout/i.test(errorMsg) || /timeout/i.test(errorCode)) errorType = 'TIMEOUT';\nif (errorCode === 'INVALID_STATUS') errorType = 'PIPELINE_FAILED';\n\nreturn [{\n  json: {\n    receiptId:  $('HTTP: Backend create_receipt').item.json.data.receipt_id,\n    customerId: $('Trigger: Sub-Workflow').item.json.customer_id,\n    traceId:    $('Trigger: Sub-Workflow').item.json.trace_id,\n    stage:      module,\n    errorType:  errorType,\n    error:      errorMsg\n  }\n}];"
@@ -274,22 +494,36 @@
       "name": "HTTP: Error-Handler Webhook",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2480, 600],
+      "position": [
+        2480,
+        600
+      ],
       "parameters": {
         "method": "POST",
         "url": "={{ ($env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook') + '/error-handler' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "content-type", "value": "application/json" },
-            { "name": "x-trace-id",   "value": "={{$json.traceId}}" }
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$json.traceId}}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"receiptId\":  \"{{$json.receiptId}}\",\n  \"customerId\": \"{{$json.customerId}}\",\n  \"stage\":      \"{{$json.stage}}\",\n  \"errorType\":  \"{{$json.errorType}}\",\n  \"error\":      \"{{ String($json.error).replace(/\\\"/g, '\\\\\\\"').slice(0, 500) }}\",\n  \"traceId\":    \"{{$json.traceId}}\"\n}",
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "continueOnFail": true
@@ -299,23 +533,40 @@
       "name": "HTTP: finalize_receipt",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2600, 400],
+      "position": [
+        2600,
+        400
+      ],
       "parameters": {
         "method": "POST",
         "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}/complete",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "content-type",  "value": "application/json" },
-            { "name": "x-customer-id", "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}" },
-            { "name": "x-trace-id",    "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}" }
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-customer-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.customer_id}}"
+            },
+            {
+              "name": "x-trace-id",
+              "value": "={{$('Trigger: Sub-Workflow').item.json.trace_id}}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"customer_id\": \"{{$('Trigger: Sub-Workflow').item.json.customer_id}}\",\n  \"trace_id\":    \"{{$('Trigger: Sub-Workflow').item.json.trace_id}}\"\n}",
         "options": {
-          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "continueOnFail": true
@@ -325,65 +576,289 @@
       "name": "Respond to Workflow",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [2840, 400],
+      "position": [
+        2840,
+        400
+      ],
       "parameters": {
         "mode": "raw",
         "jsonOutput": "={\n  \"ok\":            true,\n  \"receipt_id\":    \"{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}\",\n  \"final_status\":  \"{{ ($json.data && $json.data.receipt && $json.data.receipt.status) || 'completed' }}\"\n}",
         "options": {}
       }
+    },
+    {
+      "id": "n6b-build-payload",
+      "name": "Function: Build Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1510,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "\n// Assembles the unified payload for all sub-workflows (M01, M02, M03, \u2026).\n// Bridges the gap between the flat DB integrations format and what M01/extract expects.\n\nconst receiptRaw  = $('HTTP: Reload Receipt').item.json.data || {};\nconst profileResp = $('HTTP: Backend get_profile').item.json.data || {};\nconst profile     = profileResp.profile || profileResp || {};\nconst trigger     = $('Trigger: Sub-Workflow').item.json;\nconst step        = $('Split: Steps').item.json;\n\n// Normalize receipt (API returns 'id', sub-workflows expect 'receipt_id')\nconst receipt = {\n  receipt_id:    receiptRaw.id || receiptRaw.receipt_id,\n  customer_id:   receiptRaw.customer_id || trigger.customer_id,\n  status:        receiptRaw.status,\n  storage_key:   receiptRaw.storage_key,\n  original_name: receiptRaw.original_name,\n  mime_type:     receiptRaw.mime_type,\n  file_size_bytes: receiptRaw.file_size_bytes,\n  source:        receiptRaw.source || 'upload',\n  file: {\n    name: receiptRaw.original_name,\n    type: receiptRaw.mime_type,\n  },\n};\n\n// Normalize integrations: bridge flat DB format \u2192 nested OCR format expected by extract handler\nconst intgRaw = profile.integrations || {};\nconst ocrProvider = intgRaw.ocr_provider || intgRaw['ocr.provider'] || 'google_vision';\nconst ocrApiKey   = intgRaw.ocr_api_key  || intgRaw['ocr.api_key']  || null;\n\nconst intgNormalized = {\n  ...intgRaw,\n  // Remove flat OCR keys\n  ocr_provider: undefined,\n  ocr_api_key:  undefined,\n  // Add nested OCR structure\n  ocr: {\n    provider: ocrProvider,\n    config:   ocrApiKey ? { api_key: ocrApiKey } : {},\n  },\n};\n\n// Remove undefined keys from integrations\nconst intgClean = Object.fromEntries(\n  Object.entries(intgNormalized).filter(([, v]) => v !== undefined)\n);\n\nconst customer_profile = {\n  customer_id:     receipt.customer_id,\n  modules_enabled: profile.modules_enabled || [],\n  integrations:    intgClean,\n  routing:         profile.routing || {},\n  custom:          profile.custom  || {},\n};\n\nreturn [{\n  json: {\n    module:           step.module,\n    required:         step.required,\n    receipt,\n    customer_profile,\n    trace_id:         trigger.trace_id || ('trc_' + Math.random().toString(36).slice(2, 12)),\n    idempotency_key:  'ik_' + step.module + '_' + receipt.receipt_id,\n  }\n}];\n"
+      }
     }
   ],
   "connections": {
     "Trigger: Sub-Workflow": {
-      "main": [[{ "node": "HTTP: Backend create_receipt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: Backend create_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: Backend create_receipt": {
-      "main": [[{ "node": "HTTP: Backend get_profile", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: Backend get_profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: Backend get_profile": {
-      "main": [[{ "node": "HTTP: Backend route_plan", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: Backend route_plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: Backend route_plan": {
-      "main": [[{ "node": "Split: Steps", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Split: Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Split: Steps": {
-      "main": [[{ "node": "HTTP: Reload Receipt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: Reload Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: Reload Receipt": {
-      "main": [[{ "node": "Switch: step.module", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Function: Build Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Switch: step.module": {
       "main": [
-        [{ "node": "Run: WF-M01", "type": "main", "index": 0 }],
-        [{ "node": "Run: WF-M03", "type": "main", "index": 0 }],
-        [{ "node": "Run: WF-M02", "type": "main", "index": 0 }],
-        [{ "node": "Run: WF-M05", "type": "main", "index": 0 }],
-        [{ "node": "Run: WF-M06", "type": "main", "index": 0 }],
-        [{ "node": "Run: WF-M07", "type": "main", "index": 0 }],
-        [{ "node": "Set: Skipped (default)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Run: WF-M01",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M03",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M02",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M05",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M06",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run: WF-M07",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set: Skipped (default)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Run: WF-M01":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Run: WF-M03":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Run: WF-M02":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Run: WF-M05":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Run: WF-M06":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Run: WF-M07":         { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
-    "Set: Skipped (default)": { "main": [[{ "node": "IF: sub-result.ok", "type": "main", "index": 0 }]] },
+    "Run: WF-M01": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M03": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M02": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M05": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M06": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run: WF-M07": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Skipped (default)": {
+      "main": [
+        [
+          {
+            "node": "IF: sub-result.ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "IF: sub-result.ok": {
       "main": [
-        [{ "node": "HTTP: finalize_receipt",        "type": "main", "index": 0 }],
-        [{ "node": "Function: Classify Stage Error", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function: Classify Stage Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Function: Classify Stage Error": {
-      "main": [[{ "node": "HTTP: Error-Handler Webhook", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: Error-Handler Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: Error-Handler Webhook": {
-      "main": [[{ "node": "HTTP: finalize_receipt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP: finalize_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP: finalize_receipt": {
-      "main": [[{ "node": "Respond to Workflow", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond to Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function: Build Payload": {
+      "main": [
+        [
+          {
+            "node": "Switch: step.module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {}

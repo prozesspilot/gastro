@@ -7,7 +7,7 @@ import type {
   ReceiptFileType,
   ReceiptStatus,
 } from '../types';
-import { apiBlob, apiRequest, unwrap } from './_client';
+import { apiBlob, apiRequest, getActiveTenantId, unwrap } from './_client';
 
 // ── Backend-Mapper ────────────────────────────────────────────────────────────
 // Das Backend speichert Belege im Konzept-Schema (extraction.fields, etc.).
@@ -219,19 +219,48 @@ export async function getReceipt(receiptId: string): Promise<Receipt> {
   return mapReceipt(unwrap<RawReceipt>(raw));
 }
 
-export async function uploadReceipt(customerId: string, file: File): Promise<Receipt> {
-  // Backend hat (noch) keinen Multipart-Upload — wir legen den Datensatz an, der
-  // die Datei-Metadaten kennt. Tatsächlicher Datei-Upload läuft separat (M01).
+export async function uploadReceipt(
+  customerId: string,
+  file: File,
+  tenantId?: string,
+): Promise<Receipt> {
+  // Tenant-ID: explizit übergeben (UploadPage) oder aus localStorage
+  const activeTenantId = tenantId ?? getActiveTenantId() ?? undefined;
+
+  // Schritt 1 — Receipt-Metadaten anlegen (DB-Eintrag)
   const raw = await apiRequest<unknown>('/receipts', {
     method: 'POST',
+    tenantId: activeTenantId,
     body: {
       customer_id:   customerId,
       original_name: file.name,
-      mime_type:     file.type,
+      mime_type:     file.type || 'application/octet-stream',
       source:        'manual',
     },
   });
-  return mapReceipt(unwrap<RawReceipt>(raw));
+  const receipt = mapReceipt(unwrap<RawReceipt>(raw));
+
+  // Schritt 2 — Datei hochladen (MinIO via Backend-Proxy)
+  // Body: roher Datei-Inhalt, Content-Type = MIME-Typ der Datei
+  const contentType = file.type || 'application/octet-stream';
+  const headers: Record<string, string> = { 'Content-Type': contentType };
+  if (activeTenantId) headers['x-pp-tenant-id'] = activeTenantId;
+
+  const fileRes = await fetch(`/api/v1/receipts/${receipt.id}/file`, {
+    method:  'POST',
+    headers,
+    body:    file,
+  });
+
+  if (!fileRes.ok) {
+    const errBody = await fileRes.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(
+      errBody?.error?.message ?? `Datei-Upload fehlgeschlagen (${fileRes.status})`,
+    );
+  }
+
+  const uploadedRaw = await fileRes.json() as { data?: RawReceipt };
+  return mapReceipt(unwrap<RawReceipt>(uploadedRaw));
 }
 
 export async function updateReceiptStatus(receiptId: string, status: ReceiptStatus): Promise<Receipt> {

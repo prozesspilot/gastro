@@ -1,4 +1,4 @@
-import type { Customer, CustomerProfile, EnabledModules } from '../types';
+import type { Customer, CustomerProfile, EnabledModules, ImapConfig, OcrProvider } from '../types';
 import { apiRequest, unwrap } from './_client';
 
 interface RawCustomer {
@@ -50,6 +50,7 @@ export async function deleteCustomer(tenantId: string, customerId: string): Prom
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 interface RawProfile {
+  // Flache Felder (Legacy / direktes Backend-Format)
   id?: string;
   customer_id?: string;
   tenant_id?: string;
@@ -69,6 +70,32 @@ interface RawProfile {
   routing?: { skr_chart?: 'SKR03' | 'SKR04' };
   created_at?: string;
   updated_at?: string;
+  // JSONB-Felder (Backend-Format nach PUT)
+  integrations?: {
+    lexoffice_api_key?: string;
+    notification_language?: 'de' | 'en';
+    whatsapp_confirmation?: boolean;
+    whatsapp_monthly_report?: boolean;
+    imap?: ImapConfig;
+    // OCR
+    ocr_provider?: OcrProvider;
+    ocr_api_key?: string;
+    // DATEV
+    datev_berater_nr?: string;
+    datev_mandanten_nr?: string;
+    datev_export_email?: string;
+    // sevDesk
+    sevdesk_api_token?: string;
+    // Steuerberater
+    tax_advisor_email?: string;
+  };
+  custom?: {
+    display_name?: string;
+    legal_name?: string;
+    tax_id?: string;
+    email?: string;
+    whatsapp_number?: string;
+  };
 }
 
 const DEFAULT_MODULES: EnabledModules = {
@@ -84,19 +111,19 @@ const DEFAULT_MODULES: EnabledModules = {
 };
 
 function modulesFromArray(arr: string[]): EnabledModules {
-  // Konzept hatte Codes wie "M01", "M03" — Mapping:
   const m = { ...DEFAULT_MODULES, m01_ingestion: false, m02_archiving: false };
   for (const code of arr) {
     switch (code) {
-      case 'M01': m.m01_ingestion = true; break;
-      case 'M02': m.m02_archiving = true; break;
-      case 'M03': m.m03_extraction = true; break;
-      case 'M04': m.m04_categorization = true; break;
-      case 'M05': m.m05_lexoffice = true; break;
-      case 'M06': m.m06_portal = true; break;
-      case 'M07': m.m07_notifications = true; break;
-      case 'M08': m.m08_reporting = true; break;
-      case 'M09': m.m09_supplier_comm = true; break;
+      // Legacy-Format (M01, M02, …)
+      case 'M01': case 'm01_ingestion':      m.m01_ingestion = true; break;
+      case 'M02': case 'm02_archiving':      m.m02_archiving = true; break;
+      case 'M03': case 'm03_extraction':     m.m03_extraction = true; break;
+      case 'M04': case 'm04_categorization': m.m04_categorization = true; break;
+      case 'M05': case 'm05_lexoffice':      m.m05_lexoffice = true; break;
+      case 'M06': case 'm06_portal':         m.m06_portal = true; break;
+      case 'M07': case 'm07_notifications':  m.m07_notifications = true; break;
+      case 'M08': case 'm08_reporting':      m.m08_reporting = true; break;
+      case 'M09': case 'm09_supplier_comm':  m.m09_supplier_comm = true; break;
     }
   }
   return m;
@@ -112,20 +139,36 @@ function mapProfile(raw: RawProfile, customerId: string): CustomerProfile {
     return { ...DEFAULT_MODULES };
   })();
 
+  // Lese aus JSONB-Feldern (Backend-Format) oder flachen Feldern (Legacy)
+  const intg = raw.integrations ?? {};
+  const cust = raw.custom ?? {};
+
   return {
-    id:           raw.id ?? customerId,
+    id:           raw.id ?? raw.customer_id ?? customerId,
     tenant_id:    raw.tenant_id ?? '',
-    display_name: raw.display_name ?? '',
-    legal_name:   raw.legal_name,
-    tax_id:       raw.tax_id,
-    whatsapp_number: raw.whatsapp_number,
-    email:        raw.email,
+    display_name: raw.display_name ?? cust.display_name ?? '',
+    legal_name:   raw.legal_name   ?? cust.legal_name,
+    tax_id:       raw.tax_id       ?? cust.tax_id,
+    whatsapp_number: raw.whatsapp_number ?? cust.whatsapp_number,
+    email:        raw.email        ?? cust.email,
     enabled_modules: modulesObj,
-    lexoffice_api_key: raw.lexoffice_api_key,
+    lexoffice_api_key: raw.lexoffice_api_key ?? intg.lexoffice_api_key,
+    imap:         intg.imap,
     skr_type:     raw.skr_type ?? raw.skr_chart ?? raw.routing?.skr_chart ?? 'SKR03',
-    notification_language: raw.notification_language ?? 'de',
-    whatsapp_confirmation: raw.whatsapp_confirmation ?? false,
-    whatsapp_monthly_report: raw.whatsapp_monthly_report ?? false,
+    notification_language: raw.notification_language ?? intg.notification_language ?? 'de',
+    whatsapp_confirmation:   raw.whatsapp_confirmation   ?? intg.whatsapp_confirmation   ?? false,
+    whatsapp_monthly_report: raw.whatsapp_monthly_report ?? intg.whatsapp_monthly_report ?? false,
+    // OCR
+    ocr_provider: intg.ocr_provider,
+    ocr_api_key:  intg.ocr_api_key,
+    // DATEV
+    datev_berater_nr:   intg.datev_berater_nr,
+    datev_mandanten_nr: intg.datev_mandanten_nr,
+    datev_export_email: intg.datev_export_email,
+    // sevDesk
+    sevdesk_api_token: intg.sevdesk_api_token,
+    // Steuerberater
+    tax_advisor_email: intg.tax_advisor_email,
     created_at: raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updated_at ?? new Date().toISOString(),
   };
@@ -147,9 +190,46 @@ export async function updateCustomerProfile(
   data: Partial<CustomerProfile>,
   tenantId?: string,
 ): Promise<CustomerProfile> {
+  // Transformiere CustomerProfile → Backend-Format (modules_enabled + JSONB-Felder)
+  const modules = data.enabled_modules ?? {};
+  const body = {
+    modules_enabled: Object.entries(modules)
+      .filter(([, on]) => on)
+      .map(([key]) => key),
+    integrations: {
+      lexoffice_api_key:       data.lexoffice_api_key       ?? null,
+      notification_language:   data.notification_language   ?? 'de',
+      whatsapp_confirmation:   data.whatsapp_confirmation   ?? false,
+      whatsapp_monthly_report: data.whatsapp_monthly_report ?? false,
+      imap:                    data.imap                    ?? null,
+      // OCR
+      ocr_provider:            data.ocr_provider            ?? null,
+      ocr_api_key:             data.ocr_api_key             ?? null,
+      // DATEV
+      datev_berater_nr:        data.datev_berater_nr        ?? null,
+      datev_mandanten_nr:      data.datev_mandanten_nr      ?? null,
+      datev_export_email:      data.datev_export_email      ?? null,
+      // sevDesk
+      sevdesk_api_token:       data.sevdesk_api_token       ?? null,
+      // Steuerberater
+      tax_advisor_email:       data.tax_advisor_email       ?? null,
+    },
+    routing: {
+      skr_chart: data.skr_type ?? 'SKR03',
+    },
+    custom: {
+      display_name:    data.display_name    ?? null,
+      legal_name:      data.legal_name      ?? null,
+      tax_id:          data.tax_id          ?? null,
+      email:           data.email           ?? null,
+      whatsapp_number: data.whatsapp_number ?? null,
+    },
+    change_summary: 'Profil über Webapp gespeichert',
+  };
+
   const raw = await apiRequest<unknown>(`/customers/${customerId}/profile`, {
     method: 'PUT',
-    body: data,
+    body,
     tenantId,
   });
   return mapProfile(unwrap<RawProfile>(raw), customerId);

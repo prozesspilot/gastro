@@ -131,13 +131,22 @@ for file in "${main_files[@]}"; do
     {
       name,
       nodes: (.nodes | map(
-        if .type == "n8n-nodes-base.executeWorkflow"
-           and (.parameters.workflowId.cachedResultName // "") as $tgt
-           | $m[$tgt] != null
-        then
-          .parameters.workflowId.value = $m[.parameters.workflowId.cachedResultName]
-          | .parameters.workflowId.mode = "id"
-          | .parameters.workflowId.__rl = true
+        if .type == "n8n-nodes-base.executeWorkflow" then
+          if ((.parameters.workflowId | type) == "object")
+             and ((.parameters.workflowId.cachedResultName // "") as $tgt | $m[$tgt] != null)
+          then
+            .parameters.workflowId.value = $m[.parameters.workflowId.cachedResultName]
+            | .parameters.workflowId.mode = "id"
+            | .parameters.workflowId.__rl = true
+          elif ((.parameters.workflowId | type) == "string")
+               and ($m[.parameters.workflowId] != null)
+          then
+            .parameters.workflowId = {
+              "__rl": true,
+              "value": $m[.parameters.workflowId],
+              "mode": "id"
+            }
+          else . end
         else . end
       )),
       connections,
@@ -159,8 +168,13 @@ done
 # ── Pass 3: Activate in dependency order ─────────────────────────────────────
 echo "→ Pass 3/3: activating workflows"
 
-# Sub-workflows first, then orchestrator, then trigger last
-ACTIVATE_ORDER=("WF-M01" "WF-M02" "WF-M07" "WF-MASTER-RECEIPT" "WF-INPUT-WHATSAPP")
+# Sub-workflows first (all of them), then orchestrator, then triggers last
+ACTIVATE_ORDER=(
+  "WF-M01" "WF-M02" "WF-M03" "WF-M04" "WF-M05" "WF-M06" "WF-M07" "WF-M08"
+  "WF-M09-SUPPLIER-COMM" "WF-ERROR-HANDLER" "WF-PLUGIN-DISPATCHER" "WF-CRON-M08" "WF-CRON-M09-EXPECTED"
+  "WF-MASTER-RECEIPT"
+  "WF-INPUT-WHATSAPP" "WF-INPUT-UPLOAD" "WF-INPUT-IMAP"
+)
 
 for wf_name in "${ACTIVATE_ORDER[@]}"; do
   id="$(lookup_id "${wf_name}")"

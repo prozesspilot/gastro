@@ -87,15 +87,27 @@ async function loadSdk(): Promise<MindeeSdkModule> {
   return cachedSdk;
 }
 
-function getApiKey(): string {
-  const key = process.env.MINDEE_API_KEY;
+function getApiKey(override?: string): string {
+  // Priorität: 1) per-customer key aus ocrConfig, 2) globale ENV
+  const key = override ?? process.env.MINDEE_API_KEY;
   if (!key || key.trim().length === 0) {
-    throw new Error('MINDEE_API_KEY ist nicht gesetzt — Mindee-Adapter kann nicht initialisiert werden.');
+    throw new Error(
+      'Kein Mindee API-Key konfiguriert. ' +
+      'Entweder MINDEE_API_KEY in .env setzen oder im Kundenprofil unter ' +
+      '"OCR / Extraktion" → "Mindee API-Key" eintragen.',
+    );
   }
   return key;
 }
 
-async function getMindeeClient(): Promise<MindeeClientLike> {
+async function getMindeeClient(apiKeyOverride?: string): Promise<MindeeClientLike> {
+  // Wenn ein kundeneigener Key übergeben wird, niemals den Cache nutzen
+  if (apiKeyOverride) {
+    const sdk = await loadSdk();
+    const ClientCtor = sdk.v1?.Client ?? sdk.Client;
+    if (!ClientCtor) throw new Error('Mindee-SDK liefert keinen Client.');
+    return new ClientCtor({ apiKey: getApiKey(apiKeyOverride) });
+  }
   if (cachedClient) return cachedClient;
   const sdk = await loadSdk();
   const ClientCtor = sdk.v1?.Client ?? sdk.Client;
@@ -140,6 +152,8 @@ export function __setMindeeClientForTests(client: MindeeClientLike | null): void
 
 interface MindeeAdapterConfig {
   filename?: string;
+  /** Per-Kundenspezifischer API-Key (überschreibt globales MINDEE_API_KEY). */
+  api_key?: string;
 }
 
 export class MindeeAdapter implements OcrAdapter {
@@ -149,14 +163,15 @@ export class MindeeAdapter implements OcrAdapter {
   async extract(bytes: Buffer, cfg: Record<string, unknown> = {}): Promise<OcrResult> {
     const adapterCfg = cfg as MindeeAdapterConfig;
     const filename = adapterCfg.filename ?? 'document.pdf';
+    const apiKeyOverride = adapterCfg.api_key;
 
     // API-Key prüfen, bevor wir das SDK laden — saubere Fehlermeldung.
-    getApiKey();
+    getApiKey(apiKeyOverride);
 
     const sdk = await loadSdk();
     const InvoiceV4 = resolveInvoiceProduct(sdk);
     const BufferInput = resolveBufferInput(sdk);
-    const client = await getMindeeClient();
+    const client = await getMindeeClient(apiKeyOverride);
 
     const source = new BufferInput({ buffer: bytes, filename });
 

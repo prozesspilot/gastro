@@ -40,7 +40,10 @@ import {
   listReceipts,
   listReceiptsForExport,
   updateReceiptStatus,
+  updateReceiptStorageKey,
 } from './receipt.repository';
+import { createS3Client, uploadObject } from '../../core/storage/storage.service';
+import { triggerReceiptPipeline } from '../../core/n8n/client';
 
 export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   // Tenant-Kontext für alle Routen in diesem Plugin setzen
@@ -243,34 +246,92 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(apiOk(receipt));
   });
 
-  // ── GET /receipts/:id/upload-url ───────────────────────────────────────
+  // ── POST /receipts/:id/file ────────────────────────────────────────────
+  // Lädt die eigentliche Beleg-Datei hoch (PDF, JPG, PNG, etc.).
+  // Body: roher Datei-Inhalt als Buffer (Content-Type = MIME-Typ der Datei).
+  // Nach erfolgreichem Upload: storage_key + file_size_bytes in DB gesetzt,
+  // Status → 'received' (Pipeline kann starten).
 
-  app.get<{ Params: { id: string } }>('/:id/upload-url', async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/file', async (req, reply) => {
     const paramsParsed = receiptParamsSchema.safeParse(req.params);
     if (!paramsParsed.success) {
       return reply.code(400).send(zodToApiError(paramsParsed.error));
     }
 
-    // Verify receipt exists
     const receipt = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
-
     if (!receipt) {
       return reply.code(404).send(
         apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
       );
     }
 
-    // TODO: Implementierung mit echtem MinIO/S3 Upload
-    // Momentan nur Stub für API-Konsistenz.
-    const uploadUrl = 'https://storage.example.com/upload/TODO';
-    const key = `receipts/${req.tenantId}/${paramsParsed.data.id}`;
+    const fileBuffer = req.rawBody as Buffer | undefined;
+    if (!fileBuffer || fileBuffer.length === 0) {
+      return reply.code(400).send(
+        apiError('NO_FILE_BODY', 'Request-Body enthält keine Datei.'),
+      );
+    }
 
-    const response = uploadUrlResponseSchema.parse({
-      uploadUrl,
-      key,
+    const contentType = (req.headers['content-type'] ?? 'application/octet-stream')
+      .split(';')[0]
+      .trim();
+
+    // Storage-Key: tenantId/receiptId/original — eindeutig und nachvollziehbar
+    const storageKey = `${req.tenantId}/${paramsParsed.data.id}/original`;
+
+    try {
+      const s3 = createS3Client();
+      await uploadObject(s3, storageKey, fileBuffer, contentType);
+    } catch (err) {
+      req.log.error({ err }, 'MinIO-Upload fehlgeschlagen');
+      return reply.code(502).send(
+        apiError('STORAGE_ERROR', 'Datei konnte nicht in den Speicher hochgeladen werden.'),
+      );
+    }
+
+    // DB aktualisieren: storage_key + file_size
+    await updateReceiptStorageKey(
+      app.db,
+      req.tenantId,
+      paramsParsed.data.id,
+      storageKey,
+      fileBuffer.length,
+    );
+
+    // Status → 'received': signalisiert der Pipeline dass die Datei bereit ist
+    const updated = await updateReceiptStatus(
+      app.db,
+      req.tenantId,
+      paramsParsed.data.id,
+      'received',
+    );
+
+    void audit.log(app.db, req.tenantId, 'receipt', paramsParsed.data.id, 'file_uploaded', {
+      storage_key: storageKey,
+      size_bytes:  fileBuffer.length,
+      content_type: contentType,
     });
 
-    return reply.send(apiOk(response));
+    sseManager.emit(req.tenantId, 'receipt:status', {
+      id:          paramsParsed.data.id,
+      status:      'received',
+      storage_key: storageKey,
+      updated_at:  updated?.updated_at ?? new Date().toISOString(),
+    });
+
+    // n8n-Pipeline triggern — best-effort, kein await, blockiert nie die HTTP-Antwort
+    void triggerReceiptPipeline({
+      customer_id:   receipt.customer_id,
+      receipt_id:    paramsParsed.data.id,
+      tenant_id:     req.tenantId,
+      storage_key:   storageKey,
+      original_name: receipt.original_name ?? '',
+      mime_type:     contentType,
+      size_bytes:    fileBuffer.length,
+      trace_id:      `upload-${paramsParsed.data.id}`,
+    });
+
+    return reply.code(200).send(apiOk(updated ?? receipt));
   });
 
   // ── POST /receipts/:id/reprocess ──────────────────────────────────────────
@@ -308,6 +369,18 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       id:         paramsParsed.data.id,
       status:     'received',
       updated_at: receipt?.updated_at ?? new Date().toISOString(),
+    });
+
+    // n8n-Pipeline erneut triggern — best-effort
+    void triggerReceiptPipeline({
+      customer_id:   existing.customer_id,
+      receipt_id:    paramsParsed.data.id,
+      tenant_id:     req.tenantId,
+      storage_key:   existing.storage_key ?? '',
+      original_name: existing.original_name ?? '',
+      mime_type:     existing.mime_type ?? 'application/octet-stream',
+      size_bytes:    existing.file_size_bytes ?? 0,
+      trace_id:      `reprocess-${paramsParsed.data.id}-${Date.now()}`,
     });
 
     return reply.send(apiOk(receipt ?? existing));

@@ -110,6 +110,17 @@ export interface EnabledModules {
 export type SkrType = 'SKR03' | 'SKR04';
 export type NotificationLanguage = 'de' | 'en';
 
+export interface ImapConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  tls: boolean;
+  folder: string;
+}
+
+export type OcrProvider = 'mindee' | 'google_vision' | 'openai';
+
 export interface CustomerProfile {
   id: string;
   tenant_id: string;
@@ -120,10 +131,22 @@ export interface CustomerProfile {
   email?: string;
   enabled_modules: EnabledModules;
   lexoffice_api_key?: string;
+  imap?: ImapConfig;
   skr_type?: SkrType;
   notification_language?: NotificationLanguage;
   whatsapp_confirmation?: boolean;
   whatsapp_monthly_report?: boolean;
+  // OCR-Konfiguration (M03)
+  ocr_provider?: OcrProvider;
+  ocr_api_key?: string;
+  // DATEV-Konfiguration (M04)
+  datev_berater_nr?: string;
+  datev_mandanten_nr?: string;
+  datev_export_email?: string;
+  // sevDesk-Konfiguration (M06)
+  sevdesk_api_token?: string;
+  // Steuerberater-E-Mail (Ziel des DATEV-Exports)
+  tax_advisor_email?: string;
   created_at: string;
   updated_at: string;
 }

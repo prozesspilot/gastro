@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchTenants, fetchCustomers, fetchReceipts, updateReceiptStatus, uploadReceipt } from '../api';
+import { fetchTenants, fetchCustomers, fetchReceipts, uploadReceipt } from '../api';
 import type { Tenant, Customer, Receipt } from '../types';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -169,16 +169,9 @@ export default function UploadPage() {
     setProgress(0);
 
     try {
-      // Step 1 — creating receipt
+      // Step 1 — Metadaten anlegen + Datei zu MinIO hochladen
       setProgress(30);
-      const receipt = await uploadReceipt(selectedCustomer, selectedFile);
-
-      // Step 2 — uploading (simuliertes Upload-Window)
-      setProgress(70);
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-
-      // Step 3 — done
-      await updateReceiptStatus(receipt.id, 'done');
+      await uploadReceipt(selectedCustomer, selectedFile, selectedTenant);
       setProgress(100);
 
       // Erfolg

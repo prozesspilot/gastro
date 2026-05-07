@@ -19,6 +19,7 @@ import {
 import { routingRoutes } from './modules/routing/routing.routes';
 import { tenantRoutes } from './modules/tenants/tenant.routes';
 import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
+import { m11ImapRoutes }      from './modules/m11-imap/routes';
 import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
 import { m02ArchiveRoutes } from './modules/m02-archive/routes';
 import { m07SpreadsheetRoutes } from './modules/m07-spreadsheet/routes';
@@ -184,6 +185,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(documentRoutes,    { prefix: '/documents' });
       await apiApp.register(routingRoutes,     { prefix: '/routing' });
       await apiApp.register(m10WhatsAppRoutes, { prefix: '/internal/whatsapp' });
+      await apiApp.register(m11ImapRoutes,      { prefix: '/internal/imap' });
       await apiApp.register(receiptRoutes,          { prefix: '/receipts' });
       await apiApp.register(m01ReceiptIntakeRoutes, { prefix: '/receipts' });
       await apiApp.register(m02ArchiveRoutes,        { prefix: '/receipts' });

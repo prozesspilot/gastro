@@ -1,9 +1,11 @@
 # Foundation Spec — Sprint 0
 
-> **Phase:** 0 (Foundation, Woche 1–2)
+> **Status (2026-05-07): ✅ ERFÜLLT.** Alle 10 Deliverables D1–D10 sind implementiert und im Repo unter `prozesspilot/` produktionsbereit. Siehe [STATUS.html](STATUS.html) und [05_Roadmap.md](05_Roadmap.md). Diese Datei bleibt als **historische Referenz** und für künftige Onboarding-Lektüre erhalten — sie ist nicht mehr aktive Arbeitsanweisung.
+>
+> **Phase:** 0 (Foundation, Woche 1–2) — _historisch_
 > **Adressat:** Engineer + Claude Code
 > **Spec-Version:** 1.0
-> Diese Datei ist die Spec-Quelle für alle Sprint-0-Prompts. Sie ersetzt die fehlende `modules/M00_*.md`.
+> Diese Datei war die Spec-Quelle für alle Sprint-0-Prompts.
 
 ---
 

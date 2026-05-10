@@ -23,6 +23,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
+import { logger } from '../../../core/logger';
 
 const planInputSchema = z.object({
   receipt_id: z.string().min(1),
@@ -82,10 +83,12 @@ export function buildPlanHandler() {
     );
     const receipt = receiptResult.rows[0] ?? null;
     if (!receipt) {
+      logger.warn({ receipt_id, customer_id }, 'route_plan: receipt NOT FOUND in DB');
       return reply.code(404).send(
         apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customer_id}.`),
       );
     }
+    logger.info({ receipt_id, customer_id, status: receipt.status }, 'route_plan: receipt found');
 
     // customer_profiles aus 010 (TEXT customer_id-Welt). Wir tolerieren,
     // wenn das Profil nicht existiert, und fallen auf einen Basic-Plan zurück.
@@ -97,7 +100,8 @@ export function buildPlanHandler() {
       [customer_id],
     );
 
-    if (profileRow.rowCount === 0) {
+    if (!profileRow.rows.length) {
+      logger.warn({ customer_id }, 'route_plan: NO customer_profiles row found → FALLBACK plan [M01, M07]');
       const fallback: RoutePlanResponse = {
         receipt_id,
         customer_id,
@@ -113,6 +117,7 @@ export function buildPlanHandler() {
     const profile = profileRow.rows[0];
     // Normalize module codes: support both 'M01' and 'm01_ingestion' formats
     const rawModules = asStringArray(profile.modules_enabled);
+    logger.info({ customer_id, rawModules }, 'route_plan: profile found, raw modules_enabled');
     const enabled = new Set(rawModules.flatMap((m) => {
       const upper = m.toUpperCase();
       // Map new-format codes to legacy M-codes
@@ -200,6 +205,7 @@ export function buildPlanHandler() {
       steps.push({ module: 'M01', required: true });
     }
 
+    logger.info({ customer_id, receipt_id, steps: steps.map((s) => s.module) }, 'route_plan: FINAL plan');
     const response: RoutePlanResponse = {
       receipt_id,
       customer_id,

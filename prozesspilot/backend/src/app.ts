@@ -24,8 +24,6 @@ import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
 import { m02ArchiveRoutes } from './modules/m02-archive/routes';
 import { m07SpreadsheetRoutes } from './modules/m07-spreadsheet/routes';
 import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
-// m04CategorizeRoutes intentionally omitted — m03CategorizationRoutes is the concept-compliant implementation
-// and both use the same route pattern (POST /:id/categorize), causing a Fastify collision.
 import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
 import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
 import { m05LexofficeRoutes, m05CustomerLexofficeRoutes, m05IntegrationRoutes } from './modules/m05-lexoffice/routes';
@@ -190,7 +188,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(m01ReceiptIntakeRoutes, { prefix: '/receipts' });
       await apiApp.register(m02ArchiveRoutes,        { prefix: '/receipts' });
       await apiApp.register(m03OcrRoutes,            { prefix: '/receipts' });
-      // Konzept-konformes M03 (ersetzt m04-categorize — selbes Route-Pattern)
+      // M03 Kategorisierung — Endpoint POST /receipts/:id/categorize
       await apiApp.register(m03CategorizationRoutes, { prefix: '/receipts' });
       // M03 Kategorien-Liste (GET /categories)
       await apiApp.register(categoriesRoutes, { prefix: '/categories' });

@@ -206,7 +206,7 @@ export const MODULE_META: Record<ModuleKey, {
   m03_extraction:     { id: 'M03', label: 'OCR & Extraktion',       description: 'Liest Beleg-Felder per Google Vision' },
   m04_categorization: { id: 'M04', label: 'KI-Kategorisierung',     description: 'Schlägt SKR-Konto via Claude/Stammdaten/Override vor', requires: ['m03_extraction'] },
   m05_lexoffice:      { id: 'M05', label: 'Lexoffice-Export',       description: 'Pusht Belege als Voucher an Lexoffice', requires: ['m04_categorization'] },
-  m06_portal:         { id: 'M06', label: 'Steuerberater-Portal',   description: 'Multi-Tenant-Portal für Steuerberater' },
+  m06_portal:         { id: 'M06', label: 'sevDesk-Export',         description: 'Pusht Belege als Voucher an sevDesk' },
   m07_notifications:  { id: 'M07', label: 'WhatsApp-Bestätigung',   description: 'Sendet Status-Updates per WhatsApp zurück' },
   m08_reporting:      { id: 'M08', label: 'Monatsreporting',        description: 'Erstellt monatliche PDF-Berichte', requires: ['m07_notifications'] },
   m09_supplier_comm:  { id: 'M09', label: 'Lieferanten-Komm.',      description: 'Fragt fehlende Belege bei Lieferanten an' },

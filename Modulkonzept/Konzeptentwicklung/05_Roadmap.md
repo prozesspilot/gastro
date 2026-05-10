@@ -1,256 +1,192 @@
-# 05 — Roadmap & Entwicklungsstrategie
+# 05 — Roadmap (IST-Stand 2026-05-07)
 
-> Reihenfolge der Implementierung, kritischer Pfad, Sprint-Plan.
-> Optimiert auf "schnell verkaufbar" → MVP first, dann Erweiterungen.
+> **Hinweis:** Dieses Dokument hat sich gewandelt. Es war ursprünglich ein 16-Wochen-Plan ("SOLL"). Da die Implementierung schneller fertig wurde als geplant, ist es jetzt eine **IST-Übersicht** + nächste Schritte.
 
----
-
-## 1. Strategische Reihenfolge
-
-```
-PHASE 0 — Foundation              (Woche 1-2)
-PHASE 1 — MVP Basic               (Woche 3-6)   → erster Kunde verkaufbar
-PHASE 2 — Standard-Erweiterungen  (Woche 7-10)
-PHASE 3 — Pro-Features            (Woche 11-14)
-PHASE 4 — Hardening & Skalierung  (Woche 15-16)
-```
-
-Annahme: 1 Senior-Entwickler + Claude Code, 4 Wochen Sprint = 1 Phase.
+Live-Übersicht: [STATUS.html](STATUS.html).
 
 ---
 
-## 2. Phase 0 — Foundation (Woche 1–2)
+## 1. Was ist fertig (Stand 2026-05-07)
 
-**Ziel:** Stabiles Fundament. Ohne diese Bausteine sind alle Module nutzlos.
+### 1.1 Foundation
 
-### 2.1 Lieferumfang
+Alle 10 Sprint-0-Deliverables aus [Foundation_Spec.md](Foundation_Spec.md) sind **erfüllt**:
 
-| # | Deliverable                                  | Wer baut         | Definition of Done                                            |
-|---|----------------------------------------------|------------------|---------------------------------------------------------------|
-| 1 | Repo-Setup, CI/CD, Docker-Compose            | Engineer         | `docker compose up` startet alles lokal                        |
-| 2 | Postgres-Schema (alle Tabellen aus 02)       | Claude Code      | Prisma-Migrations laufen, RLS aktiv                            |
-| 3 | Backend-Skeleton (Fastify + Auth + Health)   | Claude Code      | `/health` antwortet, HMAC-Auth funktioniert                    |
-| 4 | Receipt-Schema + Customer-Profile-Schema     | Claude Code      | JSON-Schema validiert Beispiel-Payloads aus 01/02              |
-| 5 | Customer-Profile-API (CRUD)                  | Claude Code      | Onboarding lokal: Customer + Profile + Credential anlegen      |
-| 6 | Event-Bus (Redis Streams) + processed_events | Claude Code      | Producer/Consumer-Test publiziert/konsumiert Events            |
-| 7 | n8n-Setup + Backend-Proxy-Pattern            | Engineer         | n8n läuft, Backend-HMAC funktioniert, Test-Workflow grün       |
-| 8 | Storage-Service (MinIO + Adapter)            | Claude Code      | Upload+Download über `/api/v1/internal/storage/*`              |
-| 9 | Routing-Service (`/routing/plan`)            | Claude Code      | Liefert RoutePlan basierend auf Profil                         |
-| 10| Logging/Tracing (Pino + Trace-IDs)           | Engineer         | Trace-ID propagiert von n8n bis Backend bis Postgres           |
-
-### 2.2 Was Claude Code bekommt
-
-Pro Aufgabe ein Prompt, der enthält:
-- die Modul-/Service-Spec (Markdown-Datei aus `docs/`),
-- das Daten-Schema,
-- ein "Acceptance-Criteria"-Block ("Tests laufen", "Endpoint antwortet 200 mit korrektem Body"),
-- die Verzeichnisstruktur, in die der Code gehört.
-
----
-
-## 3. Phase 1 — MVP Basic (Woche 3–6)
-
-**Ziel:** Erstes Produkt verkaufbar. Ein Gastronom kann WhatsApp-Belege schicken, sie werden archiviert und in Excel/Sheets exportiert.
-
-### 3.1 Module
-
-Zu implementieren in dieser Reihenfolge:
-
-| # | Modul                            | Dauer  | Abhängig von               |
-|---|----------------------------------|--------|----------------------------|
-| 1 | M10 WhatsApp Eingang             | 4 Tage | Phase 0 fertig             |
-| 2 | M01 Belegerfassung & OCR         | 5 Tage | M10                        |
-| 3 | M02 Belegarchivierung            | 4 Tage | M01                        |
-| 4 | M07 Excel/Sheets Export          | 3 Tage | M01                        |
-| 5 | WF-MASTER-RECEIPT                | 2 Tage | M01, M02, M07 fertig       |
-| 6 | Web-App (minimal): Onboarding    | 4 Tage | parallel zu Modulen        |
-| 7 | E2E-Test mit echtem WhatsApp     | 2 Tage | alles oben                 |
-
-### 3.2 MVP Definition of Done
-
-- [ ] Ein Gastronom (Test-Kunde) kann sich von uns onboarden lassen (Profil angelegt, Drive verbunden, WhatsApp-Nummer registriert).
-- [ ] Foto eines echten Belegs an die WhatsApp-Nummer → erscheint nach < 60s als PDF in seinem Drive **und** als Zeile in seinem Google Sheet.
-- [ ] Bestätigungsnachricht zurück an den Sender via WhatsApp.
-- [ ] Bei OCR-Fehler bekommt der Operator (intern) einen Slack-/Mail-Alert.
-- [ ] Audit-Log enthält für jeden Beleg alle Statuswechsel.
-
-### 3.3 Was bewusst weggelassen wird
-
-- Keine KI-Kategorisierung (Standard-Feature).
-- Kein Reporting (Standard-Feature).
-- Keine Lieferanten-Kommunikation (Pro-Feature).
-- Keine Customer-Self-Service-UI (nur intern bedienbar).
-
----
-
-## 4. Phase 2 — Standard-Erweiterungen (Woche 7–10)
-
-**Ziel:** "Standard"-Paket verkaufbar. KI-Kategorisierung, Buchhaltungs-Anbindung, Reporting.
-
-### 4.1 Module
-
-| # | Modul                            | Dauer  | Abhängig von             |
-|---|----------------------------------|--------|--------------------------|
-| 1 | M03 Kategorisierung (Claude)     | 5 Tage | Phase 1 stabil           |
-| 2 | M05 Lexoffice-Integration        | 5 Tage | M03                      |
-| 3 | M06 sevDesk-Integration          | 4 Tage | M05 (Adapter-Pattern)    |
-| 4 | M08 Monatsreporting              | 5 Tage | M03                      |
-| 5 | Web-App: Beleg-Übersicht + Re-Run| 4 Tage | parallel                 |
-| 6 | Hook-System (Backend)            | 3 Tage | parallel                 |
-
-### 4.2 Standard Definition of Done
-
-- [ ] Beleg wird per Claude API kategorisiert (≥ 90% Confidence in 80% der Fälle bei Test-Datensatz).
-- [ ] Push nach Lexoffice oder sevDesk je nach Profil; Beleg-Anhang ist sichtbar.
-- [ ] Monatsreport (PDF) wird am 1. eines Monats automatisch erstellt und per Mail/WhatsApp versendet.
-- [ ] Customer-Webapp zeigt alle Belege, erlaubt Re-Run und manuelle Korrektur.
-- [ ] Hook-System läuft (Test mit Dummy-Hook).
-
----
-
-## 5. Phase 3 — Pro-Features (Woche 11–14)
-
-**Ziel:** Pro-Paket verkaufbar. DATEV, Lieferanten-Kommunikation, Custom-Hooks.
-
-### 5.1 Module
-
-| # | Modul                            | Dauer  | Abhängig von             |
-|---|----------------------------------|--------|--------------------------|
-| 1 | M04 DATEV-Export                 | 6 Tage | M03 stabil               |
-| 2 | M09 Lieferanten-Kommunikation    | 4 Tage | M01                      |
-| 3 | Web-App: Hook-Sandbox            | 3 Tage | Hooks aus Phase 2        |
-| 4 | Plugin-System (Loader, Manifest) | 4 Tage | parallel                 |
-| 5 | Erstes Custom-Module (Beispiel)  | 5 Tage | Plugin-System            |
-
-### 5.2 Pro Definition of Done
-
-- [ ] DATEV-CSV (Format v2) wird monatlich generiert, an Steuerberater verschickt, mit allen Beleg-PDFs.
-- [ ] Lieferanten-Anfrage-E-Mail (Template) wird automatisch verschickt bei `requires_review`.
-- [ ] Hook-Sandbox erlaubt sicheres Testen vor Aktivierung.
-- [ ] Plugin-System lädt versionierte Custom-Module.
-- [ ] Pilot-Pro-Kunde läuft auf eigenem Custom-Module (z. B. WWS-Anbindung).
-
----
-
-## 6. Phase 4 — Hardening & Skalierung (Woche 15–16)
-
-**Ziel:** Production-Ready für 50+ Kunden.
-
-| # | Deliverable                              | Dauer  |
+| # | Deliverable                              | Status |
 |---|------------------------------------------|--------|
-| 1 | Load-Test (Locust): 1000 Belege/h        | 2 Tage |
-| 2 | Sentry, Grafana, Alert-Routing finalisiert | 2 Tage |
-| 3 | Backup-Strategie (Postgres + MinIO)      | 1 Tag  |
-| 4 | Disaster-Recovery-Drill                  | 1 Tag  |
-| 5 | Security-Review (HMAC, Encryption)       | 2 Tage |
-| 6 | DSGVO-Lösch-Workflow (Customer-Offboarding) | 2 Tage |
-| 7 | Dokumentation (Operator-Runbook)         | 2 Tage |
+| 1 | Repo-Setup, CI/CD, Docker-Compose        | ✅      |
+| 2 | Postgres-Schema (alle Tabellen)          | ✅      |
+| 3 | Backend-Skeleton (Fastify + Auth + Health) | ✅    |
+| 4 | Receipt-Schema + CustomerProfile-Schema  | ✅      |
+| 5 | Customer-Profile-API (CRUD)              | ✅      |
+| 6 | Event-Bus (Redis Streams)                | ✅      |
+| 7 | n8n-Setup + Backend-Proxy-Pattern        | ✅      |
+| 8 | Storage-Service (MinIO + Adapter)        | ✅      |
+| 9 | Routing-Service                          | ✅      |
+| 10| Logging/Tracing (Pino + Trace-IDs)       | ✅      |
+
+### 1.2 Module
+
+| ID  | Modul                                   | Paket          | Status |
+|-----|-----------------------------------------|----------------|--------|
+| M01 | Belegerfassung & OCR                    | Basic+         | ✅      |
+| M02 | Belegarchivierung (GoBD)                | Basic+         | ✅      |
+| M03 | Kategorisierung & OCR-Postprocessing    | Standard+      | ✅      |
+| M04 | DATEV-Export                            | Pro            | ✅      |
+| M05 | Lexoffice-Integration                   | Standard+      | ✅      |
+| M06 | sevDesk-Integration                     | Standard+      | ✅      |
+| M07 | Excel/Google Sheets Export              | Basic+         | ✅      |
+| M08 | Monatsreporting                         | Standard+      | ✅      |
+| M09 | Lieferanten-Kommunikation               | Pro            | ✅      |
+| M10 | WhatsApp Eingang                        | Basic+         | ✅      |
+| M11 | IMAP / E-Mail Eingang                   | Basic+         | ✅      |
+| M12 | DSGVO-Workflows                         | alle           | ✅      |
+| M13 | Steuerberater-Portal                    | Pro            | ✅      |
+
+### 1.3 Plattform-Bestandteile
+
+- Webapp (React + Vite + Playwright) — komplett, Production-Build vorhanden
+- Plugin-System (Pro-Erweiterungen) — implementiert
+- 17 n8n-Workflows
+- 30 Postgres-Migrationen
+- Infra: Runbooks, Backup-Skripte, ADRs, Security-Checklist, Load-Tests
+- 131 Tests (57 Backend + 74 Webapp) grün
 
 ---
 
-## 7. Kritischer Pfad
+## 2. Was steht jetzt an
 
-```
-Phase 0 ─► M10 ─► M01 ─► [M02 ∥ M07] ─► WF-MASTER ─► E2E-Test (MVP)
-                            │
-                            └──► M03 ─► [M05 ∥ M06 ∥ M08] (Standard)
-                                          │
-                                          └──► [M04 ∥ M09] (Pro)
-```
+### 2.1 Phase A — Aufräumen (1–2 Tage)
 
-**Kritisch** sind: Phase 0, M10, M01, WF-MASTER. Verzögerung dort = Verzögerung des gesamten MVP.
+Vor dem ersten Pilotkunden:
 
----
+- [ ] Uncommitted Changes (20 Files) reviewen + commiten
+- [x] Tote Refactor-Reste raus (m04-categorize, leeres _foundation/) — erledigt 2026-05-07
+- [x] Konzept-Doku ↔ Code synchronisieren — erledigt 2026-05-07
+- [ ] CI-Pipeline grün auf main (`npm test` + Playwright in GitHub Actions)
+- [ ] Audit-Subagent (`/audit-konzept`) für künftige Drifts einrichten
 
-## 8. Reihenfolge der Modul-Generierung mit Claude Code
+### 2.1b Phase A+ — M14 User-Verwaltung + Auth (~2–3 Tage)
 
-Der empfohlene Ablauf pro Modul:
+**Vor Phase B (Server-Deployment) zwingend nötig**, weil aktuelles Login nur ein Tenant-Select-Platzhalter ist:
 
-1. Modul-Spec (`docs/modules/M0x_*.md`) Claude Code geben.
-2. Claude generiert:
-   - DB-Schema-Migration (falls nötig)
-   - Backend-Service (`backend/src/modules/m0x-*/`)
-   - JSON-Schemas für Input/Output
-   - Tests (Unit + Integration)
-   - n8n-Workflow-JSON (`n8n/workflows/WF-M0x.json`)
-3. Engineer reviewt, deployed in Staging.
-4. Test-Beleg durchschicken, prüfen.
-5. Merge in `main`.
+- [ ] M14-Spec ([`modules/M14_User_Verwaltung_Auth.md`](modules/M14_User_Verwaltung_Auth.md)) an Claude Code übergeben — schrittweise nach §14 der Spec
+- [ ] Migration `031_users_auth.sql` + Bootstrap super_admin
+- [ ] Backend `core/auth/` (JWT, argon2, Permissions) + `modules/users/`
+- [ ] Frontend AuthContext + LoginPage + UsersPage umbauen / neu anlegen
+- [ ] Playwright-E2E-Test grün
+- [ ] Initial-super_admin per ENV anlegen, Login durchklicken
 
-Pro Modul Aufwand: **3–6 Tage**, davon ca. 1 Tag Claude-Generierung + 2–5 Tage Review/Refinement/Tests.
+### 2.2 Phase B — Server-Deployment (3–5 Tage)
 
----
+Damit echte Kunden onboardbar werden:
 
-## 9. Modul-Wiederverwendbarkeit
+| # | Aufgabe                                                                 | Verantwortlich |
+|---|-------------------------------------------------------------------------|----------------|
+| 1 | Hosting-Anbieter wählen (Empfehlung: Hetzner Cloud CX22, EU/DSGVO)     | Engineer       |
+| 2 | Domain + DNS einrichten (api.example.de, n8n.example.de)               | Engineer       |
+| 3 | `.env.prod` mit echten Secrets (HMAC, API-Keys, S3-Creds) füllen        | Engineer       |
+| 4 | `docker-compose.prod.yml` deployen, Migrations laufen lassen           | Engineer       |
+| 5 | Nginx + Let's Encrypt SSL nach `infra/runbook/01_deployment.md`        | Engineer       |
+| 6 | Sentry-DSN setzen, Backup-Skripte aktivieren (Cron)                    | Engineer       |
+| 7 | Smoke-Test (Health-Check + ein Test-Beleg via WhatsApp-Sandbox)        | Engineer       |
+| 8 | Disaster-Recovery-Drill: Backup einspielen auf Staging                 | Engineer       |
 
-Module sind so geschnitten, dass sie modulübergreifend wiederverwendbare Bausteine teilen. Beim Bauen eines Moduls **immer** prüfen, ob ein Baustein schon existiert.
+Detail-Anleitung: [`prozesspilot/infra/runbook/01_deployment.md`](../../prozesspilot/infra/runbook/01_deployment.md).
 
-| Baustein                       | Liegt in                                        | Wird wiederverwendet von |
-|--------------------------------|-------------------------------------------------|--------------------------|
-| Receipt-Repository             | `backend/src/modules/_shared/receipts/`         | M01–M09                  |
-| OCR-Adapter (Vision/Mindee)    | `backend/src/core/adapters/ocr/`                | M01                      |
-| Storage-Adapter (Drive/Dropbox)| `backend/src/core/adapters/storage/`            | M02, M08                 |
-| Booking-Adapter (Lexoffice/sev)| `backend/src/core/adapters/booking/`            | M05, M06                 |
-| Mail-Service (SMTP, Templates) | `backend/src/core/mail/`                        | M04, M08, M09            |
-| WhatsApp-Service               | `backend/src/core/whatsapp/`                    | M08, M09, M10            |
-| PDF-Generator (Reports)        | `backend/src/core/pdf/`                         | M08, ggf. Pro-Plugins    |
-| Hook-Runner                    | `backend/src/core/hooks/`                       | alle Module              |
-| Audit-Service                  | `backend/src/core/audit/`                       | alle Module              |
+### 2.3 Phase C — Erster Pilotkunde (2–3 Wochen Vorlauf)
 
----
+| # | Aufgabe                                                                 |
+|---|-------------------------------------------------------------------------|
+| 1 | WhatsApp Business API bei Meta verifizieren (2–3 Wochen Vorlauf)        |
+| 2 | Tenant nach `infra/runbook/04_tenant_onboarding.md` anlegen             |
+| 3 | Customer-Profil + Credentials in Webapp pflegen                         |
+| 4 | Drive-OAuth + Lexoffice/sevDesk-OAuth durchklicken                      |
+| 5 | Test-Beleg über WhatsApp schicken — End-to-End-Validierung             |
+| 6 | 50 echte Belege durchlaufen lassen, Findings ins Konzept zurückspielen |
+| 7 | Operator-Schulung (Web-App: Beleg-Liste, Re-Run, manuelle Korrektur)    |
 
-## 10. Risiken & Gegenmaßnahmen
+### 2.4 Phase D — Skalierung & Pro-Features (laufend)
 
-| Risiko                                           | Auswirkung           | Gegenmaßnahme                                      |
-|--------------------------------------------------|----------------------|-----------------------------------------------------|
-| WhatsApp Business API-Verifizierung dauert       | Phase 1 Verzögerung  | Sofort in Phase 0 anstoßen (2-3 Wochen Vorlauf)     |
-| Google Vision OCR-Genauigkeit unter Erwartung    | Manueller Review-Anteil hoch | Mindee als zweiten Adapter in Phase 3 vorbereiten |
-| Lexoffice-API-Limits                              | Export-Stau           | Throttling + Retry-Queue im Backend, Adapter-Pattern |
-| DATEV-Format-Anforderungen vom Steuerberater    | M04 Verzögerung      | Phase 2: Steuerberater-Sample mit echten Daten testen |
-| Datenmodell-Änderung nach MVP                    | Migration nötig      | `schema_version` von Anfang an, Migration-Service planen |
-| Self-hosted n8n Outage                           | Ganzes System steht   | n8n+Backend in HA-Setup ab Phase 4; Notfall-Queue in Redis |
+Sobald 5+ Kunden live sind:
 
----
-
-## 11. Lieferzeitplan kompakt
-
-```
-W1   ────► Foundation (Setup, DB, Auth, Health)
-W2   ────► Foundation (Profile-API, Routing, Storage, Events)
-W3   ────► M10 + WF-INPUT-WHATSAPP
-W4   ────► M01 + Tests
-W5   ────► M02 + M07 parallel
-W6   ────► WF-MASTER + Web-App Onboarding + E2E       ★ MVP fertig
-W7   ────► M03 + Hook-System
-W8   ────► M05 (Lexoffice)
-W9   ────► M06 (sevDesk) + M08 Reporting
-W10  ────► Web-App Beleg-Liste/Re-Run                 ★ Standard fertig
-W11  ────► M04 DATEV
-W12  ────► M09 Comms
-W13  ────► Plugin-System + Hook-Sandbox
-W14  ────► Erstes Custom-Plugin (Pilot Pro-Kunde)     ★ Pro fertig
-W15  ────► Load-Test, Backup, DSGVO-Flow
-W16  ────► Security-Review, Runbook, Go-Live          ★ Skalierungsbereit
-```
+- [ ] Erstes echtes Custom-Plugin für einen Pro-Kunden (Plugin-System ist da, wartet auf realen Anwendungsfall)
+- [ ] Mindee-Adapter (zweiter OCR-Provider, wenn Google-Vision-Genauigkeit nicht reicht)
+- [ ] HA-Setup (n8n + Backend in 2 Replicas, Postgres-Replica)
+- [ ] Self-Service-Onboarding in der Webapp (heute: Operator-Onboarding)
+- [ ] DSGVO-Lösch-Workflow Audit (M12 ist da, regelmäßig durchprüfen)
 
 ---
 
-## 12. Was Claude Code an jedem Modul-Tag bekommt
+## 3. Architektur-Werte (unverändert)
 
-Pro Modul, in genau dieser Reihenfolge, mit der jeweiligen Modul-Spec:
+Auch nach Cleanup gelten weiter:
+
+1. **Modularität** — jedes Modul einzeln generierbar, einzeln deploybar.
+2. **Kundenprofil = Single Source of Truth** — keine Logik außerhalb des Profils.
+3. **Trennung n8n / Backend** — Workflow-Engine vs. Business-Logik strikt getrennt.
+4. **Erweiterbar ohne Umbau** — Hooks + Plugin-System für Pro-Anpassungen.
+5. **Bestehende Kundensoftware wird nie ersetzt** — Archivierung + Buchhaltung auf Kunden-Systemen.
+
+---
+
+## 4. Neue Module hinzufügen — Vorgehen
+
+Wenn ein Pro-Kunde ein Custom-Modul braucht:
+
+1. Modul-Spec in `modules/MXX_<Name>.md` anlegen (Vorlage: M10).
+2. Plugin-Manifest in `prozesspilot/backend/src/plugins/` schreiben.
+3. Code via Prompt-Template A aus [`06_Prompt_System.md`](06_Prompt_System.md) generieren.
+4. n8n-Workflow nach Konvention aus [`03_n8n_Workflows.md`](03_n8n_Workflows.md).
+5. Entweder als Plugin laden (Pro-Custom) oder als Core-Modul integrieren (allgemein verwendbar).
+
+**Wichtig nach jeder Änderung:** Konzept-Doku zuerst aktualisieren, dann Code. Sonst entsteht wieder ein Drift wie zuvor.
+
+---
+
+## 5. Kritischer Pfad bis zum ersten zahlenden Kunden
 
 ```
-1. "Lies diese Modul-Spec: docs/modules/M01_Belegerfassung_OCR.md"
-2. "Generiere DB-Migration in backend/prisma/migrations/, falls in der Spec gefordert."
-3. "Generiere den Backend-Service unter backend/src/modules/m01-receipt-intake/.
-    Beachte: Receipt-Schema aus docs/01_Datenmodell_Events.md.
-    Beachte: Hook-Points aus docs/04_Erweiterbarkeit_Pro.md."
-4. "Generiere Unit-Tests (Vitest) für die Service-Funktionen.
-    Generiere einen Integrationstest, der die Backend-Endpoints aufruft."
-5. "Generiere n8n-Workflow JSON unter n8n/workflows/WF-M01.json
-    nach den Konventionen aus docs/03_n8n_Workflows.md."
-6. "Erstelle eine README in backend/src/modules/m01-receipt-intake/README.md
-    mit: Zweck, Endpoints, ENV-Variablen, Test-Anleitung."
+[Phase A: 1–2 Tage Aufräumen + CI grün]
+        │
+        ▼
+[Phase B: 3–5 Tage Server-Deployment]
+        │
+        ├──► WhatsApp-Verifizierung (parallel, 2–3 Wochen)
+        │
+        ▼
+[Phase C: erstes Onboarding + 50 Test-Belege]
+        │
+        ▼
+[Erster zahlender Kunde live]
+        │
+        ▼
+[Phase D: Skalierung + reale Custom-Plugins]
 ```
 
-Damit ist jede Iteration deterministisch und review-fähig.
+**Realistische Zeitschätzung bis erster zahlender Kunde:** 3–4 Wochen ab Start Phase B (Engpass: Meta-Verifizierung).
+
+---
+
+## 6. Risiken (aktuell)
+
+| Risiko                                           | Wahrscheinlichkeit | Gegenmaßnahme                                              |
+|--------------------------------------------------|--------------------|------------------------------------------------------------|
+| Meta-WhatsApp-Verifizierung dauert > 3 Wochen    | mittel             | Parallel zu Server-Deployment starten, ngrok-Sandbox bis dahin |
+| Erste echte Belege offenbaren OCR-Schwachstellen | hoch               | Mindee-Adapter ist vorbereitet, Re-Run via Webapp möglich |
+| DSGVO-Anforderungen vom ersten Kunden            | niedrig            | M12 + DSGVO-Modul + EU-Hosting decken das ab               |
+| Custom-Plugin-Bedarf bevor Sandbox stabil        | niedrig            | Plugin-Sandbox-ADR bereits durchgedacht                    |
+| Kosten-Spike OpenAI/Anthropic                    | mittel             | Tarif-Limits pro Tenant + Mock-Modus für Tests bereits da  |
+
+---
+
+## 7. Was bewusst NICHT auf der Roadmap steht
+
+- Mobile App (Web-App reicht für die Operator-Sicht; Kunden interagieren nur via WhatsApp)
+- Eigener OCR-Service (Google Vision + Mindee reichen für absehbare Zeit)
+- Multi-Region-Hosting (DSGVO + initiale Kundenmenge → ein EU-Standort genügt)
+- Eigene Buchhaltungs-UI (das System ersetzt nie die Buchhaltungs-Software des Kunden)
+
+---
+
+**Letzte Aktualisierung:** 2026-05-07 (komplette Neufassung, weil Implementierung dem ursprünglichen 16-Wochen-Plan voraus war).

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProzessPilot — Status 2026-05-07 (post-cleanup)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2128;
+    --panel-2: #232c35;
+    --border: #2d3742;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0b429;
+    --danger: #f85149;
+    --ok: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro", system-ui, sans-serif;
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 32px; }
+  h1 { font-size: 28px; margin: 0 0 8px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .pill.ok { background: rgba(63,185,80,0.15); color: var(--ok); border: 1px solid rgba(63,185,80,0.3); }
+  .pill.warn { background: rgba(240,180,41,0.15); color: var(--warn); border: 1px solid rgba(240,180,41,0.3); }
+  .pill.danger { background: rgba(248,81,73,0.15); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
+  .pill.info { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+
+  section { margin-bottom: 40px; }
+  h2 { font-size: 18px; margin: 0 0 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  h2::before { content: ""; width: 4px; height: 20px; background: var(--accent); border-radius: 2px; }
+  h3 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent-2); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+  ul.clean li:last-child { border-bottom: none; }
+  ul.clean li::before {
+    content: "›";
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .reco {
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .reco.priority-high { border-left-color: var(--danger); }
+  .reco.priority-mid { border-left-color: var(--warn); }
+  .reco.priority-low { border-left-color: var(--accent-2); }
+  .reco h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .reco .why { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .reco .action { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 8px 10px; border-radius: 4px; margin-top: 8px; color: var(--accent-2); white-space: pre-wrap; }
+
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--accent-2); }
+
+  .alert {
+    background: rgba(63,185,80,0.08);
+    border: 1px solid rgba(63,185,80,0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  .alert strong { color: var(--ok); }
+
+  .flex-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .crossed { text-decoration: line-through; color: var(--muted); }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>ProzessPilot — Status (post-cleanup)</h1>
+  <div class="sub">IST-Stand · 2026-05-07 · Konzept synchronisiert mit Code · veraltete Files entfernt</div>
+</header>
+
+<div class="alert">
+  <strong>✓ Cleanup abgeschlossen</strong> · Konzept-Doku ist jetzt synchron zum Code. Sprint-Files ins Archiv, Foundation_Spec als erfüllt markiert, Roadmap auf IST umgeschrieben, drei undokumentierte Module (M11/M12/M13) nachgezogen, tote Refactor-Leiche <code>m04-categorize/</code> + leerer <code>_foundation/</code>-Ordner aus dem Repo entfernt.
+</div>
+
+<section>
+  <h2>Zahlen auf einen Blick</h2>
+  <div class="summary-grid">
+    <div class="stat"><div class="num">13/13</div><div class="lbl">Module dokumentiert + implementiert</div></div>
+    <div class="stat"><div class="num">17</div><div class="lbl">n8n Workflows</div></div>
+    <div class="stat"><div class="num">30</div><div class="lbl">Postgres-Migrationen</div></div>
+    <div class="stat"><div class="num">131</div><div class="lbl">Tests gesamt</div></div>
+    <div class="stat"><div class="num">24</div><div class="lbl">Module-Ordner Backend (war 26)</div></div>
+    <div class="stat"><div class="num">22</div><div class="lbl">Uncommitted Files (inkl. Cleanup)</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>1 · Konzeptentwicklung — was sich geändert hat</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Datei</th><th>Aktion</th><th>Begründung</th></tr></thead>
+      <tbody>
+        <tr><td><code>README.md</code></td><td><span class="pill info">neu geschrieben</span></td><td>IST-Stand, alle 13 Module, Verweis auf STATUS.html</td></tr>
+        <tr><td><code>05_Roadmap.md</code></td><td><span class="pill info">neu geschrieben</span></td><td>SOLL→IST umgekehrt, neue Phasen A/B/C/D</td></tr>
+        <tr><td><code>Foundation_Spec.md</code></td><td><span class="pill ok">als erfüllt markiert</span></td><td>Status-Block oben, Datei bleibt als Referenz</td></tr>
+        <tr><td><code>_sprints/Sprint_0_Foundation.md</code></td><td><span class="pill warn">→ _archive/</span></td><td>Sprint abgeschlossen, Decisions-Log nie ausgefüllt</td></tr>
+        <tr><td><code>_sprints/Sprint_1_MVP.md</code></td><td><span class="pill warn">→ _archive/</span></td><td>Sprint abgeschlossen</td></tr>
+        <tr><td><code>_sprints/</code></td><td><span class="pill danger">gelöscht (leer)</span></td><td>Ordner war nur noch leere Hülle</td></tr>
+        <tr><td><code>modules/M11_IMAP_Eingang.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec</td></tr>
+        <tr><td><code>modules/M12_DSGVO.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec</td></tr>
+        <tr><td><code>modules/M13_Steuerberater_Portal.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec, lebt unter <code>m06-advisor-portal/</code></td></tr>
+        <tr><td><code>STATUS.html</code></td><td><span class="pill info">aktualisiert</span></td><td>Diese Datei</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>2 · Repo (prozesspilot/) — was sich geändert hat</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Pfad</th><th>Aktion</th><th>Begründung</th></tr></thead>
+      <tbody>
+        <tr><td><code>backend/src/modules/m04-categorize/</code></td><td><span class="pill danger">gelöscht</span></td><td>Verifiziert tot — <code>app.ts:27</code> sagte selbst „intentionally omitted"</td></tr>
+        <tr><td><code>backend/src/modules/_foundation/</code></td><td><span class="pill danger">gelöscht</span></td><td>Leerer Stub-Ordner mit nur <code>.gitkeep</code></td></tr>
+        <tr><td><code>backend/dist/modules/m04-categorize/</code></td><td><span class="pill danger">gelöscht</span></td><td>Build-Reste, beim nächsten <code>npm run build</code> sowieso weg</td></tr>
+        <tr><td><code>backend/src/app.ts</code></td><td><span class="pill info">2× obsolete Kommentare entfernt</span></td><td>Verweise auf m04-categorize entfernt</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>Was bewusst NICHT angefasst wurde</h3>
+    <ul class="clean">
+      <li><code>m03-ocr/</code> + <code>m03-categorization/</code> — sind <strong>keine Duplikate</strong>. m03-ocr macht den OCR-Endpoint, m03-categorization die KI-Kategorisierung. Beide aktiv in <code>app.ts</code> registriert.</li>
+      <li><code>m06-sevdesk/</code> + <code>m06-advisor-portal/</code> — auch <strong>keine Duplikate</strong>. m06-advisor-portal ist das Steuerberater-Portal (M13), kein sevDesk-Submodul. Sinnvoll wäre Umbenennung auf <code>m13-advisor-portal/</code>, aber das beim nächsten Refactor — nicht jetzt, weil grüne Tests + stabiler Code.</li>
+      <li>Die 20 zuvor uncommitted Files — der eigentliche Code-Cleanup (n8n-Workflow-Refactoring + receipt.repository) war vor diesem Cleanup-Lauf schon da, sollte separat reviewt werden.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>3 · Modul-Status</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Modul</th><th>Paket</th><th>Spec</th><th>Code</th><th>n8n</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>M01 Belegerfassung &amp; OCR</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>14 .ts</td><td>WF-M01</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M02 Belegarchivierung</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>11 .ts</td><td>WF-M02</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M03 Kategorisierung</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>16+3 .ts (categorization + ocr)</td><td>WF-M03</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M04 DATEV-Export</td><td>Pro</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M04</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M05 Lexoffice</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M05</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M06 sevDesk</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>6 .ts</td><td>WF-M06</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M07 Excel/Sheets Export</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>12 .ts</td><td>WF-M07</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M08 Monatsreporting</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M08 + Cron</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M09 Lieferanten-Comm</td><td>Pro</td><td><span class="pill ok">✓</span></td><td>13 .ts</td><td>WF-M09 + Cron</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M10 WhatsApp</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>22 .ts</td><td>WF-INPUT-WHATSAPP</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M11 IMAP-Eingang</td><td>Basic+</td><td><span class="pill ok">✓ neu</span></td><td>2 .ts</td><td>WF-INPUT-IMAP</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M12 DSGVO-Workflows</td><td>alle</td><td><span class="pill ok">✓ neu</span></td><td>5 .ts</td><td>—</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M13 Steuerberater-Portal</td><td>Pro</td><td><span class="pill ok">✓ neu</span></td><td>5 .ts (in m06-advisor-portal/)</td><td>—</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>Plugin-System</td><td>Pro</td><td><span class="pill ok">in 04_Erweiterbarkeit</span></td><td>8 .ts</td><td>WF-PLUGIN-DISPATCHER</td><td><span class="pill ok">fertig</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>4 · Was als nächstes</h2>
+
+  <div class="reco priority-high">
+    <h4>① Uncommitted Changes commiten (10 min)</h4>
+    <p class="why">Ein commit für Cleanup (diese Session), ein commit für die ältere Refactoring-Welle (n8n-Workflows + receipt.repository).</p>
+    <div class="action">cd prozesspilot
+git add -p   # selektiv reviewen
+git commit -m "cleanup: remove m04-categorize remnant + empty _foundation/"
+git add -p
+git commit -m "refactor: n8n workflows + receipt repository"</div>
+  </div>
+
+  <div class="reco priority-high">
+    <h4>② Server-Deployment vorbereiten</h4>
+    <p class="why">Code ist ready, WhatsApp braucht eine echte HTTPS-URL, DSGVO einen EU-Server. Detail-Anleitung steht bereits in <code>infra/runbook/01_deployment.md</code>.</p>
+    <div class="action">→ Hetzner Cloud CX22 (4 GB RAM, EU, ~6 €/Monat)
+→ Domain + DNS auf Server
+→ docker-compose.prod.yml deployen
+→ Nginx + Let's Encrypt
+→ Sentry-DSN + Backup-Cron</div>
+  </div>
+
+  <div class="reco priority-mid">
+    <h4>③ WhatsApp Business API verifizieren — JETZT starten</h4>
+    <p class="why">Meta-Verifizierung dauert 2–3 Wochen. Sollte parallel zum Server-Setup angestoßen werden, sonst wird das der Engpass.</p>
+    <div class="action">→ Meta Business Manager → App anlegen
+→ Phone Number Display Name (kann nur 1× pro 30 Tage geändert werden)
+→ Webhook-URL muss HTTPS sein → erst nach Server-Deployment final konfigurierbar</div>
+  </div>
+
+  <div class="reco priority-mid">
+    <h4>④ Audit-Subagent einbauen</h4>
+    <p class="why">Damit dieser Drift Konzept↔Code nicht wieder auf 4 Wochen anwächst.</p>
+    <div class="action">.claude/agents/konzept-auditor.md   (Opus, read-only)
+.claude/commands/audit-konzept.md   (/audit-konzept)
+→ läuft nach jedem Sprint, schreibt _audit/REPORT.md</div>
+  </div>
+
+  <div class="reco priority-low">
+    <h4>⑤ m13-advisor-portal-Umbenennung (später)</h4>
+    <p class="why">Code lebt unter <code>m06-advisor-portal/</code>, ist aber konzeptionell M13. Sinnvoll umzubenennen, aber nicht jetzt — Tests sind grün, Code stabil. Beim nächsten Refactor-Sprint mit dranhängen.</p>
+  </div>
+
+  <div class="reco priority-low">
+    <h4>⑥ Erster Pilotkunde</h4>
+    <p class="why">Sobald Server live + WhatsApp verifiziert: Tenant nach <code>infra/runbook/04_tenant_onboarding.md</code> anlegen, 50 echte Belege durchlaufen lassen, Findings ins Konzept zurückspielen.</p>
+  </div>
+</section>
+
+<section>
+  <h2>5 · Verzeichnis nach Cleanup</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Konzeptentwicklung/</h3>
+<pre style="margin:0;font-size:12px;color:var(--muted);font-family:'SF Mono',Menlo,Consolas,monospace">
+README.md           ← IST-Stand
+STATUS.html         ← live (diese Datei)
+00_Architektur_Hauptdokument.md
+01_Datenmodell_Events.md
+02_Kundenprofil_System.md
+03_n8n_Workflows.md
+04_Erweiterbarkeit_Pro.md
+05_Roadmap.md       ← IST + nächste Schritte
+06_Prompt_System.md
+Foundation_Spec.md  ← erfüllt-Marker
+_archive/           ← Sprint 0 + 1 (historisch)
+modules/
+  M01..M10          ← original
+  M11_IMAP_Eingang.md          ← neu
+  M12_DSGVO.md                  ← neu
+  M13_Steuerberater_Portal.md   ← neu
+</pre>
+    </div>
+    <div class="card">
+      <h3>prozesspilot/backend/src/modules/</h3>
+<pre style="margin:0;font-size:12px;color:var(--muted);font-family:'SF Mono',Menlo,Consolas,monospace">
+_shared/
+customers/
+documents/
+dsgvo/                  ← M12
+m01-receipt-intake/
+m02-archive/
+m03-categorization/     ← M03 KI
+m03-ocr/                ← M03 OCR
+m04-datev/              ← M04
+m05-lexoffice/
+m06-advisor-portal/     ← M13 (lebt hier hist.)
+m06-sevdesk/            ← M06
+m07-spreadsheet/
+m08-reporting/
+m09-supplier-comm/
+m10-whatsapp/
+m11-imap/
+plugin-system/
+profiles/
+receipts/
+reports/
+routing/
+stats/
+tenants/
+
+ENTFERNT:
+  m04-categorize/       ← tote Refactor-Leiche
+  _foundation/          ← leer
+</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generiert am 2026-05-07 (post-cleanup) · ProzessPilot · STATUS.html
+</footer>
+
+</div>
+</body>
+</html>

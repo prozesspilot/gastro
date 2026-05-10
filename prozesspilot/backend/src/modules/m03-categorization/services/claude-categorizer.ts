@@ -197,7 +197,8 @@ export class ClaudeCategorizer {
 
     while (attempt <= RETRY_DELAYS_MS.length) {
       try {
-        const resp = await this.client?.messages.create({
+        if (!this.client) throw new Error('Anthropic client nicht initialisiert');
+        const resp = await this.client.messages.create({
           model: this.model,
           max_tokens: 1024,
           system: SYSTEM_PROMPT,
@@ -228,7 +229,7 @@ export class ClaudeCategorizer {
         }
 
         // Ungültige Antwort → 1× Re-Prompt
-        const reResp = await this.client?.messages.create({
+        const reResp = await this.client.messages.create({
           model: this.model,
           max_tokens: 1024,
           system: `${SYSTEM_PROMPT}\n\nRespond ONLY via the tool 'categorize_receipt'.`,

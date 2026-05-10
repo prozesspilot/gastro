@@ -67,7 +67,7 @@ declare module 'fastify' {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: Fastify-Generics erfordern explizite any für custom Logger-Typ
 export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   const app = Fastify({
     // Im Test-Modus kein Logging-Output; sonst eigene Pino-Instanz

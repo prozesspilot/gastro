@@ -31,7 +31,7 @@ export interface OverrideResolverInput {
 function normalize(s: string): string {
   return s
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '') // Diakritika
+    .replace(/[\u0300-\u036F]/g, '') // Diakritika
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();

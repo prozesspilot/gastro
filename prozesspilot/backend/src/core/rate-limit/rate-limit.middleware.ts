@@ -20,7 +20,7 @@ const LIMITS: Record<EndpointGroup, number> = {
 const WINDOW_SECONDS = 60;
 
 export interface RateLimitDeps {
-  redis: Redis;
+  redis: Pick<Redis, 'incr' | 'expire'>;
   /** Im Test override-bar */
   now?: () => number;
 }

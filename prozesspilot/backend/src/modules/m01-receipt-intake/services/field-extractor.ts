@@ -149,8 +149,7 @@ export async function extract(
         for (const [k, v] of Object.entries(claude.fields)) {
           const key = k as keyof ExtractedFields;
           if (fields[key] === undefined && v !== undefined && v !== null) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (fields as any)[key] = v;
+              (fields as Record<keyof ExtractedFields, unknown>)[key] = v;
           }
         }
         sources.claude = true;

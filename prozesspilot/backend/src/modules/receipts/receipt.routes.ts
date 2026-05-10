@@ -455,7 +455,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       reply.header('content-disposition', `attachment; filename="${filename}"`);
 
       const bytes = await stream.transformToByteArray?.();
-      return reply.send(Buffer.from(bytes));
+      return reply.send(Buffer.from(bytes ?? new Uint8Array()));
     } catch (err: unknown) {
       // S3-NoSuchKey → 404, andere Fehler → 500 via default error handler
       const awsErr = err as { name?: string; Code?: string };

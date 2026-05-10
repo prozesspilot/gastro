@@ -60,8 +60,14 @@ async function buildSingleZip(
 ): Promise<Buffer> {
   try {
     // Versuche archiver zu laden
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
-    const archiver = require('archiver') as (format: string, opts?: unknown) => any;
+    interface ArchiverInstance {
+      pipe(dest: NodeJS.WritableStream): void;
+      on(event: string, handler: (err?: Error) => void): void;
+      append(source: NodeJS.ReadableStream | Buffer, opts: { name: string }): void;
+      finalize(): Promise<void>;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const archiver = require('archiver') as (format: string, opts?: unknown) => ArchiverInstance;
     const { PassThrough } = await import('node:stream');
     const { Readable } = await import('node:stream');
 

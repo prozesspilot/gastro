@@ -34,9 +34,8 @@ function createFakeRedis(): FakeRedisShape & { reset(): void; map: Map<string, n
 describe('rate-limit checkAndIncrement', () => {
   it('erlaubt unter dem Limit', async () => {
     const redis = createFakeRedis();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await checkAndIncrement(
-      { redis: redis as any, now: () => 1_700_000_000_000 },
+      { redis, now: () => 1_700_000_000_000 },
       't1',
       'receipts_ocr',
     );
@@ -49,9 +48,8 @@ describe('rate-limit checkAndIncrement', () => {
     const redis = createFakeRedis();
     let last;
     for (let i = 0; i < 21; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       last = await checkAndIncrement(
-        { redis: redis as any, now: () => 1_700_000_000_000 },
+        { redis, now: () => 1_700_000_000_000 },
         't1',
         'receipts_ocr',
       );
@@ -63,16 +61,14 @@ describe('rate-limit checkAndIncrement', () => {
   it('zählt verschiedene Tenants unabhängig', async () => {
     const redis = createFakeRedis();
     for (let i = 0; i < 20; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await checkAndIncrement(
-        { redis: redis as any, now: () => 1_700_000_000_000 },
+        { redis, now: () => 1_700_000_000_000 },
         't1',
         'receipts_ocr',
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const t2 = await checkAndIncrement(
-      { redis: redis as any, now: () => 1_700_000_000_000 },
+      { redis, now: () => 1_700_000_000_000 },
       't2',
       'receipts_ocr',
     );
@@ -82,15 +78,13 @@ describe('rate-limit checkAndIncrement', () => {
 
   it('zählt verschiedene Endpoint-Gruppen unabhängig', async () => {
     const redis = createFakeRedis();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await checkAndIncrement(
-      { redis: redis as any, now: () => 1_700_000_000_000 },
+      { redis, now: () => 1_700_000_000_000 },
       't1',
       'receipts_ocr',
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await checkAndIncrement(
-      { redis: redis as any, now: () => 1_700_000_000_000 },
+      { redis, now: () => 1_700_000_000_000 },
       't1',
       'receipts_create',
     );
@@ -103,13 +97,11 @@ describe('rate-limit checkAndIncrement', () => {
     const redis = createFakeRedis();
     const baseMs = 1_700_000_000_000;
     for (let i = 0; i < 20; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await checkAndIncrement({ redis: redis as any, now: () => baseMs }, 't1', 'receipts_ocr');
+      await checkAndIncrement({ redis, now: () => baseMs }, 't1', 'receipts_ocr');
     }
     // 60s später → neuer Bucket
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const next = await checkAndIncrement(
-      { redis: redis as any, now: () => baseMs + 61_000 },
+      { redis, now: () => baseMs + 61_000 },
       't1',
       'receipts_ocr',
     );

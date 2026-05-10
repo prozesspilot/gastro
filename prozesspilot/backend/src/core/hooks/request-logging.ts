@@ -16,7 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import { getLogger } from '../logger';
 import { type TraceContext, newTraceId, traceStorage } from '../trace';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: Fastify-Generics erfordern explizite any für custom Logger-Typ
 export async function requestLoggingPlugin(
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {

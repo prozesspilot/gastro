@@ -121,8 +121,13 @@ export function buildSendHandler() {
       // Mail senden mit nodemailer
       let messageId: string | null = null;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
-        const nodemailer = require('nodemailer') as { createTransport: (opts: unknown) => any };
+        interface NodemailerTransporter {
+          sendMail(opts: Record<string, unknown>): Promise<{ messageId?: string }>;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const nodemailer = require('nodemailer') as {
+          createTransport: (opts: unknown) => NodemailerTransporter;
+        };
 
         const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST ?? 'localhost',

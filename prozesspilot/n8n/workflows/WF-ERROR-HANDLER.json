@@ -42,7 +42,7 @@
       "position": [720, 400],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/errors",
+        "url": "=http://host.docker.internal:3000/api/v1/errors",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -85,7 +85,7 @@
       "position": [1200, 280],
       "parameters": {
         "method": "PUT",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Function: Classify Error').item.json.receiptId}}/transition",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$('Function: Classify Error').item.json.receiptId}}/transition",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -140,7 +140,7 @@
       "position": [1680, 280],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/notifications/operator",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/notifications/operator",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

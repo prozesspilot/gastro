@@ -31,7 +31,7 @@
       "position": [480, 300],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/customers",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/customers",
         "qs": {
           "active": "true",
           "package": "standard,pro"
@@ -67,7 +67,7 @@
       "position": [960, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$json.id || $json.customer_id}}/reports/monthly/build",
+        "url": "=http://host.docker.internal:3000/api/v1/customers/{{$json.id || $json.customer_id}}/reports/monthly/build",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -122,7 +122,7 @@
       "position": [1680, 200],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$('Split: Customers').item.json.id || $('Split: Customers').item.json.customer_id}}/reports/monthly/deliver",
+        "url": "=http://host.docker.internal:3000/api/v1/customers/{{$('Split: Customers').item.json.id || $('Split: Customers').item.json.customer_id}}/reports/monthly/deliver",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

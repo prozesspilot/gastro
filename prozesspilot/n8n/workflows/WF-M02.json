@@ -44,7 +44,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}{{$json.__archivePath}}",
+        "url": "=http://host.docker.internal:3000{{$json.__archivePath}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

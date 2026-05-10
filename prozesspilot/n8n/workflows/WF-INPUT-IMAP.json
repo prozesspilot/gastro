@@ -27,7 +27,7 @@
       "position": [460, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/imap/poll",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/internal/imap/poll",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

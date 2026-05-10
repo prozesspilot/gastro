@@ -24,7 +24,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/plugins",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/plugins",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -68,7 +68,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/plugins/{{ $json.id ?? $json.plugin_id }}/executions",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/plugins/{{ $json.id ?? $json.plugin_id }}/executions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,

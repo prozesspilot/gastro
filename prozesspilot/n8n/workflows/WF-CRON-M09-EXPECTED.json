@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/customers",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/internal/customers",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -72,7 +72,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/communications/expected-check",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/communications/expected-check",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,

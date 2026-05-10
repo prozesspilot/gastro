@@ -41,7 +41,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/internal/customers",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/internal/customers",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -71,7 +71,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/customers/{{ $json.customer_id }}/reports/monthly/build",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/customers/{{ $json.customer_id }}/reports/monthly/build",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -120,7 +120,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BACKEND_URL }}/api/v1/customers/{{ $('Function: Kunden + Periode extrahieren').item.json.customer_id }}/reports/monthly/deliver",
+        "url": "={{ http://host.docker.internal:3000 }}/api/v1/customers/{{ $('Function: Kunden + Periode extrahieren').item.json.customer_id }}/reports/monthly/deliver",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

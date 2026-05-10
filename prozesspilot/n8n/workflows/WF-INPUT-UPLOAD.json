@@ -52,7 +52,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/profile/{{$json.customer_id}}",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/profile/{{$json.customer_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -88,7 +88,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/routing/plan",
+        "url": "=http://host.docker.internal:3000/api/v1/routing/plan",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -397,7 +397,7 @@
       ],
       "parameters": {
         "method": "PUT",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Code: Normalize Payload').item.json.receipt_id}}/status",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$('Code: Normalize Payload').item.json.receipt_id}}/status",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -417,7 +417,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"status\":\"done\"}",
+        "jsonBody": "{\"status\": \"completed\"}",
         "options": {
           "response": {
             "response": {

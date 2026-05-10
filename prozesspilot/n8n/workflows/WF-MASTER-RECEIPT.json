@@ -35,7 +35,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -89,7 +89,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/profile/{{$('Trigger: Sub-Workflow').item.json.customer_id}}",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/profile/{{$('Trigger: Sub-Workflow').item.json.customer_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -125,7 +125,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/routing/plan",
+        "url": "=http://host.docker.internal:3000/api/v1/routing/plan",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -182,7 +182,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -539,7 +539,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}/complete",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$('HTTP: Backend create_receipt').item.json.data.receipt_id}}/complete",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

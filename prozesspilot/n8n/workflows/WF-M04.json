@@ -35,7 +35,7 @@
       "position": [480, 400],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/customers?modules=m04_datev",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/customers?modules=m04_datev",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -77,7 +77,7 @@
       "position": [1200, 400],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$json.customer_id}}/datev/build",
+        "url": "=http://host.docker.internal:3000/api/v1/customers/{{$json.customer_id}}/datev/build",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -131,7 +131,7 @@
       "position": [1680, 280],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/customers/{{$('Code: Vormonat berechnen').item.json.customer_id}}/datev/{{$json.data.datev_export_id}}/send",
+        "url": "=http://host.docker.internal:3000/api/v1/customers/{{$('Code: Vormonat berechnen').item.json.customer_id}}/datev/{{$json.data.datev_export_id}}/send",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

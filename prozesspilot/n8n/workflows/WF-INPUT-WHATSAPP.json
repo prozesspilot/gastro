@@ -45,7 +45,7 @@
       "position": [720, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/resolve",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/whatsapp/resolve",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -71,7 +71,7 @@
       "position": [960, 300],
       "parameters": {
         "method": "GET",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/media/{{$('Function: Extract Message').item.json.media_id}}",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/whatsapp/media/{{$('Function: Extract Message').item.json.media_id}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -132,7 +132,7 @@
       "position": [1680, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/internal/whatsapp/send-text",
+        "url": "=http://host.docker.internal:3000/api/v1/internal/whatsapp/send-text",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

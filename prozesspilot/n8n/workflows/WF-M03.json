@@ -40,7 +40,7 @@
       "position": [700, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$json.receipt.receipt_id}}/categorize",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$json.receipt.receipt_id}}/categorize",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

@@ -44,7 +44,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}{{$json.__path}}",
+        "url": "=http://host.docker.internal:3000{{$json.__path}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

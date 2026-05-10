@@ -40,7 +40,7 @@
       "position": [700, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -67,7 +67,7 @@
       "position": [940, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.BACKEND_URL}}/api/v1/receipts/{{$('Function: Assert Status').item.json.receipt.receipt_id}}/extract",
+        "url": "=http://host.docker.internal:3000/api/v1/receipts/{{$('Function: Assert Status').item.json.receipt.receipt_id}}/extract",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

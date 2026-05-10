@@ -12,19 +12,17 @@ import { publishEvent } from '../../../core/events/publisher';
 
 export const RECEIPT_STREAM = 'pp:events:receipt';
 
-export type ExportEventType =
-  | 'pp.receipt.exported'
-  | 'pp.receipt.export_failed';
+export type ExportEventType = 'pp.receipt.exported' | 'pp.receipt.export_failed';
 
 export interface ExportEventData {
-  receipt_id:    string;
-  customer_id:   string;
-  status:        string;
-  target:        string;          // 'google_sheets' | 'excel_onedrive' | …
-  external_id?:  string;
+  receipt_id: string;
+  customer_id: string;
+  status: string;
+  target: string; // 'google_sheets' | 'excel_onedrive' | …
+  external_id?: string;
   external_url?: string;
-  trace_id?:     string;
-  error?:        string;
+  trace_id?: string;
+  error?: string;
 }
 
 export async function emitExportEvent(
@@ -35,7 +33,7 @@ export async function emitExportEvent(
   await publishEvent(redis, RECEIPT_STREAM, {
     type,
     customer_id: data.customer_id,
-    timestamp:   new Date().toISOString(),
-    payload:     JSON.stringify(data),
+    timestamp: new Date().toISOString(),
+    payload: JSON.stringify(data),
   });
 }

@@ -13,14 +13,13 @@
 import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { config } from '../../../core/config';
 
-export async function downloadObject(
-  s3: S3Client,
-  objectKey: string,
-): Promise<Buffer> {
-  const res = await s3.send(new GetObjectCommand({
-    Bucket: config.MINIO_BUCKET,
-    Key:    objectKey,
-  }));
+export async function downloadObject(s3: S3Client, objectKey: string): Promise<Buffer> {
+  const res = await s3.send(
+    new GetObjectCommand({
+      Bucket: config.MINIO_BUCKET,
+      Key: objectKey,
+    }),
+  );
   const stream = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
   if (!stream?.transformToByteArray) {
     throw new Error(`Storage-Download: leerer Body für ${objectKey}`);

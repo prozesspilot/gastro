@@ -35,4 +35,11 @@ export const adapterFactory: OcrAdapterFactory = {
   },
 };
 
-export type { OcrAdapter, OcrProviderId, OcrResult, OcrBlock, OcrWord, BBox } from './adapter.interface';
+export type {
+  OcrAdapter,
+  OcrProviderId,
+  OcrResult,
+  OcrBlock,
+  OcrWord,
+  BBox,
+} from './adapter.interface';

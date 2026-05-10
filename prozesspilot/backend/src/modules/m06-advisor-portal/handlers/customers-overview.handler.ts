@@ -8,8 +8,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const querySchema = z.object({
   advisor_id: z.string().min(1, 'advisor_id ist erforderlich'),
@@ -38,7 +38,7 @@ export function buildCustomersOverviewHandler() {
     try {
       // Prüfe ob advisor existiert
       const advisorRow = await db.query<{ advisor_id: string; tenant_id: string; name: string }>(
-        `SELECT advisor_id, tenant_id, name FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1`,
+        'SELECT advisor_id, tenant_id, name FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1',
         [advisor_id],
       );
       if (!advisorRow.rows[0]) {
@@ -47,7 +47,7 @@ export function buildCustomersOverviewHandler() {
 
       // Alle zugänglichen Kunden holen
       const accessRows = await db.query<{ customer_id: string }>(
-        `SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1`,
+        'SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1',
         [advisor_id],
       );
       const customerIds = accessRows.rows.map((r) => r.customer_id);
@@ -82,9 +82,9 @@ export function buildCustomersOverviewHandler() {
       const result: CustomerOverviewItem[] = aggRows.rows.map((row) => ({
         customer_id: row.customer_id,
         name: row.name ?? row.customer_id,
-        receipt_count: parseInt(row.receipt_count, 10),
-        pending_count: parseInt(row.pending_count, 10),
-        exported_count: parseInt(row.exported_count, 10),
+        receipt_count: Number.parseInt(row.receipt_count, 10),
+        pending_count: Number.parseInt(row.pending_count, 10),
+        exported_count: Number.parseInt(row.exported_count, 10),
       }));
 
       return reply.send(apiOk(result));

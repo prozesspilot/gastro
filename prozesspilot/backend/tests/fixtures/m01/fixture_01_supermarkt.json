@@ -4,10 +4,10 @@
   "expected_fields": {
     "supplier_vat_id": "DE123456789",
     "document_number": "RE-2026-1042",
-    "document_date":   "2026-04-28",
-    "currency":        "EUR",
-    "total_gross":     142.85,
-    "total_net":       120.04
+    "document_date": "2026-04-28",
+    "currency": "EUR",
+    "total_gross": 142.85,
+    "total_net": 120.04
   },
   "expected_status": "extracted",
   "expected_confidence_range": [0.85, 1.0],

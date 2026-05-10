@@ -13,15 +13,17 @@ vi.mock('@aws-sdk/client-s3', () => {
   const S3Client = vi.fn(() => ({ send: mockSend }));
   return {
     S3Client,
-    PutObjectCommand:    vi.fn((args: unknown) => ({ _type: 'PUT',    args })),
-    GetObjectCommand:    vi.fn((args: unknown) => ({ _type: 'GET',    args })),
+    PutObjectCommand: vi.fn((args: unknown) => ({ _type: 'PUT', args })),
+    GetObjectCommand: vi.fn((args: unknown) => ({ _type: 'GET', args })),
     DeleteObjectCommand: vi.fn((args: unknown) => ({ _type: 'DELETE', args })),
-    HeadObjectCommand:   vi.fn((args: unknown) => ({ _type: 'HEAD',   args })),
+    HeadObjectCommand: vi.fn((args: unknown) => ({ _type: 'HEAD', args })),
   };
 });
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: vi.fn().mockResolvedValue('https://minio.example.com/bucket/key?X-Amz-Signature=abc'),
+  getSignedUrl: vi
+    .fn()
+    .mockResolvedValue('https://minio.example.com/bucket/key?X-Amz-Signature=abc'),
 }));
 
 import { S3Client } from '@aws-sdk/client-s3';
@@ -39,7 +41,10 @@ function makeClient() {
   const send = vi.fn();
   // @ts-expect-error mock
   vi.mocked(S3Client).mockImplementation(() => ({ send }));
-  return { send, client: new S3Client({}) as unknown as InstanceType<typeof S3Client> & { send: typeof send } };
+  return {
+    send,
+    client: new S3Client({}) as unknown as InstanceType<typeof S3Client> & { send: typeof send },
+  };
 }
 
 // ── uploadObject ──────────────────────────────────────────────────────────────
@@ -51,7 +56,12 @@ describe('uploadObject', () => {
     const { send, client } = makeClient();
     send.mockResolvedValue({});
 
-    const result = await uploadObject(client, 'tenant/2024-01/doc.pdf', Buffer.from('PDF'), 'application/pdf');
+    const result = await uploadObject(
+      client,
+      'tenant/2024-01/doc.pdf',
+      Buffer.from('PDF'),
+      'application/pdf',
+    );
 
     expect(send).toHaveBeenCalledOnce();
     expect(result.key).toBe('tenant/2024-01/doc.pdf');
@@ -63,9 +73,9 @@ describe('uploadObject', () => {
     const { send, client } = makeClient();
     send.mockRejectedValue(new Error('NoSuchBucket'));
 
-    await expect(
-      uploadObject(client, 'k', Buffer.alloc(1), 'application/pdf'),
-    ).rejects.toThrow('NoSuchBucket');
+    await expect(uploadObject(client, 'k', Buffer.alloc(1), 'application/pdf')).rejects.toThrow(
+      'NoSuchBucket',
+    );
   });
 });
 

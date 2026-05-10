@@ -13,8 +13,8 @@
 
 export const STREAMS = {
   customers: 'pp:customers',
-  documents: 'pp:documents',   // für D8/D9
-  jobs:      'pp:jobs',        // für D9
+  documents: 'pp:documents', // für D8/D9
+  jobs: 'pp:jobs', // für D9
 } as const;
 
 export type StreamName = (typeof STREAMS)[keyof typeof STREAMS];
@@ -28,9 +28,9 @@ export type StreamName = (typeof STREAMS)[keyof typeof STREAMS];
  */
 export interface BaseEvent {
   /** Redis-Message-ID, z. B. "1718000000000-0" */
-  id:        string;
+  id: string;
   /** Diskriminierender Typ, z. B. "customer.created" */
-  type:      string;
+  type: string;
   tenant_id: string;
   /** ISO-8601-Timestamp */
   timestamp: string;
@@ -38,19 +38,16 @@ export interface BaseEvent {
 
 // ── Customer-Events ───────────────────────────────────────────────────────────
 
-export type CustomerEventType =
-  | 'customer.created'
-  | 'customer.updated'
-  | 'customer.soft_deleted';
+export type CustomerEventType = 'customer.created' | 'customer.updated' | 'customer.soft_deleted';
 
 export interface CustomerEventPayload {
-  customer_id:  string;
+  customer_id: string;
   /** Kurzname für Logging/Tracing — kein PII in der Stream-Nachricht */
   external_id?: string | null;
 }
 
 export interface CustomerEvent extends BaseEvent {
-  type:    CustomerEventType;
+  type: CustomerEventType;
   payload: CustomerEventPayload;
 }
 
@@ -60,8 +57,8 @@ export interface CustomerEvent extends BaseEvent {
  * So sieht ein Event in Redis Streams aus (alle Werte als Strings).
  */
 export interface RawStreamMessage {
-  type:      string;
+  type: string;
   tenant_id: string;
   timestamp: string;
-  payload:   string; // JSON.stringify(EventPayload)
+  payload: string; // JSON.stringify(EventPayload)
 }

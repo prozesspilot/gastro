@@ -67,10 +67,13 @@ export async function resolveFromMasterData(
   if (!row || !row.default_category || !row.default_skr) return null;
 
   const confidence =
-    row.match_kind === 'vat_id' ? 1.0 :
-    row.match_kind === 'name'   ? 0.95 :
-    row.match_kind === 'alias'  ? 0.9 :
-                                  0.0;
+    row.match_kind === 'vat_id'
+      ? 1.0
+      : row.match_kind === 'name'
+        ? 0.95
+        : row.match_kind === 'alias'
+          ? 0.9
+          : 0.0;
 
   if (confidence < MIN_CONFIDENCE) return null;
 

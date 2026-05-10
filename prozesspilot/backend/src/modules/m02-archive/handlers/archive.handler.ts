@@ -13,30 +13,30 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import {
-  createArchiveStorageAdapterFactory,
+  type ArchiveProviderId,
   type ArchiveStorageAdapter,
   type ArchiveStorageAdapterFactory,
-  type ArchiveProviderId,
+  createArchiveStorageAdapterFactory,
 } from '../../../core/adapters/archive-storage/factory';
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { imageToPdf, isPdf } from '../../../core/pdf/image-to-pdf';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { renderFilename, renderPathTemplate } from '../../../core/templates/path-template';
 
-import { archiveInputSchema } from '../schemas/archive.input';
-import { appendCounter, MAX_COLLISION_COUNTER } from '../services/collision-resolver';
-import { writeAudit } from '../services/audit.service';
-import { emitArchiveEvent } from '../services/event-emitter';
-import { downloadObject } from '../../m01-receipt-intake/services/storage-download';
 import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
+import { downloadObject } from '../../m01-receipt-intake/services/storage-download';
+import { archiveInputSchema } from '../schemas/archive.input';
+import { writeAudit } from '../services/audit.service';
+import { MAX_COLLISION_COUNTER, appendCounter } from '../services/collision-resolver';
+import { emitArchiveEvent } from '../services/event-emitter';
 
 const ACCEPTED_INPUT_STATUSES = new Set<string>(['extracted', 'categorized']);
 

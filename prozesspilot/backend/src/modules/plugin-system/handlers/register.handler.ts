@@ -5,8 +5,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const registerSchema = z.object({
   name: z.string().min(1).max(100),
@@ -40,10 +40,7 @@ const ALLOWED_HOOK_EVENTS = [
 ];
 
 export function buildRegisterHandler() {
-  return async function registerHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function registerHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(422).send(zodToApiError(parsed.error));
@@ -59,23 +56,23 @@ export function buildRegisterHandler() {
     }
 
     // Webhook-URL validieren: muss https:// sein (außer localhost in dev)
-    const isLocalhost = input.webhook_url.includes('localhost') ||
-      input.webhook_url.includes('127.0.0.1');
+    const isLocalhost =
+      input.webhook_url.includes('localhost') || input.webhook_url.includes('127.0.0.1');
     const isHttps = input.webhook_url.startsWith('https://');
 
     if (!isHttps && !isLocalhost) {
-      return reply.code(422).send(
-        apiError(
-          'WEBHOOK_URL_INVALID',
-          'Webhook-URL muss HTTPS verwenden (außer localhost in Entwicklung)',
-        ),
-      );
+      return reply
+        .code(422)
+        .send(
+          apiError(
+            'WEBHOOK_URL_INVALID',
+            'Webhook-URL muss HTTPS verwenden (außer localhost in Entwicklung)',
+          ),
+        );
     }
 
     // Hook-Events validieren
-    const invalidEvents = input.hook_events.filter(
-      (e) => !ALLOWED_HOOK_EVENTS.includes(e),
-    );
+    const invalidEvents = input.hook_events.filter((e) => !ALLOWED_HOOK_EVENTS.includes(e));
     if (invalidEvents.length > 0) {
       return reply.code(422).send(
         apiError('INVALID_HOOK_EVENTS', `Unbekannte Hook-Events: ${invalidEvents.join(', ')}`, {
@@ -117,9 +114,9 @@ export function buildRegisterHandler() {
       );
     } catch (err) {
       logger.error({ err, tenantId }, 'Plugin-Registrierung fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Plugin konnte nicht registriert werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Plugin konnte nicht registriert werden'));
     }
   };
 }

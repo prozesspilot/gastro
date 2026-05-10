@@ -20,98 +20,123 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 // Module hier stubben, damit ESM-Resolve nicht beim Modul-Load scheitert.
 vi.mock('googleapis', () => ({
   google: {
-    auth:   { OAuth2: class {} },
-    sheets: () => ({ spreadsheets: { get: vi.fn(), batchUpdate: vi.fn(), values: { get: vi.fn(), append: vi.fn(), update: vi.fn() } } }),
+    auth: { OAuth2: class {} },
+    sheets: () => ({
+      spreadsheets: {
+        get: vi.fn(),
+        batchUpdate: vi.fn(),
+        values: { get: vi.fn(), append: vi.fn(), update: vi.fn() },
+      },
+    }),
   },
 }));
 vi.mock('google-auth-library', () => ({
   OAuth2Client: class {},
 }));
 
-import { m07SpreadsheetRoutes } from '../routes';
 import type { SpreadsheetAdapter } from '../../../core/adapters/spreadsheet/factory';
+import { m07SpreadsheetRoutes } from '../routes';
 
 // ── Mock-Adapter ─────────────────────────────────────────────────────────────
 
 interface AdapterTrace {
   ensureTabExists: ReturnType<typeof vi.fn>;
-  ensureHeader:    ReturnType<typeof vi.fn>;
+  ensureHeader: ReturnType<typeof vi.fn>;
   findRowByReceiptId: ReturnType<typeof vi.fn>;
-  appendRow:       ReturnType<typeof vi.fn>;
-  updateRow:       ReturnType<typeof vi.fn>;
+  appendRow: ReturnType<typeof vi.fn>;
+  updateRow: ReturnType<typeof vi.fn>;
 }
 
-function makeMockAdapter(opts: { existingRow?: number | null } = {}): { adapter: SpreadsheetAdapter; trace: AdapterTrace } {
+function makeMockAdapter(opts: { existingRow?: number | null } = {}): {
+  adapter: SpreadsheetAdapter;
+  trace: AdapterTrace;
+} {
   const trace: AdapterTrace = {
     ensureTabExists: vi.fn(async () => undefined),
-    ensureHeader:    vi.fn(async () => undefined),
+    ensureHeader: vi.fn(async () => undefined),
     findRowByReceiptId: vi.fn(async () =>
       opts.existingRow != null ? { row_index: opts.existingRow } : null,
     ),
     appendRow: vi.fn(async (_ctx, _cust, sheetId, tab, _rid, row) => ({
       row_index: 157,
-      url:       `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=0&range=A157`,
-      _row:      row,
-      _tab:      tab,
+      url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=0&range=A157`,
+      _row: row,
+      _tab: tab,
     })),
     updateRow: vi.fn(async (_ctx, _cust, sheetId, _tab, _rid, rowIndex) => ({
       row_index: rowIndex,
-      url:       `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=0&range=A${rowIndex}`,
+      url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=0&range=A${rowIndex}`,
     })),
   };
   const adapter: SpreadsheetAdapter = {
     id: 'google_sheets',
-    ensureTabExists:  trace.ensureTabExists as unknown as SpreadsheetAdapter['ensureTabExists'],
-    ensureHeader:     trace.ensureHeader as unknown as SpreadsheetAdapter['ensureHeader'],
-    findRowByReceiptId: trace.findRowByReceiptId as unknown as SpreadsheetAdapter['findRowByReceiptId'],
-    appendRow:        trace.appendRow as unknown as SpreadsheetAdapter['appendRow'],
-    updateRow:        trace.updateRow as unknown as SpreadsheetAdapter['updateRow'],
+    ensureTabExists: trace.ensureTabExists as unknown as SpreadsheetAdapter['ensureTabExists'],
+    ensureHeader: trace.ensureHeader as unknown as SpreadsheetAdapter['ensureHeader'],
+    findRowByReceiptId:
+      trace.findRowByReceiptId as unknown as SpreadsheetAdapter['findRowByReceiptId'],
+    appendRow: trace.appendRow as unknown as SpreadsheetAdapter['appendRow'],
+    updateRow: trace.updateRow as unknown as SpreadsheetAdapter['updateRow'],
   };
   return { adapter, trace };
 }
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id:      string;
-  customer_id:     string;
-  status:          string;
-  file_object_key: string;
-  file_sha256:     string;
-  payload:         Record<string, unknown>;
-  created_at:      Date;
-  updated_at:      Date;
+  id: string;
+  customer_id: string;
+  status: string;
+  storage_key: string;
+  file_sha256: string;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
 }
 
 const fakeDb = {
   receipts: [] as FakeReceiptRow[],
-  audits:   [] as { action: string; payload: unknown }[],
-  reset() { this.receipts = []; this.audits = []; },
+  audits: [] as { action: string; payload: unknown }[],
+  reset() {
+    this.receipts = [];
+    this.audits = [];
+  },
   query: vi.fn(async (sql: string, params: unknown[] = []) => {
     if (/INSERT INTO audit_log/i.test(sql)) {
       fakeDb.audits.push({ action: String(params[2]), payload: JSON.parse(String(params[4])) });
       return { rows: [] };
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [string, string, string, string, string];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
-      const updated = {
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
+      const updated: FakeReceiptRow = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
-        file_sha256:     sha,
-        payload:         JSON.parse(payloadJson),
-        updated_at:      new Date(),
+        storage_key: key,
+        file_sha256: sha,
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
+        updated_at: new Date(),
       };
       fakeDb.receipts[idx] = updated;
       return { rows: [updated] };
     }
     if (/FROM\s+receipts/i.test(sql)) {
-      const isFindById = /receipt_id\s*=\s*\$1/i.test(sql);
+      // findById: WHERE id = $1 AND customer_id = $2
+      const isFindById = /WHERE\s+id\s*=\s*\$1/i.test(sql);
       if (isFindById) {
         const [id, cid] = params as [string, string];
-        const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+        const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
         return { rows: row ? [row] : [] };
       }
     }
@@ -134,43 +159,36 @@ let mockAdapter: SpreadsheetAdapter;
 let trace: AdapterTrace;
 
 const RECEIPT: FakeReceiptRow = {
-  receipt_id:      '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-  customer_id:     'cust_a3f4b2',
-  status:          'archived',
-  file_object_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
-  file_sha256:     'f3b8a91c2d7e44bb',
-  payload: {
-    receipt_id:  '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-    customer_id: 'cust_a3f4b2',
-    status:      'archived',
-    file: {
-      object_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
-      mime_type:  'image/jpeg',
-      size_bytes: 1024,
-      sha256:     'f3b8a91c2d7e44bb',
-    },
+  id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
+  customer_id: 'cust_a3f4b2',
+  status: 'archived',
+  storage_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
+  file_sha256: 'f3b8a91c2d7e44bb',
+  mime_type: 'image/jpeg',
+  file_size_bytes: 1024,
+  metadata: {
     extraction: {
       fields: {
-        supplier_name:   'Pizzeria Bella Italia',
+        supplier_name: 'Pizzeria Bella Italia',
         document_number: 'RE-2026-1042',
-        document_date:   '2026-04-28',
-        currency:        'EUR',
-        total_gross:     142.85,
-        total_net:       120.04,
-        payment_method:  'cash',
+        document_date: '2026-04-28',
+        currency: 'EUR',
+        total_gross: 142.85,
+        total_net: 120.04,
+        payment_method: 'cash',
         tax_lines: [
-          { rate: 0.19, amount: 19.00 },
-          { rate: 0.07, amount:  1.40 },
+          { rate: 0.19, amount: 19.0 },
+          { rate: 0.07, amount: 1.4 },
         ],
       },
     },
     categorization: {
       category_label: 'Wareneinkauf Lebensmittel',
-      skr_account:    '3100',
-      cost_center:    'kueche',
+      skr_account: '3100',
+      cost_center: 'kueche',
     },
     archive: {
-      path:         '/PP/Bella Italia/2026/04/2026-04-28_RE-2026-1042.pdf',
+      path: '/PP/Bella Italia/2026/04/2026-04-28_RE-2026-1042.pdf',
       external_url: 'https://drive.google.com/file/d/abc/view',
     },
     audit: {
@@ -191,9 +209,9 @@ const PROFILE_BASE = {
   integrations: {
     spreadsheet: {
       provider: 'google_sheets' as const,
-      enabled:  true,
+      enabled: true,
       config: {
-        sheet_id:          '1zXyZ-abc',
+        sheet_id: '1zXyZ-abc',
         tab_name_template: 'Belege {year}',
       },
     },
@@ -203,22 +221,24 @@ const PROFILE_BASE = {
 
 beforeAll(async () => {
   app = Fastify({ logger: false });
-  app.decorate('db',    fakeDb as never);
+  app.decorate('db', fakeDb as never);
   app.decorate('redis', fakeRedis as never);
 
-  app.addContentTypeParser(
-    'application/json',
-    { parseAs: 'buffer' },
-    (req, body, done) => {
-      (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
-      try { done(null, JSON.parse((body as Buffer).toString('utf-8'))); }
-      catch (err) { done(err as Error); }
-    },
-  );
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+    try {
+      done(null, JSON.parse((body as Buffer).toString('utf-8')));
+    } catch (err) {
+      done(err as Error);
+    }
+  });
 
-  await app.register(async (api) => {
-    await api.register(m07SpreadsheetRoutes, { prefix: '/receipts' });
-  }, { prefix: '/api/v1' });
+  await app.register(
+    async (api) => {
+      await api.register(m07SpreadsheetRoutes, { prefix: '/receipts' });
+    },
+    { prefix: '/api/v1' },
+  );
   await app.ready();
 });
 
@@ -228,7 +248,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   fakeDb.reset();
-  fakeDb.receipts.push({ ...RECEIPT, payload: { ...RECEIPT.payload } });
+  fakeDb.receipts.push({ ...RECEIPT, metadata: { ...RECEIPT.metadata } });
   vi.clearAllMocks();
 });
 
@@ -243,7 +263,7 @@ describe('M07 append.handler', () => {
     try {
       const res = await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE, trace_id: 'trc_t1' },
       });
@@ -255,7 +275,11 @@ describe('M07 append.handler', () => {
       expect(trace.appendRow).toHaveBeenCalledTimes(1);
       expect(trace.updateRow).not.toHaveBeenCalled();
 
-      const exports = body.data.receipt.exports as Array<{ target: string; status: string; external_id: string }>;
+      const exports = body.data.receipt.exports as Array<{
+        target: string;
+        status: string;
+        external_id: string;
+      }>;
       const gs = exports.find((e) => e.target === 'google_sheets');
       expect(gs).toBeDefined();
       expect(gs?.status).toBe('pushed');
@@ -273,7 +297,7 @@ describe('M07 append.handler', () => {
     try {
       const res = await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE, trace_id: 'trc_t2' },
       });
@@ -293,12 +317,15 @@ describe('M07 append.handler', () => {
     try {
       await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE, trace_id: 'trc_t3' },
       });
       expect(trace.ensureTabExists).toHaveBeenCalledWith(
-        expect.any(Object), 'cust_a3f4b2', '1zXyZ-abc', 'Belege 2026',
+        expect.any(Object),
+        'cust_a3f4b2',
+        '1zXyZ-abc',
+        'Belege 2026',
       );
     } finally {
       await localApp.close();
@@ -311,7 +338,7 @@ describe('M07 append.handler', () => {
     try {
       await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE, trace_id: 'trc_t4' },
       });
@@ -339,19 +366,19 @@ describe('M07 append.handler', () => {
           ],
         },
       };
-      // Receipt um meta.custom.branch + extraction.confidence ergänzen
-      fakeDb.receipts[0].payload = {
-        ...fakeDb.receipts[0].payload,
+      // Receipt um meta.custom.branch + extraction.confidence ergänzen — neue Schema: alles in metadata
+      fakeDb.receipts[0].metadata = {
+        ...fakeDb.receipts[0].metadata,
         meta: { custom: { branch: 'muenchen-altstadt' } },
         extraction: {
-          ...(fakeDb.receipts[0].payload.extraction as object),
+          ...(fakeDb.receipts[0].metadata.extraction as object),
           confidence: 0.94,
         },
       };
 
       await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: profile, trace_id: 'trc_t5' },
       });
@@ -378,7 +405,7 @@ describe('M07 append.handler', () => {
     try {
       const res = await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/UNKNOWN/exports/spreadsheet',
+        url: '/api/v1/receipts/UNKNOWN/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE },
       });
@@ -396,7 +423,7 @@ describe('M07 append.handler', () => {
       fakeDb.receipts[0].status = 'received';
       const res = await localApp.inject({
         method: 'POST',
-        url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
+        url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/exports/spreadsheet',
         headers: { 'content-type': 'application/json' },
         payload: { customer_profile: PROFILE_BASE },
       });
@@ -412,23 +439,25 @@ describe('M07 append.handler', () => {
 
 async function buildAppWith(opts: { adapter: SpreadsheetAdapter }): Promise<FastifyInstance> {
   const local = Fastify({ logger: false });
-  local.decorate('db',    fakeDb as never);
+  local.decorate('db', fakeDb as never);
   local.decorate('redis', fakeRedis as never);
-  local.addContentTypeParser(
-    'application/json',
-    { parseAs: 'buffer' },
-    (req, body, done) => {
-      (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
-      try { done(null, JSON.parse((body as Buffer).toString('utf-8'))); }
-      catch (err) { done(err as Error); }
+  local.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+    try {
+      done(null, JSON.parse((body as Buffer).toString('utf-8')));
+    } catch (err) {
+      done(err as Error);
+    }
+  });
+  await local.register(
+    async (api) => {
+      await api.register(m07SpreadsheetRoutes, {
+        prefix: '/receipts',
+        adapterFactory: { for: () => opts.adapter },
+      });
     },
+    { prefix: '/api/v1' },
   );
-  await local.register(async (api) => {
-    await api.register(m07SpreadsheetRoutes, {
-      prefix: '/receipts',
-      adapterFactory: { for: () => opts.adapter },
-    });
-  }, { prefix: '/api/v1' });
   await local.ready();
   return local;
 }

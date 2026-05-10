@@ -16,7 +16,10 @@ const envSchema = z.object({
   PP_HMAC_SECRET: z.string().default(''),
   PP_HMAC_TIMESTAMP_SKEW: z.coerce.number().default(300),
   // '1' = HMAC-Bypass aktiv. In Production VERBOTEN — Backend prüft und beendet sich.
-  PP_AUTH_DISABLED: z.string().transform((v) => v === '1').default('0'),
+  PP_AUTH_DISABLED: z
+    .string()
+    .transform((v) => v === '1')
+    .default('0'),
 
   PP_PGCRYPTO_KEY: z.string().default(''),
 
@@ -27,7 +30,7 @@ const envSchema = z.object({
   N8N_WEBHOOK_SECRET: z.string().default(''),
 
   CLAUDE_API_KEY: z.string().default(''),
-  CLAUDE_MODEL:   z.string().default('claude-sonnet-4-6'),
+  CLAUDE_MODEL: z.string().default('claude-sonnet-4-6'),
   GOOGLE_VISION_KEY_FILE: z.string().default(''),
   // M01 §15 — Timeout für OCR-Adapter (Default 15 s).
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
@@ -37,20 +40,20 @@ const envSchema = z.object({
 
   // ── M10: WhatsApp Eingang ────────────────────────────────────────────────
   // Meta App Secret — wird zur Validierung der X-Hub-Signature-256 genutzt.
-  WHATSAPP_APP_SECRET:        z.string().default(''),
+  WHATSAPP_APP_SECRET: z.string().default(''),
   // Initiale GET-Verify-Challenge bei Registrierung des Webhooks.
-  WHATSAPP_VERIFY_TOKEN:      z.string().default(''),
+  WHATSAPP_VERIFY_TOKEN: z.string().default(''),
   // Graph-API-Version (z. B. v19.0). Pro Customer überschreibbar via credential meta.
   WHATSAPP_GRAPH_API_VERSION: z.string().default('v19.0'),
   // Bucket für Original-Belege (M10 verwendet ihn implizit über MINIO_BUCKET;
   // separate Variable folgt der M10-Spec §14 für mögliche zukünftige Trennung).
-  STORAGE_RAW_BUCKET:         z.string().default('prozesspilot-raw'),
+  STORAGE_RAW_BUCKET: z.string().default('prozesspilot-raw'),
 
   // ── M07: Google Sheets / Google Drive OAuth ─────────────────────────────
   // Shared OAuth2-Client für Google Drive (M02) und Google Sheets (M07).
   // Pro Customer wird nur Refresh-Token + ggf. Access-Token in
   // customer_credentials hinterlegt; Client-ID/Secret sind global.
-  GOOGLE_OAUTH_CLIENT_ID:     z.string().default(''),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().default(''),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(''),
 });
 

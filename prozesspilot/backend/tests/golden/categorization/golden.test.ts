@@ -11,15 +11,15 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  createClaudeCategorizer,
   type AnthropicLikeClient,
   type AnthropicMessageResponse,
   type CategorizeRequest,
+  createClaudeCategorizer,
 } from '../../../src/modules/m03-categorization/services/claude-categorizer';
 import type { CategorizationResult } from '../../../src/modules/m03-categorization/services/types';
 

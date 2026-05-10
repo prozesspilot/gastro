@@ -11,10 +11,10 @@ import type Redis from 'ioredis';
 export type EndpointGroup = 'receipts_create' | 'receipts_ocr' | 'receipts_categorize' | 'default';
 
 const LIMITS: Record<EndpointGroup, number> = {
-  receipts_create:     100,
-  receipts_ocr:         20,
-  receipts_categorize:  20,
-  default:             500,
+  receipts_create: 100,
+  receipts_ocr: 20,
+  receipts_categorize: 20,
+  default: 500,
 };
 
 const WINDOW_SECONDS = 60;

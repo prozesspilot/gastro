@@ -90,21 +90,14 @@ export class SevDeskClient {
   constructor(opts: SevDeskClientOpts) {
     this.apiToken = opts.apiToken;
     this.customerId = opts.customerId;
-    this.baseUrl =
-      opts.baseUrl ??
-      process.env.SEVDESK_API_BASE ??
-      'https://my.sevdesk.de/api/v1';
+    this.baseUrl = opts.baseUrl ?? process.env.SEVDESK_API_BASE ?? 'https://my.sevdesk.de/api/v1';
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.timeoutMs =
-      opts.timeoutMs ??
-      Number(process.env.SEVDESK_DEFAULT_TIMEOUT_MS ?? '15000');
+    this.timeoutMs = opts.timeoutMs ?? Number(process.env.SEVDESK_DEFAULT_TIMEOUT_MS ?? '15000');
   }
 
   // ── Public Methods ─────────────────────────────────────────────────────────
 
-  async saveVoucher(
-    payload: SevDeskVoucherFactory,
-  ): Promise<SevDeskSaveVoucherResponse> {
+  async saveVoucher(payload: SevDeskVoucherFactory): Promise<SevDeskSaveVoucherResponse> {
     return this.requestJson<SevDeskSaveVoucherResponse>(
       'POST',
       '/Voucher/Factory/saveVoucher',
@@ -112,10 +105,7 @@ export class SevDeskClient {
     );
   }
 
-  async uploadTempFile(
-    fileBytes: Buffer,
-    fileName: string,
-  ): Promise<SevDeskTempFile> {
+  async uploadTempFile(fileBytes: Buffer, fileName: string): Promise<SevDeskTempFile> {
     const url = `${this.baseUrl}/Voucher/Factory/uploadTempFile`;
     const formData = new FormData();
     const blob = new Blob([fileBytes as unknown as ArrayBuffer], {
@@ -127,20 +117,16 @@ export class SevDeskClient {
     return res as SevDeskTempFile;
   }
 
-  async attachFileToVoucher(
-    voucherId: number,
-    filename: string,
-  ): Promise<void> {
+  async attachFileToVoucher(voucherId: number, filename: string): Promise<void> {
     await this.requestJson('PUT', `/Voucher/${voucherId}/attachDocument`, {
       filename,
     });
   }
 
   async getAccountingTypes(): Promise<SevDeskAccountingType[]> {
-    const res = await this.requestJson<{ objects: SevDeskAccountingType[] } | SevDeskAccountingType[]>(
-      'GET',
-      '/AccountingType',
-    );
+    const res = await this.requestJson<
+      { objects: SevDeskAccountingType[] } | SevDeskAccountingType[]
+    >('GET', '/AccountingType');
     if (Array.isArray(res)) return res;
     return (res as { objects: SevDeskAccountingType[] }).objects ?? [];
   }
@@ -156,9 +142,12 @@ export class SevDeskClient {
 
   async testConnection(): Promise<{ ok: boolean; organizationName?: string }> {
     try {
-      const res = await this.requestJson<{ objects?: { organizationName?: string } }>('GET', '/SevUser');
-      const orgName =
-        (res as { objects?: Array<{ organizationName?: string }> })?.objects?.[0]?.organizationName;
+      const res = await this.requestJson<{ objects?: { organizationName?: string } }>(
+        'GET',
+        '/SevUser',
+      );
+      const orgName = (res as { objects?: Array<{ organizationName?: string }> })?.objects?.[0]
+        ?.organizationName;
       return { ok: true, organizationName: orgName };
     } catch (err) {
       logger.warn({ err }, 'sevDesk connection test fehlgeschlagen');
@@ -168,20 +157,12 @@ export class SevDeskClient {
 
   // ── Internal ───────────────────────────────────────────────────────────────
 
-  private async requestJson<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async requestJson<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
     return this.requestWithRetry(method, url, body) as Promise<T>;
   }
 
-  private async requestWithRetry(
-    method: string,
-    url: string,
-    body?: unknown,
-  ): Promise<unknown> {
+  private async requestWithRetry(method: string, url: string, body?: unknown): Promise<unknown> {
     const RETRY_DELAYS_MS = [500, 2000, 8000];
     let attempt = 0;
     let lastErr: unknown = null;
@@ -208,8 +189,7 @@ export class SevDeskClient {
 
       if (res.status === 429) {
         const retryAfter = parseRetryAfter(res.headers.get('retry-after'));
-        const waitMs =
-          retryAfter ?? RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        const waitMs = retryAfter ?? RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
         if (attempt >= RETRY_DELAYS_MS.length) {
           const txt = await res.text().catch(() => '');
           throw new SevDeskApiError(429, `sevDesk 429 Rate-Limit — ${txt}`);
@@ -252,11 +232,7 @@ export class SevDeskClient {
     throw lastErr ?? new SevDeskApiError(0, 'sevDesk request failed after retries');
   }
 
-  private buildRequestInit(
-    method: string,
-    body: unknown,
-    signal: AbortSignal,
-  ): RequestInit {
+  private buildRequestInit(method: string, body: unknown, signal: AbortSignal): RequestInit {
     if (body instanceof FormData) {
       return {
         method,

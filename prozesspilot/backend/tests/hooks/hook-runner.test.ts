@@ -14,9 +14,9 @@ import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clearHookRunnerDeps,
   hookRunner,
   setHookRunnerDeps,
-  clearHookRunnerDeps,
 } from '../../src/core/hooks/hook-runner';
 import type { Receipt } from '../../src/modules/_shared/receipts/receipt.repository';
 
@@ -143,7 +143,9 @@ describe('Hook-Runner', () => {
 
     expect(fakeFetch).toHaveBeenCalledTimes(1);
     expect(result.meta).toBeDefined();
-    expect((result.meta as { custom?: { hook_touched?: boolean } }).custom?.hook_touched).toBe(true);
+    expect((result.meta as { custom?: { hook_touched?: boolean } }).custom?.hook_touched).toBe(
+      true,
+    );
   });
 
   it('http_webhook: Netzwerkfehler → Original-Payload, Fehler geloggt', async () => {
@@ -178,11 +180,14 @@ describe('Hook-Runner', () => {
   });
 
   it('http_webhook: 4xx → kein Retry, Hook ignoriert', async () => {
-    const fakeFetch = vi.fn(async () => ({
-      ok: false,
-      status: 400,
-      text: async () => 'bad request',
-    } as unknown as Response));
+    const fakeFetch = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 400,
+          text: async () => 'bad request',
+        }) as unknown as Response,
+    );
     const pool = buildFakePool([
       {
         hook_id: 'hk_3',
@@ -259,7 +264,8 @@ describe('Hook-Runner', () => {
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ patch: { receipt: { meta: { custom: { added: tag + '+x' } } } } }),
+        text: async () =>
+          JSON.stringify({ patch: { receipt: { meta: { custom: { added: `${tag}+x` } } } } }),
       } as unknown as Response;
     });
 
@@ -316,11 +322,14 @@ describe('Hook-Runner', () => {
   // ── User-Aufgabe 2 — explizite Test-Cases ────────────────────────────────
 
   it('User: Hook mit Erfolg → execution geloggt, status=success', async () => {
-    const fakeFetch = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({}),
-    } as unknown as Response));
+    const fakeFetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({}),
+        }) as unknown as Response,
+    );
     const pool = buildFakePool([
       {
         hook_id: 'hk_log_ok',
@@ -431,11 +440,14 @@ describe('Hook-Runner', () => {
   });
 
   it('Execution-Log enthält response_status 200 bei Erfolg', async () => {
-    const fakeFetch = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ patch: { receipt: { meta: { custom: { x: 1 } } } } }),
-    } as unknown as Response));
+    const fakeFetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ patch: { receipt: { meta: { custom: { x: 1 } } } } }),
+        }) as unknown as Response,
+    );
     const pool = buildFakePool([
       {
         hook_id: 'hk_status',

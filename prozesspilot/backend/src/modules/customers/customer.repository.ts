@@ -13,21 +13,16 @@
  */
 
 import type { Pool } from 'pg';
-import {
-  type CreateCustomerInput,
-  type CustomerResponse,
-  type ListCustomersQuery,
-  type UpdateCustomerInput,
-} from '../../core/schemas/customer';
-import {
-  decryptExpr,
-  decryptNullableExpr,
-  encryptExpr,
-  getCryptoKey,
-} from '../../core/db/crypto';
+import { decryptExpr, decryptNullableExpr, encryptExpr, getCryptoKey } from '../../core/db/crypto';
 import { withTenant } from '../../core/db/tenant';
 import type { PaginationMeta } from '../../core/schemas/common';
 import { buildPaginationMeta } from '../../core/schemas/common';
+import type {
+  CreateCustomerInput,
+  CustomerResponse,
+  ListCustomersQuery,
+  UpdateCustomerInput,
+} from '../../core/schemas/customer';
 
 // ── SELECT-Fragment mit Entschlüsselung ───────────────────────────────────
 
@@ -53,15 +48,15 @@ function selectColumns(): string {
 
 function rowToResponse(row: Record<string, unknown>): CustomerResponse {
   return {
-    id:          row.id as string,
-    tenant_id:   row.tenant_id as string,
-    name:        row.name as string,
-    email:       (row.email as string | null) ?? null,
-    tax_number:  (row.tax_number as string | null) ?? null,
+    id: row.id as string,
+    tenant_id: row.tenant_id as string,
+    name: row.name as string,
+    email: (row.email as string | null) ?? null,
+    tax_number: (row.tax_number as string | null) ?? null,
     external_id: (row.external_id as string | null) ?? null,
-    active:      row.active as boolean,
-    created_at:  (row.created_at as Date).toISOString(),
-    updated_at:  (row.updated_at as Date).toISOString(),
+    active: row.active as boolean,
+    created_at: (row.created_at as Date).toISOString(),
+    updated_at: (row.updated_at as Date).toISOString(),
   };
 }
 
@@ -82,8 +77,8 @@ export async function createCustomer(
       VALUES (
         $2,
         ${encryptExpr(3)},
-        ${input.email       ? encryptExpr(4) : 'NULL'},
-        ${input.tax_number  ? encryptExpr(input.email ? 5 : 4) : 'NULL'},
+        ${input.email ? encryptExpr(4) : 'NULL'},
+        ${input.tax_number ? encryptExpr(input.email ? 5 : 4) : 'NULL'},
         ${buildExternalIdParam(input)}
       )
       RETURNING
@@ -100,14 +95,10 @@ export async function createCustomer(
 }
 
 /** Hilfsfunktion: Parameterliste für INSERT */
-function buildInsertParams(
-  key: string,
-  tenantId: string,
-  input: CreateCustomerInput,
-): unknown[] {
+function buildInsertParams(key: string, tenantId: string, input: CreateCustomerInput): unknown[] {
   // $1=key, $2=tenantId, $3=name
   const params: unknown[] = [key, tenantId, input.name];
-  if (input.email)      params.push(input.email);
+  if (input.email) params.push(input.email);
   if (input.tax_number) params.push(input.tax_number);
   if (input.external_id) params.push(input.external_id);
   return params;
@@ -118,7 +109,7 @@ function buildExternalIdParam(input: CreateCustomerInput): string {
   if (!input.external_id) return 'NULL';
   // Parameter-Index: 3 (name) + optionale email + optionale tax_number + 1
   let idx = 3;
-  if (input.email)      idx++;
+  if (input.email) idx++;
   if (input.tax_number) idx++;
   return `$${idx + 1}`;
 }
@@ -146,13 +137,13 @@ export async function listCustomers(
   tenantId: string,
   query: ListCustomersQuery,
 ): Promise<{ data: CustomerResponse[]; pagination: PaginationMeta }> {
-  const key    = getCryptoKey();
+  const key = getCryptoKey();
   const offset = (query.page - 1) * query.limit;
 
   // Zulässige Spalten für ORDER BY (SQL-Injection-Schutz)
   const sortColumn: Record<string, string> = {
-    created_at:  'created_at',
-    updated_at:  'updated_at',
+    created_at: 'created_at',
+    updated_at: 'updated_at',
     external_id: 'external_id',
   };
   const orderCol = sortColumn[query.sort_by] ?? 'created_at';
@@ -182,19 +173,19 @@ export async function listCustomers(
       `SELECT COUNT(*) AS count FROM customers ${where}`,
       conditionParams,
     );
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = Number.parseInt(countResult.rows[0].count, 10);
 
     // Daten-Query: key=$1, Bedingungen mit um 1 verschobenen Indizes
     const dataParams: unknown[] = [key];
     const shiftedConditions = conditions.map((cond, i) => {
       dataParams.push(conditionParams[i]);
-      return cond.replace(/\$(\d+)/, (_, n) => `$${parseInt(n, 10) + 1}`);
+      return cond.replace(/\$(\d+)/, (_, n) => `$${Number.parseInt(n, 10) + 1}`);
     });
     const dataWhere =
       shiftedConditions.length > 0 ? `WHERE ${shiftedConditions.join(' AND ')}` : '';
 
     dataParams.push(query.limit, offset);
-    const limitIdx  = dataParams.length - 1;
+    const limitIdx = dataParams.length - 1;
     const offsetIdx = dataParams.length;
 
     const { rows } = await client.query<Record<string, unknown>>(
@@ -209,7 +200,7 @@ export async function listCustomers(
     );
 
     return {
-      data:       rows.map(rowToResponse),
+      data: rows.map(rowToResponse),
       pagination: buildPaginationMeta(query.page, query.limit, total),
     };
   });
@@ -226,7 +217,7 @@ export async function updateCustomer(
 
   return withTenant(pool, tenantId, async (client) => {
     // SET-Ausdrücke dynamisch zusammenbauen
-    const sets:   string[]  = ['updated_at = now()'];
+    const sets: string[] = ['updated_at = now()'];
     const params: unknown[] = [key, id]; // $1=key, $2=id
 
     if (input.name !== undefined) {
@@ -285,7 +276,7 @@ export async function softDeleteCustomer(
 ): Promise<boolean> {
   return withTenant(pool, tenantId, async (client) => {
     const { rowCount } = await client.query(
-      `UPDATE customers SET active = false, updated_at = now() WHERE id = $1 AND active = true`,
+      'UPDATE customers SET active = false, updated_at = now() WHERE id = $1 AND active = true',
       [id],
     );
     return (rowCount ?? 0) > 0;

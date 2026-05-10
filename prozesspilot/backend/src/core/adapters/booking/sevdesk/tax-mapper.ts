@@ -4,14 +4,14 @@
  */
 
 import type { Pool } from 'pg';
-import type { SevDeskClient } from './sevdesk.client';
 import { logger } from '../../../logger';
+import type { SevDeskClient } from './sevdesk.client';
 
 // Standard-Fallback-TaxRule-IDs für sevDesk (übliche Werte — können abweichen)
 const DEFAULT_TAX_RULE_IDS: Record<number, number> = {
   19: 1, // 19% Regelbesteuerung
-  7: 2,  // 7% ermäßigt
-  0: 5,  // 0% / steuerfrei
+  7: 2, // 7% ermäßigt
+  0: 5, // 0% / steuerfrei
 };
 
 /**

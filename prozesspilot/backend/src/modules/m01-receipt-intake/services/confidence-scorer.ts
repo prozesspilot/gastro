@@ -13,14 +13,14 @@
  */
 
 export interface CombineWeights {
-  ocr:    number; // 0..1
+  ocr: number; // 0..1
   fields: number; // 0..1
 }
 
 const DEFAULT_WEIGHTS: CombineWeights = { ocr: 0.6, fields: 0.4 };
 
 export function combineConfidence(
-  ocrConfidence:   number,
+  ocrConfidence: number,
   fieldsConfidence: number,
   weights: CombineWeights = DEFAULT_WEIGHTS,
 ): number {

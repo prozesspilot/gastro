@@ -31,7 +31,12 @@ export async function createTestCustomer(
   const customerId = opts.customerId ?? `cust_e2e_${Date.now().toString(36)}`;
   const integrations = opts.integrations ?? {};
   const routing = opts.routing ?? {};
-  const custom = { display_name: `Test ${customerId}`, package: opts.package ?? 'standard', status: 'active', ...(opts.custom ?? {}) };
+  const custom = {
+    display_name: `Test ${customerId}`,
+    package: opts.package ?? 'standard',
+    status: 'active',
+    ...(opts.custom ?? {}),
+  };
   const modules = opts.modules ?? ['M01', 'M03', 'M02', 'M07'];
 
   await pool.query(
@@ -43,7 +48,13 @@ export async function createTestCustomer(
            routing         = EXCLUDED.routing,
            custom          = EXCLUDED.custom,
            updated_at      = now()`,
-    [customerId, JSON.stringify(modules), JSON.stringify(integrations), JSON.stringify(routing), JSON.stringify(custom)],
+    [
+      customerId,
+      JSON.stringify(modules),
+      JSON.stringify(integrations),
+      JSON.stringify(routing),
+      JSON.stringify(custom),
+    ],
   );
 
   return {
@@ -53,11 +64,19 @@ export async function createTestCustomer(
       // Wenn `receipts.customer_id` ein UUID-Typ ist (Migration 013), dann
       // wirft das DELETE — wir fangen das hier ab, damit der nachfolgende
       // customer_profiles-Cleanup garantiert läuft.
-      await pool.query(`DELETE FROM hook_executions WHERE customer_id = $1`, [customerId]).catch(() => undefined);
-      await pool.query(`DELETE FROM error_log WHERE customer_id = $1`, [customerId]).catch(() => undefined);
-      await pool.query(`DELETE FROM customer_hooks WHERE customer_id = $1`, [customerId]).catch(() => undefined);
-      await pool.query(`DELETE FROM receipts WHERE customer_id = $1`, [customerId]).catch(() => undefined);
-      await pool.query(`DELETE FROM customer_profiles WHERE customer_id = $1`, [customerId]);
+      await pool
+        .query('DELETE FROM hook_executions WHERE customer_id = $1', [customerId])
+        .catch(() => undefined);
+      await pool
+        .query('DELETE FROM error_log WHERE customer_id = $1', [customerId])
+        .catch(() => undefined);
+      await pool
+        .query('DELETE FROM customer_hooks WHERE customer_id = $1', [customerId])
+        .catch(() => undefined);
+      await pool
+        .query('DELETE FROM receipts WHERE customer_id = $1', [customerId])
+        .catch(() => undefined);
+      await pool.query('DELETE FROM customer_profiles WHERE customer_id = $1', [customerId]);
     },
   };
 }

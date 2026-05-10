@@ -12,22 +12,15 @@
  *  5) Receipt zurückgeben
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { Pool } from 'pg';
 
 import { config } from '../../core/config';
 import { logger } from '../../core/logger';
-import {
-  apiError,
-  apiOk,
-  zodToApiError,
-} from '../../core/schemas/common';
-import {
-  getReceipt,
-  updateReceiptStatus,
-} from '../receipts/receipt.repository';
+import { apiError, apiOk, zodToApiError } from '../../core/schemas/common';
+import { getReceipt, updateReceiptStatus } from '../receipts/receipt.repository';
 import type { ReceiptResponse, ReceiptRow } from '../receipts/receipt.schema';
 import { ocrParamsSchema } from './ocr.schema';
 
@@ -35,14 +28,11 @@ export interface OcrHandlerDeps {
   s3?: S3Client;
 }
 
-async function downloadStorageObject(
-  s3: S3Client,
-  objectKey: string,
-): Promise<Buffer> {
+async function downloadStorageObject(s3: S3Client, objectKey: string): Promise<Buffer> {
   const res = await s3.send(
     new GetObjectCommand({
       Bucket: config.MINIO_BUCKET,
-      Key:    objectKey,
+      Key: objectKey,
     }),
   );
   const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
@@ -62,8 +52,9 @@ let cachedVisionClient: VisionLazyClient | null = null;
 async function getVisionClient(): Promise<VisionLazyClient> {
   if (cachedVisionClient) return cachedVisionClient;
   const mod = await import('@google-cloud/vision');
-  const ctor = (mod as { ImageAnnotatorClient: new (opts: { keyFilename?: string }) => VisionLazyClient })
-    .ImageAnnotatorClient;
+  const ctor = (
+    mod as { ImageAnnotatorClient: new (opts: { keyFilename?: string }) => VisionLazyClient }
+  ).ImageAnnotatorClient;
   cachedVisionClient = new ctor({ keyFilename: config.GOOGLE_VISION_KEY_FILE });
   return cachedVisionClient;
 }
@@ -83,12 +74,8 @@ async function runVisionOcr(bytes: Buffer): Promise<{ text: string; confidence: 
   const r = response as VisionResp;
   const text = r.fullTextAnnotation?.text ?? '';
   const pages = r.fullTextAnnotation?.pages ?? [];
-  const confs = pages
-    .map((p) => p.confidence)
-    .filter((c): c is number => typeof c === 'number');
-  const confidence = confs.length > 0
-    ? confs.reduce((a, b) => a + b, 0) / confs.length
-    : 0;
+  const confs = pages.map((p) => p.confidence).filter((c): c is number => typeof c === 'number');
+  const confidence = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
   return { text, confidence };
 }
 
@@ -108,9 +95,7 @@ export function buildOcrHandler(deps: OcrHandlerDeps = {}) {
     // 1) Receipt laden
     const receipt = await getReceipt(db, tenantId, receiptId);
     if (!receipt) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${receiptId} nicht gefunden.`),
-      );
+      return reply.code(404).send(apiError('NOT_FOUND', `Receipt ${receiptId} nicht gefunden.`));
     }
 
     // 2) Status auf 'processing'
@@ -142,9 +127,9 @@ export function buildOcrHandler(deps: OcrHandlerDeps = {}) {
       const ocrAt = new Date().toISOString();
       const newMetadata = {
         ...(receipt.metadata ?? {}),
-        ocr_text:       ocrText,
+        ocr_text: ocrText,
         ocr_confidence: ocrConfidence,
-        ocr_at:         ocrAt,
+        ocr_at: ocrAt,
       };
 
       const { rows } = await db.query<ReceiptRow>(
@@ -160,46 +145,38 @@ export function buildOcrHandler(deps: OcrHandlerDeps = {}) {
       );
 
       if (!rows[0]) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Receipt ${receiptId} nicht gefunden.`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Receipt ${receiptId} nicht gefunden.`));
       }
 
       const updated: ReceiptResponse = {
-        id:              rows[0].id,
-        tenant_id:       rows[0].tenant_id,
-        customer_id:     rows[0].customer_id,
-        status:          rows[0].status as ReceiptResponse['status'],
-        original_name:   rows[0].original_name,
-        mime_type:       rows[0].mime_type,
-        storage_key:     rows[0].storage_key,
+        id: rows[0].id,
+        tenant_id: rows[0].tenant_id,
+        customer_id: rows[0].customer_id,
+        status: rows[0].status as ReceiptResponse['status'],
+        original_name: rows[0].original_name,
+        mime_type: rows[0].mime_type,
+        storage_key: rows[0].storage_key,
         file_size_bytes: rows[0].file_size_bytes,
-        file_sha256:     rows[0].file_sha256,
-        source:          rows[0].source as ReceiptResponse['source'],
-        metadata:        rows[0].metadata,
-        error_message:   rows[0].error_message,
-        created_at:      rows[0].created_at.toISOString(),
-        updated_at:      rows[0].updated_at.toISOString(),
+        file_sha256: rows[0].file_sha256,
+        source: rows[0].source as ReceiptResponse['source'],
+        metadata: rows[0].metadata,
+        error_message: rows[0].error_message,
+        created_at: rows[0].created_at.toISOString(),
+        updated_at: rows[0].updated_at.toISOString(),
       };
 
       return reply.send(
         apiOk({
-          receipt:        updated,
-          ocr_text:       ocrText,
+          receipt: updated,
+          ocr_text: ocrText,
           ocr_confidence: ocrConfidence,
-          ocr_at:         ocrAt,
+          ocr_at: ocrAt,
           mock,
         }),
       );
     } catch (err) {
       logger.error({ err, receiptId, tenantId }, 'M03 OCR fehlgeschlagen');
-      await updateReceiptStatus(
-        db,
-        tenantId,
-        receiptId,
-        'error',
-        (err as Error).message,
-      );
+      await updateReceiptStatus(db, tenantId, receiptId, 'error', (err as Error).message);
       return reply.code(502).send(
         apiError('OCR_FAILED', 'OCR-Verarbeitung fehlgeschlagen.', {
           message: (err as Error).message,

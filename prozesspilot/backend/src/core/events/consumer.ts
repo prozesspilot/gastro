@@ -18,13 +18,12 @@ import type { RawStreamMessage } from './types';
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
-export type EventHandler = (
-  messageId: string,
-  fields: RawStreamMessage,
-) => Promise<void>;
+export type EventHandler = (messageId: string, fields: RawStreamMessage) => Promise<void>;
 
 // ioredis XREADGROUP-Ergebnis-Typ (vereinfacht)
-type XReadGroupResult = Array<[stream: string, messages: Array<[id: string, fields: string[]]>]> | null;
+type XReadGroupResult = Array<
+  [stream: string, messages: Array<[id: string, fields: string[]]>]
+> | null;
 
 // ── Consumer-Group erstellen ──────────────────────────────────────────────────
 
@@ -38,9 +37,17 @@ export async function createConsumerGroup(
   group: string,
 ): Promise<void> {
   try {
-    await (redis as unknown as {
-      xgroup(cmd: string, key: string, groupname: string, id: string, mkstream: string): Promise<string>;
-    }).xgroup('CREATE', stream, group, '$', 'MKSTREAM');
+    await (
+      redis as unknown as {
+        xgroup(
+          cmd: string,
+          key: string,
+          groupname: string,
+          id: string,
+          mkstream: string,
+        ): Promise<string>;
+      }
+    ).xgroup('CREATE', stream, group, '$', 'MKSTREAM');
     logger.info({ stream, group }, 'Consumer Group erstellt');
   } catch (err) {
     // BUSYGROUP = Group existiert bereits — kein Fehler
@@ -68,18 +75,32 @@ export async function consumeEvents(
   handler: EventHandler,
   count = 10,
 ): Promise<void> {
-  const results = await (redis as unknown as {
-    xreadgroup(
-      groupStr: 'GROUP', group: string, consumer: string,
-      countStr: 'COUNT', count: string,
-      blockStr: 'BLOCK', block: string,
-      streamsStr: 'STREAMS', stream: string, id: string,
-    ): Promise<XReadGroupResult>;
-  }).xreadgroup(
-    'GROUP', group, consumer,
-    'COUNT', String(count),
-    'BLOCK', '2000',
-    'STREAMS', stream, '>',
+  const results = await (
+    redis as unknown as {
+      xreadgroup(
+        groupStr: 'GROUP',
+        group: string,
+        consumer: string,
+        countStr: 'COUNT',
+        count: string,
+        blockStr: 'BLOCK',
+        block: string,
+        streamsStr: 'STREAMS',
+        stream: string,
+        id: string,
+      ): Promise<XReadGroupResult>;
+    }
+  ).xreadgroup(
+    'GROUP',
+    group,
+    consumer,
+    'COUNT',
+    String(count),
+    'BLOCK',
+    '2000',
+    'STREAMS',
+    stream,
+    '>',
   );
 
   if (!results) return; // Timeout — keine neuen Nachrichten
@@ -94,11 +115,16 @@ export async function consumeEvents(
 
       try {
         await handler(id, fields as unknown as RawStreamMessage);
-        await (redis as unknown as {
-          xack(stream: string, group: string, ...ids: string[]): Promise<number>;
-        }).xack(stream, group, id);
+        await (
+          redis as unknown as {
+            xack(stream: string, group: string, ...ids: string[]): Promise<number>;
+          }
+        ).xack(stream, group, id);
       } catch (err) {
-        logger.error({ err, id, stream, group }, 'Event-Handler fehlgeschlagen — Nachricht bleibt im PEL');
+        logger.error(
+          { err, id, stream, group },
+          'Event-Handler fehlgeschlagen — Nachricht bleibt im PEL',
+        );
       }
     }
   }

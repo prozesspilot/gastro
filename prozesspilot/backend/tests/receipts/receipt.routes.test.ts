@@ -32,15 +32,15 @@ afterAll(async () => {
 beforeEach(async () => {
   if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-receipts-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Test-Mandant'],
   );
   tenantId = rows[0].id;
 
   // Customer anlegen — Receipts brauchen FK auf Customer
   const cRes = await app.inject({
-    method:  'POST',
-    url:     '/api/v1/customers',
+    method: 'POST',
+    url: '/api/v1/customers',
     headers: { 'content-type': 'application/json', 'x-pp-tenant-id': tenantId },
     payload: { name: 'Test Customer' },
   });
@@ -49,7 +49,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
 });
 
 function headers() {
@@ -58,10 +58,15 @@ function headers() {
 
 async function createTestReceipt(overrides: Record<string, unknown> = {}) {
   return app.inject({
-    method:  'POST',
-    url:     '/api/v1/receipts',
+    method: 'POST',
+    url: '/api/v1/receipts',
     headers: headers(),
-    payload: { customer_id: customerId, original_name: 'beleg.pdf', mime_type: 'application/pdf', ...overrides },
+    payload: {
+      customer_id: customerId,
+      original_name: 'beleg.pdf',
+      mime_type: 'application/pdf',
+      ...overrides,
+    },
   });
 }
 
@@ -83,8 +88,8 @@ describe.skipIf(!E2E)('POST /api/v1/receipts', () => {
 
   it('gibt 422 bei fehlendem customer_id zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts',
+      method: 'POST',
+      url: '/api/v1/receipts',
       headers: headers(),
       payload: {},
     });
@@ -94,8 +99,8 @@ describe.skipIf(!E2E)('POST /api/v1/receipts', () => {
 
   it('gibt 400 bei fehlendem tenant-Header zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts',
+      method: 'POST',
+      url: '/api/v1/receipts',
       headers: { 'content-type': 'application/json' },
       payload: { customer_id: customerId },
     });
@@ -113,7 +118,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts',
+      url: '/api/v1/receipts',
       headers: headers(),
     });
     const body = res.json();
@@ -127,11 +132,13 @@ describe.skipIf(!E2E)('GET /api/v1/receipts', () => {
     await createTestReceipt();
     const res = await app.inject({
       method: 'GET',
-      url:    `/api/v1/receipts?customer_id=${customerId}`,
+      url: `/api/v1/receipts?customer_id=${customerId}`,
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.receipts.every((r: { customer_id: string }) => r.customer_id === customerId)).toBe(true);
+    expect(
+      res.json().data.receipts.every((r: { customer_id: string }) => r.customer_id === customerId),
+    ).toBe(true);
   });
 });
 
@@ -144,7 +151,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url:    `/api/v1/receipts/${id}`,
+      url: `/api/v1/receipts/${id}`,
       headers: headers(),
     });
     const body = res.json();
@@ -156,7 +163,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id', () => {
   it('gibt 404 bei unbekannter ID zurück', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts/00000000-0000-0000-0000-000000000000',
+      url: '/api/v1/receipts/00000000-0000-0000-0000-000000000000',
       headers: headers(),
     });
     expect(res.statusCode).toBe(404);
@@ -171,8 +178,8 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/:id/status', () => {
     const id = created.data.id;
 
     const res = await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${id}/status`,
       headers: headers(),
       payload: { status: 'done' },
     });
@@ -186,8 +193,8 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/:id/status', () => {
     const id = created.data.id;
 
     const res = await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${id}/status`,
       headers: headers(),
       payload: { status: 'error', error_message: 'OCR fehlgeschlagen' },
     });
@@ -200,8 +207,8 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/:id/status', () => {
   it('gibt 422 bei ungültigem Status zurück', async () => {
     const created = (await createTestReceipt()).json();
     const res = await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${created.data.id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${created.data.id}/status`,
       headers: headers(),
       payload: { status: 'foobar' },
     });
@@ -217,15 +224,15 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/stats', () => {
     await createTestReceipt({ source: 'whatsapp' });
     const r3 = (await createTestReceipt()).json();
     await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${r3.data.id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${r3.data.id}/status`,
       headers: headers(),
       payload: { status: 'done' },
     });
 
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts/stats',
+      url: '/api/v1/receipts/stats',
       headers: headers(),
     });
     const body = res.json();
@@ -244,19 +251,19 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/stats', () => {
 
     // Anderen Tenant anlegen, prüfen, dass dessen Stats leer sind
     const { rows } = await app.db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-iso-${Date.now()}`, 'Iso'],
     );
     const otherTenant = rows[0].id;
 
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts/stats',
+      url: '/api/v1/receipts/stats',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenant },
     });
     expect(res.json().data.total).toBe(0);
 
-    await app.db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant]);
+    await app.db.query('DELETE FROM tenants WHERE id = $1', [otherTenant]);
   });
 });
 
@@ -269,22 +276,24 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/bulk-status', () => {
     const r3 = (await createTestReceipt()).json();
 
     const res = await app.inject({
-      method:  'PUT',
-      url:     '/api/v1/receipts/bulk-status',
+      method: 'PUT',
+      url: '/api/v1/receipts/bulk-status',
       headers: headers(),
       payload: { ids: [r1.data.id, r2.data.id, r3.data.id], status: 'done' },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().data.count).toBe(3);
-    expect(res.json().data.updated.every((r: { status: string }) => r.status === 'done')).toBe(true);
+    expect(res.json().data.updated.every((r: { status: string }) => r.status === 'done')).toBe(
+      true,
+    );
   });
 
   it('gibt 422 bei mehr als 50 IDs zurück', async () => {
     const ids = Array.from({ length: 51 }, () => '00000000-0000-0000-0000-000000000000');
     const res = await app.inject({
-      method:  'PUT',
-      url:     '/api/v1/receipts/bulk-status',
+      method: 'PUT',
+      url: '/api/v1/receipts/bulk-status',
       headers: headers(),
       payload: { ids, status: 'done' },
     });
@@ -297,20 +306,20 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/bulk-status', () => {
 
     // Anderer Tenant + Customer + Receipt
     const { rows } = await app.db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-bulk-iso-${Date.now()}`, 'OtherTenant'],
     );
     const otherTenant = rows[0].id;
     const otherCustomerRes = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/customers',
+      method: 'POST',
+      url: '/api/v1/customers',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenant },
       payload: { name: 'Other' },
     });
     const otherCustomerId = otherCustomerRes.json().data.id;
     const otherReceipt = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts',
+      method: 'POST',
+      url: '/api/v1/receipts',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenant },
       payload: { customer_id: otherCustomerId },
     });
@@ -318,8 +327,8 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/bulk-status', () => {
 
     // Bulk im aktuellen Tenant — versucht, fremde ID zu treffen
     const res = await app.inject({
-      method:  'PUT',
-      url:     '/api/v1/receipts/bulk-status',
+      method: 'PUT',
+      url: '/api/v1/receipts/bulk-status',
       headers: headers(),
       payload: { ids: [r1.data.id, otherId], status: 'done' },
     });
@@ -328,13 +337,13 @@ describe.skipIf(!E2E)('PUT /api/v1/receipts/bulk-status', () => {
 
     // Fremder Receipt darf nicht 'done' sein
     const checkOther = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/receipts/${otherId}`,
+      method: 'GET',
+      url: `/api/v1/receipts/${otherId}`,
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenant },
     });
     expect(checkOther.json().data.status).toBe('pending');
 
-    await app.db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant]);
+    await app.db.query('DELETE FROM tenants WHERE id = $1', [otherTenant]);
   });
 });
 
@@ -347,7 +356,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/export', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts/export',
+      url: '/api/v1/receipts/export',
       headers: headers(),
     });
 
@@ -361,7 +370,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/export', () => {
   it('setzt content-disposition Header', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/receipts/export',
+      url: '/api/v1/receipts/export',
       headers: headers(),
     });
     expect(res.headers['content-disposition']).toMatch(/attachment.*filename/);
@@ -375,19 +384,21 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit Filtern', () => {
     const r1 = (await createTestReceipt()).json();
     const r2 = (await createTestReceipt()).json();
     await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${r2.data.id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${r2.data.id}/status`,
       headers: headers(),
       payload: { status: 'done' },
     });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts?status=pending',
+      method: 'GET',
+      url: '/api/v1/receipts?status=pending',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.receipts.every((r: { status: string }) => r.status === 'pending')).toBe(true);
+    expect(res.json().data.receipts.every((r: { status: string }) => r.status === 'pending')).toBe(
+      true,
+    );
     expect(res.json().data.receipts.some((r: { id: string }) => r.id === r1.data.id)).toBe(true);
   });
 
@@ -397,8 +408,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit Filtern', () => {
     await createTestReceipt({ original_name: 'c.pdf' });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts?limit=2&offset=0',
+      method: 'GET',
+      url: '/api/v1/receipts?limit=2&offset=0',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -413,13 +424,13 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit Filtern', () => {
 describe.skipIf(!E2E)('POST /api/v1/receipts mit fremdem Customer', () => {
   it('gibt 404 zurück wenn customer nicht im Tenant existiert', async () => {
     const { rows } = await app.db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-other-${Date.now()}`, 'Other'],
     );
     const otherTenantId = rows[0].id;
     const otherCustomerRes = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/customers',
+      method: 'POST',
+      url: '/api/v1/customers',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenantId },
       payload: { name: 'Foreign' },
     });
@@ -430,7 +441,7 @@ describe.skipIf(!E2E)('POST /api/v1/receipts mit fremdem Customer', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('CUSTOMER_NOT_FOUND');
 
-    await app.db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenantId]);
+    await app.db.query('DELETE FROM tenants WHERE id = $1', [otherTenantId]);
   });
 });
 
@@ -443,19 +454,19 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id Tenant-Isolation', () => {
 
     // Anderer Tenant
     const { rows } = await app.db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-iso-get-${Date.now()}`, 'OtherTenant'],
     );
     const otherTenantId = rows[0].id;
 
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/receipts/${id}`,
+      method: 'GET',
+      url: `/api/v1/receipts/${id}`,
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenantId },
     });
     expect(res.statusCode).toBe(404);
 
-    await app.db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenantId]);
+    await app.db.query('DELETE FROM tenants WHERE id = $1', [otherTenantId]);
   });
 });
 
@@ -488,27 +499,27 @@ describe.skipIf(!E2E)('POST /api/v1/receipts mit file_sha256 (Deduplication)', (
 
     // Anderer Tenant + Customer
     const { rows } = await app.db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-dedup-iso-${Date.now()}`, 'Iso'],
     );
     const otherTenantId = rows[0].id;
     const oc = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/customers',
+      method: 'POST',
+      url: '/api/v1/customers',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenantId },
       payload: { name: 'Other' },
     });
     const otherCustomerId = oc.json().data.id;
 
     const second = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts',
+      method: 'POST',
+      url: '/api/v1/receipts',
       headers: { 'content-type': 'application/json', 'x-pp-tenant-id': otherTenantId },
       payload: { customer_id: otherCustomerId, file_sha256: sha },
     });
     expect(second.statusCode).toBe(201);
 
-    await app.db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenantId]);
+    await app.db.query('DELETE FROM tenants WHERE id = $1', [otherTenantId]);
   });
 
   it('lehnt ungültigen SHA256 ab', async () => {
@@ -525,8 +536,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit search-Parameter', () => {
     await createTestReceipt({ original_name: 'Rechnung Foo.pdf' });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts?search=Bahn',
+      method: 'GET',
+      url: '/api/v1/receipts?search=Bahn',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -537,14 +548,14 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit search-Parameter', () => {
 
   it('findet Receipt anhand metadata.ocr_text', async () => {
     const r = (await createTestReceipt()).json();
-    await app.db.query(
-      `UPDATE receipts SET metadata = $2 WHERE id = $1`,
-      [r.data.id, JSON.stringify({ ocr_text: 'Hochgeschwindigkeitszug nach Berlin' })],
-    );
+    await app.db.query('UPDATE receipts SET metadata = $2 WHERE id = $1', [
+      r.data.id,
+      JSON.stringify({ ocr_text: 'Hochgeschwindigkeitszug nach Berlin' }),
+    ]);
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts?search=Berlin',
+      method: 'GET',
+      url: '/api/v1/receipts?search=Berlin',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -554,8 +565,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit search-Parameter', () => {
   it('liefert leere Liste bei nicht gefundenem Suchbegriff', async () => {
     await createTestReceipt({ original_name: 'beleg-1.pdf' });
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts?search=xyznopematch9876',
+      method: 'GET',
+      url: '/api/v1/receipts?search=xyznopematch9876',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -570,8 +581,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id/upload-url', () => {
   it('gibt eine uploadUrl zurück', async () => {
     const created = (await createTestReceipt()).json();
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/receipts/${created.data.id}/upload-url`,
+      method: 'GET',
+      url: `/api/v1/receipts/${created.data.id}/upload-url`,
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -581,8 +592,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id/upload-url', () => {
 
   it('gibt 404 wenn Receipt nicht existiert', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/upload-url',
+      method: 'GET',
+      url: '/api/v1/receipts/00000000-0000-0000-0000-000000000000/upload-url',
       headers: headers(),
     });
     expect(res.statusCode).toBe(404);
@@ -597,16 +608,16 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
     const created = (await createTestReceipt()).json();
     const id = created.data.id;
     await app.inject({
-      method:  'PUT',
-      url:     `/api/v1/receipts/${id}/status`,
+      method: 'PUT',
+      url: `/api/v1/receipts/${id}/status`,
       headers: headers(),
       payload: { status: 'done' },
     });
 
     // Re-Processing auslösen
     const res = await app.inject({
-      method:  'POST',
-      url:     `/api/v1/receipts/${id}/reprocess`,
+      method: 'POST',
+      url: `/api/v1/receipts/${id}/reprocess`,
       headers: headers(),
       payload: {},
     });
@@ -618,8 +629,8 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
 
   it('gibt 404 bei unbekannter ID zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/reprocess',
+      method: 'POST',
+      url: '/api/v1/receipts/00000000-0000-0000-0000-000000000000/reprocess',
       headers: headers(),
       payload: {},
     });
@@ -628,8 +639,8 @@ describe.skipIf(!E2E)('POST /api/v1/receipts/:id/reprocess', () => {
 
   it('gibt 400 bei ungültiger UUID zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts/invalid-uuid/reprocess',
+      method: 'POST',
+      url: '/api/v1/receipts/invalid-uuid/reprocess',
       headers: headers(),
       payload: {},
     });
@@ -646,8 +657,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id/download', () => {
     const id = created.data.id;
 
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/receipts/${id}/download`,
+      method: 'GET',
+      url: `/api/v1/receipts/${id}/download`,
       headers: headers(),
     });
 
@@ -658,8 +669,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id/download', () => {
 
   it('gibt 404 bei unbekannter Receipt-ID zurück', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/receipts/00000000-0000-0000-0000-000000000000/download',
+      method: 'GET',
+      url: '/api/v1/receipts/00000000-0000-0000-0000-000000000000/download',
       headers: headers(),
     });
     expect(res.statusCode).toBe(404);

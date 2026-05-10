@@ -17,16 +17,13 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '../../../core/logger';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { sendTemplateInputSchema } from '../schemas/send-template.input';
-import {
-  CredentialNotFoundError,
-  loadWaCredential,
-} from '../services/credential.service';
-import {
-  defaultMetaGraphClient,
-  MetaGraphError,
-  type MetaGraphClient,
-} from '../services/meta-graph.client';
 import { writeAudit } from '../services/audit.service';
+import { CredentialNotFoundError, loadWaCredential } from '../services/credential.service';
+import {
+  type MetaGraphClient,
+  MetaGraphError,
+  defaultMetaGraphClient,
+} from '../services/meta-graph.client';
 
 export interface SendTemplateHandlerDeps {
   metaClient?: MetaGraphClient;
@@ -47,9 +44,9 @@ export function buildSendTemplateHandler(deps: SendTemplateHandlerDeps = {}) {
     try {
       const cred = await loadWaCredential(req.server.db, customer_id);
       if (!cred.phoneNumberId) {
-        return reply.code(400).send(
-          apiError('VALIDATION_ERROR', 'phone_number_id fehlt im credential meta.'),
-        );
+        return reply
+          .code(400)
+          .send(apiError('VALIDATION_ERROR', 'phone_number_id fehlt im credential meta.'));
       }
 
       const res = await metaClient.sendTemplateMessage(
@@ -62,17 +59,17 @@ export function buildSendTemplateHandler(deps: SendTemplateHandlerDeps = {}) {
 
       void writeAudit(req.server.db, {
         customerId: customer_id,
-        eventType:  'whatsapp.template.sent',
-        payload:    { to, template_name, message_id: res.message_id },
-        traceId:    req.headers['x-trace-id'] as string | undefined,
+        eventType: 'whatsapp.template.sent',
+        payload: { to, template_name, message_id: res.message_id },
+        traceId: req.headers['x-trace-id'] as string | undefined,
       });
 
       return reply.send(apiOk({ message_id: res.message_id }));
     } catch (err) {
       if (err instanceof CredentialNotFoundError) {
-        return reply.code(404).send(
-          apiError('CREDENTIAL_NOT_FOUND', 'Kein WhatsApp-Access-Token für diesen Kunden.'),
-        );
+        return reply
+          .code(404)
+          .send(apiError('CREDENTIAL_NOT_FOUND', 'Kein WhatsApp-Access-Token für diesen Kunden.'));
       }
       if (err instanceof MetaGraphError) {
         const code = err.status >= 500 ? 'EXTERNAL_API_FAILED' : 'EXTERNAL_API_4XX';

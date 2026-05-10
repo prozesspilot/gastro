@@ -8,7 +8,7 @@
  * Aufruf:  npm run migrate
  */
 
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import { config } from '../config';
@@ -40,9 +40,7 @@ async function migrate(): Promise<void> {
     // Alle SQL-Dateien einlesen und sortieren
     let files: string[];
     try {
-      files = (await readdir(MIGRATIONS_DIR))
-        .filter((f) => f.endsWith('.sql'))
-        .sort();
+      files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
     } catch {
       logger.error({ dir: MIGRATIONS_DIR }, 'Migrations-Verzeichnis nicht gefunden');
       process.exit(1);
@@ -66,10 +64,7 @@ async function migrate(): Promise<void> {
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query(
-          'INSERT INTO schema_migrations (version) VALUES ($1)',
-          [file],
-        );
+        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
         await client.query('COMMIT');
         logger.info({ file }, '✓ Migration erfolgreich angewendet');
       } catch (err) {

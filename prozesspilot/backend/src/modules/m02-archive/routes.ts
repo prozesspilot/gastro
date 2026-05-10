@@ -10,11 +10,11 @@
  * Spec-Referenz: M02 §6, §7
  */
 
-import type { FastifyInstance } from 'fastify';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyInstance } from 'fastify';
 import type { ArchiveStorageAdapterFactory } from '../../core/adapters/archive-storage/factory';
-import { createS3Client } from '../../core/storage/storage.service';
 import { createArchiveStorageAdapterFactory } from '../../core/adapters/archive-storage/factory';
+import { createS3Client } from '../../core/storage/storage.service';
 import { buildArchiveHandler } from './handlers/archive.handler';
 
 export interface M02RoutesDeps {

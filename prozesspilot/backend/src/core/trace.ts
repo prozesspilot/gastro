@@ -16,13 +16,13 @@ import { randomUUID } from 'node:crypto';
 
 export interface TraceContext {
   /** Eindeutige ID für einen einzelnen HTTP-Request oder Job-Lauf */
-  traceId:   string;
+  traceId: string;
   /** Tenant-ID aus x-pp-tenant-id Header (falls vorhanden) */
   tenantId?: string;
   /** HTTP-Request-Methode */
-  method?:   string;
+  method?: string;
   /** HTTP-Request-Pfad */
-  path?:     string;
+  path?: string;
 }
 
 export const traceStorage = new AsyncLocalStorage<TraceContext>();

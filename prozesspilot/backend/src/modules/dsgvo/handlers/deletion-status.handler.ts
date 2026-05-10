@@ -4,8 +4,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildDeletionStatusHandler() {
   return async function deletionStatusHandler(
@@ -30,17 +30,15 @@ export function buildDeletionStatusHandler() {
       );
 
       if (rows.length === 0) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Loeschantrag ${id} nicht gefunden`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Loeschantrag ${id} nicht gefunden`));
       }
 
       return reply.send(apiOk(rows[0]));
     } catch (err) {
       logger.error({ err, id, tenantId }, 'Status-Abfrage fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Status konnte nicht abgefragt werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Status konnte nicht abgefragt werden'));
     }
   };
 }
@@ -75,12 +73,14 @@ export function buildExecuteDeletionHandler() {
     );
 
     if (requestRows.length === 0) {
-      return reply.code(404).send(
-        apiError(
-          'NOT_FOUND_OR_INVALID_STATUS',
-          `Loeschantrag ${id} nicht gefunden oder hat unguelitigen Status (nur 'pending' kann ausgefuehrt werden)`,
-        ),
-      );
+      return reply
+        .code(404)
+        .send(
+          apiError(
+            'NOT_FOUND_OR_INVALID_STATUS',
+            `Loeschantrag ${id} nicht gefunden oder hat unguelitigen Status (nur 'pending' kann ausgefuehrt werden)`,
+          ),
+        );
     }
 
     const customerId = requestRows[0]?.customer_id ?? null;
@@ -98,29 +98,28 @@ export function buildExecuteDeletionHandler() {
             )`,
           [tenantId],
         );
-        deletedTables['plugin_executions'] = pluginRes.rowCount ?? 0;
+        deletedTables.plugin_executions = pluginRes.rowCount ?? 0;
 
         // 2. communications
         try {
-          const commRes = await db.query(
-            `DELETE FROM communications WHERE customer_id = $1`,
-            [customerId],
-          );
-          deletedTables['communications'] = commRes.rowCount ?? 0;
+          const commRes = await db.query('DELETE FROM communications WHERE customer_id = $1', [
+            customerId,
+          ]);
+          deletedTables.communications = commRes.rowCount ?? 0;
         } catch {
           // Tabelle existiert moeglicherweise nicht
-          deletedTables['communications'] = 0;
+          deletedTables.communications = 0;
         }
 
         // 3. bulk_approvals
         try {
           const bulkRes = await db.query(
-            `DELETE FROM bulk_approvals WHERE customer_id = $1 OR tenant_id = $2`,
+            'DELETE FROM bulk_approvals WHERE customer_id = $1 OR tenant_id = $2',
             [customerId, tenantId],
           );
-          deletedTables['bulk_approvals'] = bulkRes.rowCount ?? 0;
+          deletedTables.bulk_approvals = bulkRes.rowCount ?? 0;
         } catch {
-          deletedTables['bulk_approvals'] = 0;
+          deletedTables.bulk_approvals = 0;
         }
 
         // 4. receipt_files (nur DB-Eintraege, kein S3-Call in MVP)
@@ -130,27 +129,23 @@ export function buildExecuteDeletionHandler() {
               WHERE receipt_id IN (SELECT receipt_id FROM receipts WHERE customer_id = $1)`,
             [customerId],
           );
-          deletedTables['receipt_files'] = rfRes.rowCount ?? 0;
+          deletedTables.receipt_files = rfRes.rowCount ?? 0;
         } catch {
-          deletedTables['receipt_files'] = 0;
+          deletedTables.receipt_files = 0;
         }
 
         // 5. receipts
-        const recRes = await db.query(
-          `DELETE FROM receipts WHERE customer_id = $1`,
-          [customerId],
-        );
-        deletedTables['receipts'] = recRes.rowCount ?? 0;
+        const recRes = await db.query('DELETE FROM receipts WHERE customer_id = $1', [customerId]);
+        deletedTables.receipts = recRes.rowCount ?? 0;
 
         // 6. customer_profiles
         try {
-          const cpRes = await db.query(
-            `DELETE FROM customer_profiles WHERE customer_id = $1`,
-            [customerId],
-          );
-          deletedTables['customer_profiles'] = cpRes.rowCount ?? 0;
+          const cpRes = await db.query('DELETE FROM customer_profiles WHERE customer_id = $1', [
+            customerId,
+          ]);
+          deletedTables.customer_profiles = cpRes.rowCount ?? 0;
         } catch {
-          deletedTables['customer_profiles'] = 0;
+          deletedTables.customer_profiles = 0;
         }
       }
 
@@ -165,7 +160,12 @@ export function buildExecuteDeletionHandler() {
       );
 
       logger.info(
-        { request_id: id, tenant_id: tenantId, customer_id: customerId, deleted_tables: deletedTables },
+        {
+          request_id: id,
+          tenant_id: tenantId,
+          customer_id: customerId,
+          deleted_tables: deletedTables,
+        },
         'DSGVO-Loeschung ausgefuehrt',
       );
 
@@ -180,17 +180,19 @@ export function buildExecuteDeletionHandler() {
     } catch (err) {
       const errMsg = (err as Error).message;
 
-      await db.query(
-        `UPDATE deletion_requests
+      await db
+        .query(
+          `UPDATE deletion_requests
             SET status = 'failed', error_message = $1, processed_at = now()
           WHERE request_id = $2`,
-        [errMsg, id],
-      ).catch(() => undefined);
+          [errMsg, id],
+        )
+        .catch(() => undefined);
 
       logger.error({ err, request_id: id, tenantId }, 'DSGVO-Loeschung fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('DELETION_FAILED', 'Loeschung fehlgeschlagen', { message: errMsg }),
-      );
+      return reply
+        .code(500)
+        .send(apiError('DELETION_FAILED', 'Loeschung fehlgeschlagen', { message: errMsg }));
     }
   };
 }

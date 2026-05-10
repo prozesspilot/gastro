@@ -16,13 +16,22 @@
 import type { FastifyInstance } from 'fastify';
 import * as audit from '../../core/audit/audit.service';
 import { tenantContextHook } from '../../core/hooks/tenant-context';
+import { triggerReceiptPipeline } from '../../core/n8n/client';
 import { rateLimit } from '../../core/rate-limit/rate-limit.middleware';
+import { apiError, apiOk, zodToApiError } from '../../core/schemas/common';
 import { sseManager } from '../../core/sse/sse.manager';
+import { createS3Client, uploadObject } from '../../core/storage/storage.service';
 import {
-  apiError,
-  apiOk,
-  zodToApiError,
-} from '../../core/schemas/common';
+  DuplicateReceiptError,
+  bulkUpdateStatus,
+  createReceipt,
+  getReceipt,
+  getReceiptStats,
+  listReceipts,
+  listReceiptsForExport,
+  updateReceiptStatus,
+  updateReceiptStorageKey,
+} from './receipt.repository';
 import {
   bulkStatusSchema,
   createReceiptSchema,
@@ -31,19 +40,6 @@ import {
   updateReceiptStatusSchema,
   uploadUrlResponseSchema,
 } from './receipt.schema';
-import {
-  bulkUpdateStatus,
-  createReceipt,
-  DuplicateReceiptError,
-  getReceipt,
-  getReceiptStats,
-  listReceipts,
-  listReceiptsForExport,
-  updateReceiptStatus,
-  updateReceiptStorageKey,
-} from './receipt.repository';
-import { createS3Client, uploadObject } from '../../core/storage/storage.service';
-import { triggerReceiptPipeline } from '../../core/n8n/client';
 
 export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   // Tenant-Kontext für alle Routen in diesem Plugin setzen
@@ -73,11 +69,11 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     for (const r of updated) {
       void audit.log(app.db, req.tenantId, 'receipt', r.id, 'status_changed', {
         new_status: parsed.data.status,
-        bulk:       true,
+        bulk: true,
       });
       sseManager.emit(req.tenantId, 'receipt:status', {
-        id:         r.id,
-        status:     r.status,
+        id: r.id,
+        status: r.status,
         updated_at: r.updated_at,
       });
     }
@@ -88,7 +84,17 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/export', async (req, reply) => {
     const data = await listReceiptsForExport(app.db, req.tenantId);
-    const header = ['id', 'status', 'original_name', 'source', 'category', 'amount', 'currency', 'date', 'created_at'];
+    const header = [
+      'id',
+      'status',
+      'original_name',
+      'source',
+      'category',
+      'amount',
+      'currency',
+      'date',
+      'created_at',
+    ];
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return '';
       const s = String(v);
@@ -99,22 +105,29 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     };
     const lines = [header.join(',')];
     for (const row of data) {
-      lines.push([
-        row.id,
-        row.status,
-        row.original_name,
-        row.source,
-        row.category,
-        row.amount,
-        row.currency,
-        row.date,
-        row.created_at,
-      ].map(escape).join(','));
+      lines.push(
+        [
+          row.id,
+          row.status,
+          row.original_name,
+          row.source,
+          row.category,
+          row.amount,
+          row.currency,
+          row.date,
+          row.created_at,
+        ]
+          .map(escape)
+          .join(','),
+      );
     }
     const csv = `${lines.join('\n')}\n`;
     return reply
       .header('content-type', 'text/csv; charset=utf-8')
-      .header('content-disposition', `attachment; filename="receipts-${new Date().toISOString().slice(0, 10)}.csv"`)
+      .header(
+        'content-disposition',
+        `attachment; filename="receipts-${new Date().toISOString().slice(0, 10)}.csv"`,
+      )
       .send(csv);
   });
 
@@ -148,16 +161,18 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     // Prüfen, ob Customer im aktuellen Tenant existiert
     const customerCheck = await app.db.query<{ id: string }>(
-      `SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND active = true`,
+      'SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND active = true',
       [parsed.data.customer_id, req.tenantId],
     );
     if (customerCheck.rows.length === 0) {
-      return reply.code(404).send(
-        apiError(
-          'CUSTOMER_NOT_FOUND',
-          'Der angegebene Customer existiert nicht im aktuellen Tenant.',
-        ),
-      );
+      return reply
+        .code(404)
+        .send(
+          apiError(
+            'CUSTOMER_NOT_FOUND',
+            'Der angegebene Customer existiert nicht im aktuellen Tenant.',
+          ),
+        );
     }
 
     try {
@@ -176,12 +191,9 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       if (isNotFoundError(err)) {
-        return reply.code(404).send(
-          apiError(
-            'CUSTOMER_NOT_FOUND',
-            'Der angegebene Customer existiert nicht.',
-          ),
-        );
+        return reply
+          .code(404)
+          .send(apiError('CUSTOMER_NOT_FOUND', 'Der angegebene Customer existiert nicht.'));
       }
       throw err;
     }
@@ -198,9 +210,9 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     const receipt = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
 
     if (!receipt) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
     return reply.send(apiOk(receipt));
@@ -228,18 +240,18 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     );
 
     if (!receipt) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
     void audit.log(app.db, req.tenantId, 'receipt', receipt.id, 'status_changed', {
-      new_status:    bodyParsed.data.status,
+      new_status: bodyParsed.data.status,
       error_message: bodyParsed.data.error_message ?? null,
     });
     sseManager.emit(req.tenantId, 'receipt:status', {
-      id:         receipt.id,
-      status:     receipt.status,
+      id: receipt.id,
+      status: receipt.status,
       updated_at: receipt.updated_at,
     });
 
@@ -260,16 +272,14 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     const receipt = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
     if (!receipt) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
     const fileBuffer = req.rawBody as Buffer | undefined;
     if (!fileBuffer || fileBuffer.length === 0) {
-      return reply.code(400).send(
-        apiError('NO_FILE_BODY', 'Request-Body enthält keine Datei.'),
-      );
+      return reply.code(400).send(apiError('NO_FILE_BODY', 'Request-Body enthält keine Datei.'));
     }
 
     const contentType = (req.headers['content-type'] ?? 'application/octet-stream')
@@ -284,9 +294,9 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       await uploadObject(s3, storageKey, fileBuffer, contentType);
     } catch (err) {
       req.log.error({ err }, 'MinIO-Upload fehlgeschlagen');
-      return reply.code(502).send(
-        apiError('STORAGE_ERROR', 'Datei konnte nicht in den Speicher hochgeladen werden.'),
-      );
+      return reply
+        .code(502)
+        .send(apiError('STORAGE_ERROR', 'Datei konnte nicht in den Speicher hochgeladen werden.'));
     }
 
     // DB aktualisieren: storage_key + file_size
@@ -308,27 +318,27 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     void audit.log(app.db, req.tenantId, 'receipt', paramsParsed.data.id, 'file_uploaded', {
       storage_key: storageKey,
-      size_bytes:  fileBuffer.length,
+      size_bytes: fileBuffer.length,
       content_type: contentType,
     });
 
     sseManager.emit(req.tenantId, 'receipt:status', {
-      id:          paramsParsed.data.id,
-      status:      'received',
+      id: paramsParsed.data.id,
+      status: 'received',
       storage_key: storageKey,
-      updated_at:  updated?.updated_at ?? new Date().toISOString(),
+      updated_at: updated?.updated_at ?? new Date().toISOString(),
     });
 
     // n8n-Pipeline triggern — best-effort, kein await, blockiert nie die HTTP-Antwort
     void triggerReceiptPipeline({
-      customer_id:   receipt.customer_id,
-      receipt_id:    paramsParsed.data.id,
-      tenant_id:     req.tenantId,
-      storage_key:   storageKey,
+      customer_id: receipt.customer_id,
+      receipt_id: paramsParsed.data.id,
+      tenant_id: req.tenantId,
+      storage_key: storageKey,
       original_name: receipt.original_name ?? '',
-      mime_type:     contentType,
-      size_bytes:    fileBuffer.length,
-      trace_id:      `upload-${paramsParsed.data.id}`,
+      mime_type: contentType,
+      size_bytes: fileBuffer.length,
+      trace_id: `upload-${paramsParsed.data.id}`,
     });
 
     return reply.code(200).send(apiOk(updated ?? receipt));
@@ -346,9 +356,9 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     const existing = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
     if (!existing) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
     // DECISION: Reprocess setzt Status auf 'received' zurück (Anfang der Pipeline)
@@ -366,21 +376,21 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     });
 
     sseManager.emit(req.tenantId, 'receipt:reprocess', {
-      id:         paramsParsed.data.id,
-      status:     'received',
+      id: paramsParsed.data.id,
+      status: 'received',
       updated_at: receipt?.updated_at ?? new Date().toISOString(),
     });
 
     // n8n-Pipeline erneut triggern — best-effort
     void triggerReceiptPipeline({
-      customer_id:   existing.customer_id,
-      receipt_id:    paramsParsed.data.id,
-      tenant_id:     req.tenantId,
-      storage_key:   existing.storage_key ?? '',
+      customer_id: existing.customer_id,
+      receipt_id: paramsParsed.data.id,
+      tenant_id: req.tenantId,
+      storage_key: existing.storage_key ?? '',
       original_name: existing.original_name ?? '',
-      mime_type:     existing.mime_type ?? 'application/octet-stream',
-      size_bytes:    existing.file_size_bytes ?? 0,
-      trace_id:      `reprocess-${paramsParsed.data.id}-${Date.now()}`,
+      mime_type: existing.mime_type ?? 'application/octet-stream',
+      size_bytes: existing.file_size_bytes ?? 0,
+      trace_id: `reprocess-${paramsParsed.data.id}-${Date.now()}`,
     });
 
     return reply.send(apiOk(receipt ?? existing));
@@ -398,17 +408,17 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     const receipt = await getReceipt(app.db, req.tenantId, paramsParsed.data.id);
     if (!receipt) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
     if (!receipt.storage_key) {
       // DECISION: Kein storage_key = keine Datei im Objekt-Store — 404 statt 500,
       // weil das ein erwartbarer Zustand (Receipt ohne Upload) ist.
-      return reply.code(404).send(
-        apiError('NO_FILE', 'Für diesen Beleg wurde noch keine Datei hochgeladen.'),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NO_FILE', 'Für diesen Beleg wurde noch keine Datei hochgeladen.'));
     }
 
     // Datei aus MinIO streamen über presigned URL oder direkten Proxy-Download.
@@ -421,7 +431,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
         endpoint: config.MINIO_ENDPOINT,
         region: 'us-east-1',
         credentials: {
-          accessKeyId:     config.MINIO_ACCESS_KEY,
+          accessKeyId: config.MINIO_ACCESS_KEY,
           secretAccessKey: config.MINIO_SECRET_KEY,
         },
         forcePathStyle: true,
@@ -429,10 +439,12 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
       const cmd = new GetObjectCommand({
         Bucket: config.MINIO_BUCKET,
-        Key:    receipt.storage_key,
+        Key: receipt.storage_key,
       });
       const obj = await s3.send(cmd);
-      const stream = obj.Body as { pipe?: (dest: unknown) => void; transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+      const stream = obj.Body as
+        | { pipe?: (dest: unknown) => void; transformToByteArray?: () => Promise<Uint8Array> }
+        | undefined;
       if (!stream) {
         return reply.code(404).send(apiError('NO_FILE', 'Datei nicht gefunden im Storage.'));
       }
@@ -442,7 +454,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       reply.header('content-type', mimeType);
       reply.header('content-disposition', `attachment; filename="${filename}"`);
 
-      const bytes = await stream.transformToByteArray!();
+      const bytes = await stream.transformToByteArray?.();
       return reply.send(Buffer.from(bytes));
     } catch (err: unknown) {
       // S3-NoSuchKey → 404, andere Fehler → 500 via default error handler

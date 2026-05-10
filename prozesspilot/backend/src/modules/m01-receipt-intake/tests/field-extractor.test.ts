@@ -8,10 +8,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { extract } from '../services/field-extractor';
-import type { OcrResult } from '../../../core/adapters/ocr/factory';
 import fixture01 from '../../../../tests/fixtures/m01/fixture_01_supermarkt.json';
 import fixture02 from '../../../../tests/fixtures/m01/fixture_02_handschrift.json';
+import type { OcrResult } from '../../../core/adapters/ocr/factory';
+import { extract } from '../services/field-extractor';
 
 // Minimaler DB-Stub — suppliers_global liefert per default nichts.
 const noopDb = {
@@ -82,12 +82,14 @@ describe('field-extractor — Lieferanten-Lookup', () => {
   it('fragt suppliers_global an, wenn USt-ID erkannt', async () => {
     const dbMock = {
       query: vi.fn(async () => ({
-        rows: [{
-          supplier_id:  'sup_metro',
-          vat_id:       'DE123456789',
-          display_name: 'Metro AG (Großhandel)',
-          aliases:      ['Metro AG'],
-        }],
+        rows: [
+          {
+            supplier_id: 'sup_metro',
+            vat_id: 'DE123456789',
+            display_name: 'Metro AG (Großhandel)',
+            aliases: ['Metro AG'],
+          },
+        ],
       })),
     } as unknown as import('pg').Pool;
     const ocr = ocrFromFixture('Beleg\nUSt-IdNr: DE123456789\n28.04.2026\nGesamt 50,00 €');
@@ -101,9 +103,14 @@ describe('field-extractor — Claude-Fallback-Pfad', () => {
   it('ruft Claude NICHT auf, wenn Regex alle Pflichtfelder liefert', async () => {
     const claudeMock = vi.fn(async () => ({ fields: {}, claude_confidence: 0.9 }));
     const ocr = ocrFromFixture(fixture01.raw_text, 0.95);
-    await extract(noopDb, ocr, {
-      custom: { supplier_overrides: { 'Metro AG': {} } },
-    }, { claudeExtract: claudeMock });
+    await extract(
+      noopDb,
+      ocr,
+      {
+        custom: { supplier_overrides: { 'Metro AG': {} } },
+      },
+      { claudeExtract: claudeMock },
+    );
     expect(claudeMock).not.toHaveBeenCalled();
   });
 
@@ -112,7 +119,7 @@ describe('field-extractor — Claude-Fallback-Pfad', () => {
       fields: {
         supplier_name: 'Café Klein',
         document_date: '2026-02-01',
-        total_gross:   8.30,
+        total_gross: 8.3,
       },
       claude_confidence: 0.7,
     }));
@@ -120,7 +127,7 @@ describe('field-extractor — Claude-Fallback-Pfad', () => {
     const res = await extract(noopDb, ocr, {}, { claudeExtract: claudeMock });
     expect(claudeMock).toHaveBeenCalledOnce();
     expect(res.fields.supplier_name).toBe('Café Klein');
-    expect(res.fields.total_gross).toBe(8.30);
+    expect(res.fields.total_gross).toBe(8.3);
     expect(res.sources.claude).toBe(true);
   });
 
@@ -136,7 +143,9 @@ describe('field-extractor — Claude-Fallback-Pfad', () => {
   });
 
   it('verkraftet Claude-Fehler ohne Throw — gibt Regex-Result zurück', async () => {
-    const claudeMock = vi.fn(async () => { throw new Error('API_DOWN'); });
+    const claudeMock = vi.fn(async () => {
+      throw new Error('API_DOWN');
+    });
     const ocr = ocrFromFixture(fixture02.raw_text, 0.45);
     const res = await extract(noopDb, ocr, {}, { claudeExtract: claudeMock });
     expect(res.fields.document_date).toBe('2026-02-01');

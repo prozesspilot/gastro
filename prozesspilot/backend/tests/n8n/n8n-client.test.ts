@@ -5,24 +5,31 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { N8nClientError, getWorkflow, getWorkflows, triggerWebhook } from '../../src/core/n8n/client';
+import {
+  N8nClientError,
+  getWorkflow,
+  getWorkflows,
+  triggerWebhook,
+} from '../../src/core/n8n/client';
 
 // ── fetch mocken ──────────────────────────────────────────────────────────────
 
 function makeFetchMock(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({
-    ok:     status >= 200 && status < 300,
+    ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
-    json:   () => Promise.resolve(body),
-    text:   () => Promise.resolve(String(body)),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(String(body)),
   });
 }
 
 // ── triggerWebhook ────────────────────────────────────────────────────────────
 
 describe('triggerWebhook', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('POST an /webhook/<path> mit JSON-Payload', async () => {
     const mockFetch = makeFetchMock(200, { success: true });
@@ -48,7 +55,9 @@ describe('triggerWebhook', () => {
 // ── getWorkflows ──────────────────────────────────────────────────────────────
 
 describe('getWorkflows', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('GET /api/v1/workflows und gibt data-Array zurück', async () => {
     vi.stubGlobal('fetch', makeFetchMock(200, { data: [{ id: '1', name: 'Workflow A' }] }));
@@ -69,12 +78,14 @@ describe('getWorkflows', () => {
 // ── getWorkflow ───────────────────────────────────────────────────────────────
 
 describe('getWorkflow', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('GET /api/v1/workflows/:id', async () => {
     vi.stubGlobal('fetch', makeFetchMock(200, { id: '42', name: 'My Workflow' }));
 
-    const wf = await getWorkflow('42') as { id: string };
+    const wf = (await getWorkflow('42')) as { id: string };
 
     expect(wf.id).toBe('42');
   });

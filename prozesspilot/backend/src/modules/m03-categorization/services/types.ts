@@ -34,7 +34,13 @@ export interface CategorizationContext {
   totalGross?: number;
   totalNet?: number;
   documentDate?: string;
-  lineItems?: Array<{ description?: string; total?: number; tax_rate?: number; qty?: number; unit_price?: number }>;
+  lineItems?: Array<{
+    description?: string;
+    total?: number;
+    tax_rate?: number;
+    qty?: number;
+    unit_price?: number;
+  }>;
   taxLines?: Array<{ rate: number; base: number; amount: number }>;
   currency?: string;
 }

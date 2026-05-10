@@ -10,8 +10,8 @@
  * Authentifizierung: API-Key aus ENV MINDEE_API_KEY.
  */
 
-import type { OcrAdapter, OcrFields, OcrResult } from './adapter.interface';
 import { logger } from '../../logger';
+import type { OcrAdapter, OcrFields, OcrResult } from './adapter.interface';
 
 // ── Lazy SDK-Loader (analog zum Google-Vision-Adapter) ───────────────────────
 
@@ -61,7 +61,11 @@ interface MindeeBufferInputCtor {
 }
 
 interface MindeeClientLike {
-  parse<T>(productClass: unknown, source: unknown, params?: unknown): Promise<MindeePredictResponse<T>>;
+  parse<T>(
+    productClass: unknown,
+    source: unknown,
+    params?: unknown,
+  ): Promise<MindeePredictResponse<T>>;
 }
 
 interface MindeeClientCtor {
@@ -93,8 +97,8 @@ function getApiKey(override?: string): string {
   if (!key || key.trim().length === 0) {
     throw new Error(
       'Kein Mindee API-Key konfiguriert. ' +
-      'Entweder MINDEE_API_KEY in .env setzen oder im Kundenprofil unter ' +
-      '"OCR / Extraktion" → "Mindee API-Key" eintragen.',
+        'Entweder MINDEE_API_KEY in .env setzen oder im Kundenprofil unter ' +
+        '"OCR / Extraktion" → "Mindee API-Key" eintragen.',
     );
   }
   return key;
@@ -119,10 +123,7 @@ async function getMindeeClient(apiKeyOverride?: string): Promise<MindeeClientLik
 }
 
 function resolveInvoiceProduct(sdk: MindeeSdkModule): unknown {
-  const candidate =
-    sdk.v1?.product?.InvoiceV4 ??
-    sdk.product?.InvoiceV4 ??
-    null;
+  const candidate = sdk.v1?.product?.InvoiceV4 ?? sdk.product?.InvoiceV4 ?? null;
   if (!candidate) {
     throw new Error('Mindee-SDK: InvoiceV4 Produkt nicht gefunden.');
   }
@@ -236,18 +237,18 @@ export function mapMindeeToOcrFields(p: MindeeInvoiceV4Document): OcrFields {
     .filter((t) => t.rate > 0 || t.amount > 0);
 
   const candidate: Record<string, unknown> = {
-    supplier_name:    strField(p.supplierName),
-    supplier_vat_id:  strField(firstField(p.supplierCompanyRegistrations)),
+    supplier_name: strField(p.supplierName),
+    supplier_vat_id: strField(firstField(p.supplierCompanyRegistrations)),
     supplier_address: strField(p.supplierAddress),
-    document_number:  strField(p.invoiceNumber),
-    document_date:    dateField(p.date),
-    due_date:         dateField(p.dueDate),
-    total_net:        numField(p.totalNet),
-    total_gross:      numField(p.totalAmount),
-    total_tax:        numField(p.totalTax),
-    tax_lines:        taxLines.length > 0 ? taxLines : undefined,
-    currency:         p.locale?.currency ?? undefined,
-    payment_method:   strField(firstField(p.supplierPaymentDetails)),
+    document_number: strField(p.invoiceNumber),
+    document_date: dateField(p.date),
+    due_date: dateField(p.dueDate),
+    total_net: numField(p.totalNet),
+    total_gross: numField(p.totalAmount),
+    total_tax: numField(p.totalTax),
+    tax_lines: taxLines.length > 0 ? taxLines : undefined,
+    currency: p.locale?.currency ?? undefined,
+    payment_method: strField(firstField(p.supplierPaymentDetails)),
   };
 
   // null/undefined-Werte rausfiltern (Tests erwarten "undefined statt null").

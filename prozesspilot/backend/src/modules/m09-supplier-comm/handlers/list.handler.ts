@@ -7,8 +7,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const querySchema = z.object({
   customer_id: z.string().optional(),
@@ -37,10 +37,7 @@ interface CommunicationRow {
 }
 
 export function buildListHandler() {
-  return async function listHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function listHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const parsed = querySchema.safeParse(req.query);
     if (!parsed.success) {
       return reply.code(422).send(zodToApiError(parsed.error));

@@ -26,7 +26,10 @@ export async function internalCustomersRoutes(app: FastifyInstance): Promise<voi
   app.get('/customers', async (req, reply) => {
     const q = req.query as { active?: string; package?: string };
     const wantActive = q.active !== 'false';
-    const wantPackages = (q.package ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+    const wantPackages = (q.package ?? '')
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
 
     const { rows } = await app.db.query<CustomerProfileRow>(
       `SELECT customer_id, integrations, routing, custom, modules_enabled, updated_at
@@ -36,12 +39,8 @@ export async function internalCustomersRoutes(app: FastifyInstance): Promise<voi
 
     const filtered = rows.filter((r) => {
       const cust = (r.custom ?? {}) as Record<string, unknown>;
-      const pkg = typeof cust.package === 'string'
-        ? (cust.package as string)
-        : 'basic';
-      const status = typeof cust.status === 'string'
-        ? (cust.status as string)
-        : 'active';
+      const pkg = typeof cust.package === 'string' ? (cust.package as string) : 'basic';
+      const status = typeof cust.status === 'string' ? (cust.status as string) : 'active';
       const isActive = status === 'active';
       if (wantActive && !isActive) return false;
       if (wantPackages.length > 0 && !wantPackages.includes(pkg)) return false;

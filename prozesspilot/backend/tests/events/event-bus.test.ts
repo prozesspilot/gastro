@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createConsumerGroup, consumeEvents } from '../../src/core/events/consumer';
+import { consumeEvents, createConsumerGroup } from '../../src/core/events/consumer';
 import { publishCustomerEvent, publishEvent } from '../../src/core/events/publisher';
 import { STREAMS } from '../../src/core/events/types';
 
@@ -13,10 +13,10 @@ import { STREAMS } from '../../src/core/events/types';
 
 function makeRedis() {
   return {
-    xadd:       vi.fn(),
-    xgroup:     vi.fn(),
+    xadd: vi.fn(),
+    xgroup: vi.fn(),
     xreadgroup: vi.fn(),
-    xack:       vi.fn(),
+    xack: vi.fn(),
   };
 }
 
@@ -27,16 +27,30 @@ type MockRedis = ReturnType<typeof makeRedis>;
 describe('publishEvent', () => {
   let redis: MockRedis;
 
-  beforeEach(() => { redis = makeRedis(); });
-  afterEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    redis = makeRedis();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('ruft xadd mit korrekten Parametern auf', async () => {
     redis.xadd.mockResolvedValue('1234567890-0');
 
-    const id = await publishEvent(redis as never, 'pp:test', { type: 'test.event', tenant_id: 'abc' });
+    const id = await publishEvent(redis as never, 'pp:test', {
+      type: 'test.event',
+      tenant_id: 'abc',
+    });
 
     expect(redis.xadd).toHaveBeenCalledOnce();
-    expect(redis.xadd).toHaveBeenCalledWith('pp:test', '*', 'type', 'test.event', 'tenant_id', 'abc');
+    expect(redis.xadd).toHaveBeenCalledWith(
+      'pp:test',
+      '*',
+      'type',
+      'test.event',
+      'tenant_id',
+      'abc',
+    );
     expect(id).toBe('1234567890-0');
   });
 
@@ -54,8 +68,12 @@ describe('publishEvent', () => {
 describe('publishCustomerEvent', () => {
   let redis: MockRedis;
 
-  beforeEach(() => { redis = makeRedis(); });
-  afterEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    redis = makeRedis();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('schreibt in den customers-Stream mit korrekten Feldern', async () => {
     redis.xadd.mockResolvedValue('9999-0');
@@ -76,7 +94,10 @@ describe('publishCustomerEvent', () => {
 
     expect(fieldMap.type).toBe('customer.created');
     expect(fieldMap.tenant_id).toBe('tenant-1');
-    expect(JSON.parse(fieldMap.payload)).toMatchObject({ customer_id: 'cust-42', external_id: 'DATEV-001' });
+    expect(JSON.parse(fieldMap.payload)).toMatchObject({
+      customer_id: 'cust-42',
+      external_id: 'DATEV-001',
+    });
     expect(fieldMap.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
@@ -94,8 +115,12 @@ describe('publishCustomerEvent', () => {
 describe('createConsumerGroup', () => {
   let redis: MockRedis;
 
-  beforeEach(() => { redis = makeRedis(); });
-  afterEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    redis = makeRedis();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('ruft XGROUP CREATE mit MKSTREAM auf', async () => {
     redis.xgroup.mockResolvedValue('OK');
@@ -103,7 +128,11 @@ describe('createConsumerGroup', () => {
     await createConsumerGroup(redis as never, STREAMS.customers, 'pp-worker');
 
     expect(redis.xgroup).toHaveBeenCalledWith(
-      'CREATE', STREAMS.customers, 'pp-worker', '$', 'MKSTREAM',
+      'CREATE',
+      STREAMS.customers,
+      'pp-worker',
+      '$',
+      'MKSTREAM',
     );
   });
 
@@ -129,8 +158,12 @@ describe('createConsumerGroup', () => {
 describe('consumeEvents', () => {
   let redis: MockRedis;
 
-  beforeEach(() => { redis = makeRedis(); });
-  afterEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    redis = makeRedis();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('ruft Handler auf und sendet XACK', async () => {
     const handler = vi.fn().mockResolvedValue(undefined);
@@ -143,7 +176,16 @@ describe('consumeEvents', () => {
         [
           [
             '1111-0',
-            ['type', 'customer.created', 'tenant_id', 't1', 'timestamp', '2024-01-01T00:00:00.000Z', 'payload', '{"customer_id":"c1"}'],
+            [
+              'type',
+              'customer.created',
+              'tenant_id',
+              't1',
+              'timestamp',
+              '2024-01-01T00:00:00.000Z',
+              'payload',
+              '{"customer_id":"c1"}',
+            ],
           ],
         ],
       ],
@@ -153,10 +195,10 @@ describe('consumeEvents', () => {
 
     expect(handler).toHaveBeenCalledOnce();
     expect(handler).toHaveBeenCalledWith('1111-0', {
-      type:       'customer.created',
-      tenant_id:  't1',
-      timestamp:  '2024-01-01T00:00:00.000Z',
-      payload:    '{"customer_id":"c1"}',
+      type: 'customer.created',
+      tenant_id: 't1',
+      timestamp: '2024-01-01T00:00:00.000Z',
+      payload: '{"customer_id":"c1"}',
     });
     expect(redis.xack).toHaveBeenCalledWith(STREAMS.customers, 'pp-worker', '1111-0');
   });
@@ -165,7 +207,15 @@ describe('consumeEvents', () => {
     const handler = vi.fn().mockRejectedValue(new Error('Handler-Fehler'));
     redis.xack.mockResolvedValue(1);
     redis.xreadgroup.mockResolvedValue([
-      [STREAMS.customers, [['2222-0', ['type', 'customer.created', 'tenant_id', 't1', 'timestamp', 'ts', 'payload', '{}']]]],
+      [
+        STREAMS.customers,
+        [
+          [
+            '2222-0',
+            ['type', 'customer.created', 'tenant_id', 't1', 'timestamp', 'ts', 'payload', '{}'],
+          ],
+        ],
+      ],
     ]);
 
     // Darf nicht werfen — Fehler werden geloggt
@@ -193,8 +243,23 @@ describe('consumeEvents', () => {
       [
         STREAMS.customers,
         [
-          ['3333-0', ['type', 'customer.created',     'tenant_id', 't1', 'timestamp', 'ts1', 'payload', '{}']],
-          ['3334-0', ['type', 'customer.soft_deleted', 'tenant_id', 't1', 'timestamp', 'ts2', 'payload', '{}']],
+          [
+            '3333-0',
+            ['type', 'customer.created', 'tenant_id', 't1', 'timestamp', 'ts1', 'payload', '{}'],
+          ],
+          [
+            '3334-0',
+            [
+              'type',
+              'customer.soft_deleted',
+              'tenant_id',
+              't1',
+              'timestamp',
+              'ts2',
+              'payload',
+              '{}',
+            ],
+          ],
         ],
       ],
     ]);

@@ -20,10 +20,7 @@ declare module 'fastify' {
   }
 }
 
-export async function tenantContextHook(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
+export async function tenantContextHook(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const raw = req.headers['x-pp-tenant-id'];
   const tenantId = Array.isArray(raw) ? raw[0] : raw;
 
@@ -32,7 +29,7 @@ export async function tenantContextHook(
     await reply.code(400).send({
       ok: false,
       error: {
-        code:    'MISSING_TENANT',
+        code: 'MISSING_TENANT',
         message: 'Header x-pp-tenant-id muss eine gültige UUID enthalten.',
       },
     });

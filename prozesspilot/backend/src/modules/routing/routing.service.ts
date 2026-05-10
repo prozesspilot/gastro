@@ -27,17 +27,17 @@ import {
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
 export interface CreateJobForDocumentOptions {
-  tenantId:    string;
-  documentId:  string;
-  payload?:    Record<string, unknown>;
+  tenantId: string;
+  documentId: string;
+  payload?: Record<string, unknown>;
   maxAttempts?: number;
-  runAt?:      Date;
+  runAt?: Date;
 }
 
 export interface ProcessResult {
-  job:     JobResponse;
+  job: JobResponse;
   success: boolean;
-  error?:  string;
+  error?: string;
 }
 
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
@@ -51,9 +51,9 @@ async function triggerDocumentWebhook(
 ): Promise<void> {
   try {
     await triggerWebhook('document-routing', {
-      tenant_id:   tenantId,
+      tenant_id: tenantId,
       document_id: documentId,
-      job_id:      jobId,
+      job_id: jobId,
       ...extraPayload,
     });
   } catch (err) {
@@ -75,10 +75,10 @@ export async function createJobForDocument(
   options: CreateJobForDocumentOptions,
 ): Promise<JobResponse> {
   const input: CreateJobInput = {
-    document_id:  options.documentId,
-    payload:      options.payload ?? {},
+    document_id: options.documentId,
+    payload: options.payload ?? {},
     max_attempts: options.maxAttempts ?? 3,
-    run_at:       options.runAt,
+    run_at: options.runAt,
   };
 
   const job = await createJob(pool, options.tenantId, input);
@@ -89,12 +89,7 @@ export async function createJobForDocument(
   );
 
   // n8n asynchron auslösen — kein await, kein throw
-  void triggerDocumentWebhook(
-    options.tenantId,
-    options.documentId,
-    job.id,
-    options.payload ?? {},
-  );
+  void triggerDocumentWebhook(options.tenantId, options.documentId, job.id, options.payload ?? {});
 
   return job;
 }
@@ -119,10 +114,10 @@ export async function processNextJob(pool: Pool): Promise<ProcessResult | null> 
 
   try {
     const n8nResult = await triggerWebhook('document-routing', {
-      tenant_id:   job.tenant_id,
+      tenant_id: job.tenant_id,
       document_id: job.document_id,
-      job_id:      job.id,
-      attempt:     job.attempts,
+      job_id: job.id,
+      attempt: job.attempts,
       ...job.payload,
     });
 

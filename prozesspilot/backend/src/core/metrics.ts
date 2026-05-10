@@ -1,7 +1,7 @@
 // Decision: Zentrales Metriken-Modul im Core-Layer — alle Module importieren
 // von hier, kein direktes prom-client-Coupling außerhalb dieses Files.
 // Prefix "pp_" = ProzessPilot-Namespace für alle Custom-Metriken.
-import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
 export const registry = new Registry();
 collectDefaultMetrics({ register: registry, prefix: 'pp_' });

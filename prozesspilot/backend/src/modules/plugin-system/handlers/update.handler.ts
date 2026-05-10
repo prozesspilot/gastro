@@ -5,8 +5,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -39,30 +39,29 @@ export function buildUpdateHandler() {
     // Webhook-URL validieren wenn angegeben
     if (input.webhook_url) {
       const isLocalhost =
-        input.webhook_url.includes('localhost') ||
-        input.webhook_url.includes('127.0.0.1');
+        input.webhook_url.includes('localhost') || input.webhook_url.includes('127.0.0.1');
       const isHttps = input.webhook_url.startsWith('https://');
       if (!isHttps && !isLocalhost) {
-        return reply.code(422).send(
-          apiError(
-            'WEBHOOK_URL_INVALID',
-            'Webhook-URL muss HTTPS verwenden (außer localhost in Entwicklung)',
-          ),
-        );
+        return reply
+          .code(422)
+          .send(
+            apiError(
+              'WEBHOOK_URL_INVALID',
+              'Webhook-URL muss HTTPS verwenden (außer localhost in Entwicklung)',
+            ),
+          );
       }
     }
 
     try {
       // Prüfen ob Plugin dem Tenant gehört
       const { rows: existing } = await db.query(
-        `SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2`,
+        'SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2',
         [pluginId, tenantId],
       );
 
       if (existing.length === 0) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`));
       }
 
       // Dynamisches UPDATE aufbauen
@@ -96,12 +95,12 @@ export function buildUpdateHandler() {
       }
 
       if (updates.length === 0) {
-        return reply.code(422).send(
-          apiError('NO_CHANGES', 'Keine Felder zum Aktualisieren angegeben'),
-        );
+        return reply
+          .code(422)
+          .send(apiError('NO_CHANGES', 'Keine Felder zum Aktualisieren angegeben'));
       }
 
-      updates.push(`updated_at = now()`);
+      updates.push('updated_at = now()');
       params.push(pluginId);
 
       const { rows } = await db.query(
@@ -118,9 +117,9 @@ export function buildUpdateHandler() {
       return reply.send(apiOk(rows[0]));
     } catch (err) {
       logger.error({ err, pluginId, tenantId }, 'Plugin-Update fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Plugin konnte nicht aktualisiert werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Plugin konnte nicht aktualisiert werden'));
     }
   };
 }

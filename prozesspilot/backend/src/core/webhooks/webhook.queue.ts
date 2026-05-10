@@ -14,27 +14,27 @@ import { logger } from '../logger';
 const BASE_BACKOFF_MS = 30_000;
 
 export interface WebhookJob {
-  id:            string;
-  tenant_id:     string;
-  url:           string;
-  payload:       Record<string, unknown>;
-  attempts:      number;
-  max_attempts:  number;
+  id: string;
+  tenant_id: string;
+  url: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
   next_retry_at: Date;
-  last_error:    string | null;
-  status:        'pending' | 'processing' | 'done' | 'failed';
+  last_error: string | null;
+  status: 'pending' | 'processing' | 'done' | 'failed';
 }
 
 interface WebhookRow {
-  id:            string;
-  tenant_id:     string;
-  url:           string;
-  payload:       Record<string, unknown>;
-  attempts:      number;
-  max_attempts:  number;
+  id: string;
+  tenant_id: string;
+  url: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
   next_retry_at: Date;
-  last_error:    string | null;
-  status:        string;
+  last_error: string | null;
+  status: string;
 }
 
 function rowToJob(r: WebhookRow): WebhookJob {
@@ -70,19 +70,16 @@ export interface ProcessOptions {
   /** Im Test injizierbar. Default: globaler fetch. */
   fetcher?: typeof fetch;
   /** Im Test injizierbar. Default: Date.now */
-  now?:     () => number;
+  now?: () => number;
 }
 
 /**
  * Verarbeitet den nächsten fälligen Job. Gibt true zurück, wenn ein Job
  * verarbeitet wurde, sonst false (queue leer / nichts fällig).
  */
-export async function processNext(
-  db: Pool,
-  opts: ProcessOptions = {},
-): Promise<boolean> {
+export async function processNext(db: Pool, opts: ProcessOptions = {}): Promise<boolean> {
   const fetcher = opts.fetcher ?? fetch;
-  const now     = opts.now ?? (() => Date.now());
+  const now = opts.now ?? (() => Date.now());
 
   const client = await db.connect();
   try {
@@ -110,17 +107,16 @@ export async function processNext(
 
     try {
       const res = await fetcher(job.url, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body:    JSON.stringify(job.payload),
+        body: JSON.stringify(job.payload),
       });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      await db.query(
-        `UPDATE webhook_queue SET status = 'done', last_error = NULL WHERE id = $1`,
-        [job.id],
-      );
+      await db.query(`UPDATE webhook_queue SET status = 'done', last_error = NULL WHERE id = $1`, [
+        job.id,
+      ]);
       return true;
     } catch (err) {
       const newAttempts = job.attempts + 1;
@@ -131,7 +127,7 @@ export async function processNext(
           [job.id, newAttempts, errMsg],
         );
       } else {
-        const backoffMs = (2 ** newAttempts) * BASE_BACKOFF_MS;
+        const backoffMs = 2 ** newAttempts * BASE_BACKOFF_MS;
         const nextAt = new Date(now() + backoffMs);
         await db.query(
           `
@@ -163,11 +159,7 @@ export async function processNext(
 /**
  * Worker, der periodisch processNext aufruft. Gibt eine Stop-Funktion zurück.
  */
-export function startWorker(
-  db: Pool,
-  intervalMs = 10_000,
-  opts: ProcessOptions = {},
-): () => void {
+export function startWorker(db: Pool, intervalMs = 10_000, opts: ProcessOptions = {}): () => void {
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
 

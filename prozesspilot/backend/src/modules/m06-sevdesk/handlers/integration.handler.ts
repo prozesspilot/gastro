@@ -7,12 +7,15 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
-import { SevDeskClient } from '../../../core/adapters/booking/sevdesk/sevdesk.client';
-import { getApiToken, SevDeskNotConfiguredError } from '../../../core/adapters/booking/sevdesk/auth';
 import { syncAccountingTypes } from '../../../core/adapters/booking/sevdesk/account-mapper';
+import {
+  SevDeskNotConfiguredError,
+  getApiToken,
+} from '../../../core/adapters/booking/sevdesk/auth';
+import { SevDeskClient } from '../../../core/adapters/booking/sevdesk/sevdesk.client';
 import { syncTaxRules } from '../../../core/adapters/booking/sevdesk/tax-mapper';
 
 const testInputSchema = z.object({
@@ -52,9 +55,11 @@ export function buildIntegrationTestHandler() {
         return reply.code(412).send(apiError('SEVDESK_NOT_CONFIGURED', err.message));
       }
       logger.error({ err, customer_id }, 'M06 integration-test fehlgeschlagen');
-      return reply.code(502).send(apiError('EXTERNAL_API_FAILED', 'sevDesk Verbindungstest fehlgeschlagen.', {
-        message: (err as Error).message,
-      }));
+      return reply.code(502).send(
+        apiError('EXTERNAL_API_FAILED', 'sevDesk Verbindungstest fehlgeschlagen.', {
+          message: (err as Error).message,
+        }),
+      );
     }
   };
 }
@@ -92,9 +97,11 @@ export function buildSyncAccountsHandler() {
         return reply.code(412).send(apiError('SEVDESK_NOT_CONFIGURED', err.message));
       }
       logger.error({ err, customer_id }, 'M06 sync-accounts fehlgeschlagen');
-      return reply.code(502).send(apiError('EXTERNAL_API_FAILED', 'sevDesk Sync fehlgeschlagen.', {
-        message: (err as Error).message,
-      }));
+      return reply.code(502).send(
+        apiError('EXTERNAL_API_FAILED', 'sevDesk Sync fehlgeschlagen.', {
+          message: (err as Error).message,
+        }),
+      );
     }
   };
 }

@@ -2,10 +2,10 @@
  * M02 — Tests für renderPathTemplate / renderFilename (M02 §9).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  renderPathTemplate,
   renderFilename,
+  renderPathTemplate,
   sanitizeFilename,
   transliterate,
 } from '../../../core/templates/path-template';

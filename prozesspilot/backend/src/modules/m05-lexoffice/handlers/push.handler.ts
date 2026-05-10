@@ -16,32 +16,32 @@
  *  12) Persist + Audit + Event
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
+import { config } from '../../../core/config';
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
-import { config } from '../../../core/config';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
-import {
-  createLexofficeClientForCustomer,
-  LexofficeNotConfiguredError,
-  LexofficeApiError,
-  LexofficeClient,
-} from '../../../core/adapters/booking/lexoffice/lexoffice.client';
 import { CategoryMapper } from '../../../core/adapters/booking/lexoffice/category.mapper';
+import {
+  LexofficeApiError,
+  type LexofficeClient,
+  LexofficeNotConfiguredError,
+  createLexofficeClientForCustomer,
+} from '../../../core/adapters/booking/lexoffice/lexoffice.client';
 import { buildLexofficeVoucher } from '../../../core/adapters/booking/lexoffice/voucher.builder';
 
 import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
 
 import { pushInputSchema } from '../schemas/push.input';
-import { resolveContact } from '../services/contact-resolver';
 import { pickAttachmentBytes } from '../services/attachment-picker';
 import { writeAudit } from '../services/audit.service';
+import { resolveContact } from '../services/contact-resolver';
 import { emitLexofficeEvent } from '../services/event-emitter';
 
 const ACCEPTED_INPUT_STATUSES = new Set<string>(['archived', 'categorized']);
@@ -80,27 +80,31 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
         .send(apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customerId}.`));
     }
     if (!ACCEPTED_INPUT_STATUSES.has(receipt.status)) {
-      return reply
-        .code(422)
-        .send(apiError('INVALID_STATUS', `Receipt-Status '${receipt.status}' nicht akzeptiert für /exports/lexoffice.`, {
-          status: receipt.status,
-          accepted: Array.from(ACCEPTED_INPUT_STATUSES),
-        }));
+      return reply.code(422).send(
+        apiError(
+          'INVALID_STATUS',
+          `Receipt-Status '${receipt.status}' nicht akzeptiert für /exports/lexoffice.`,
+          {
+            status: receipt.status,
+            accepted: Array.from(ACCEPTED_INPUT_STATUSES),
+          },
+        ),
+      );
     }
 
     // 2) Idempotenz: schon gepusht?
-    const existingExport = (receipt.exports ?? []).find(
-      (e: unknown) => {
-        const x = e as { target?: string; status?: string };
-        return x.target === 'lexoffice' && x.status === 'pushed';
-      },
-    );
+    const existingExport = (receipt.exports ?? []).find((e: unknown) => {
+      const x = e as { target?: string; status?: string };
+      return x.target === 'lexoffice' && x.status === 'pushed';
+    });
     if (existingExport) {
-      return reply.send(apiOk({
-        receipt,
-        receipt_patch: { status: receipt.status, exports: receipt.exports },
-        already_pushed: true,
-      }));
+      return reply.send(
+        apiOk({
+          receipt,
+          receipt_patch: { status: receipt.status, exports: receipt.exports },
+          already_pushed: true,
+        }),
+      );
     }
 
     try {
@@ -121,21 +125,29 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
       const cat = (receipt.categorization as { skr_account?: string } | undefined) ?? {};
       const skrAccount = cat.skr_account ?? '';
       if (!skrAccount) {
-        return reply.code(422).send(
-          apiError('VALIDATION_FAILED', 'Receipt hat kein SKR-Konto — Kategorisierung muss vor Lexoffice-Push laufen.', { receipt_id }),
-        );
+        return reply
+          .code(422)
+          .send(
+            apiError(
+              'VALIDATION_FAILED',
+              'Receipt hat kein SKR-Konto — Kategorisierung muss vor Lexoffice-Push laufen.',
+              { receipt_id },
+            ),
+          );
       }
       const mapper = new CategoryMapper({ pool: db, client });
       const lexofficeCategoryId = await mapper.mapSkrToLexoffice(skrAccount, customerId);
 
       // 5) Kontaktauflösung
-      const fields = (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {};
-      const supplierName = typeof fields.supplier_name === 'string' ? (fields.supplier_name as string) : '';
-      const supplierVatId = typeof fields.supplier_vat_id === 'string' ? (fields.supplier_vat_id as string) : null;
-      const lexofficeIntegration =
-        (customer_profile.integrations as Record<string, unknown> | undefined)?.lexoffice as
-          | { auto_create_contacts?: boolean }
-          | undefined;
+      const fields =
+        (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {};
+      const supplierName =
+        typeof fields.supplier_name === 'string' ? (fields.supplier_name as string) : '';
+      const supplierVatId =
+        typeof fields.supplier_vat_id === 'string' ? (fields.supplier_vat_id as string) : null;
+      const lexofficeIntegration = (
+        customer_profile.integrations as Record<string, unknown> | undefined
+      )?.lexoffice as { auto_create_contacts?: boolean } | undefined;
       const autoCreate = Boolean(lexofficeIntegration?.auto_create_contacts);
       const contact = await resolveContact({
         client,
@@ -181,7 +193,10 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
         );
       } catch (err) {
         // M05 §10: Anhang-Fehler bricht den Voucher nicht
-        logger.warn({ err, voucher_id: created.id }, 'Lexoffice-Anhang fehlgeschlagen — Voucher steht');
+        logger.warn(
+          { err, voucher_id: created.id },
+          'Lexoffice-Anhang fehlgeschlagen — Voucher steht',
+        );
       }
 
       // 10) Receipt patchen
@@ -220,7 +235,11 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
         customerId,
         receiptId: receipt_id,
         eventType: 'pp.receipt.exported.lexoffice',
-        payload: { external_id: created.id, contact_id: contact.contactId, lexoffice_category_id: lexofficeCategoryId },
+        payload: {
+          external_id: created.id,
+          contact_id: contact.contactId,
+          lexoffice_category_id: lexofficeCategoryId,
+        },
         traceId: trace_id,
       });
       void emitLexofficeEvent(redis, 'pp.receipt.exported', {
@@ -233,12 +252,14 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
         trace_id,
       });
 
-      return reply.send(apiOk({
-        receipt: saved,
-        receipt_patch: { status: saved.status, exports: saved.exports },
-        events_to_emit: ['pp.receipt.exported'],
-        module: 'M05',
-      }));
+      return reply.send(
+        apiOk({
+          receipt: saved,
+          receipt_patch: { status: saved.status, exports: saved.exports },
+          events_to_emit: ['pp.receipt.exported'],
+          module: 'M05',
+        }),
+      );
     } catch (err) {
       logger.error({ err, receipt_id, customerId }, 'M05 push fehlgeschlagen');
       void writeAudit(db, {
@@ -261,13 +282,18 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
         return reply.code(412).send(apiError('LEXOFFICE_NOT_CONFIGURED', err.message));
       }
       if (err instanceof LexofficeApiError) {
-        return reply.code(502).send(apiError('EXTERNAL_API_FAILED', err.message, {
-          status: err.status, body: err.body,
-        }));
+        return reply.code(502).send(
+          apiError('EXTERNAL_API_FAILED', err.message, {
+            status: err.status,
+            body: err.body,
+          }),
+        );
       }
-      return reply.code(502).send(apiError('EXTERNAL_API_FAILED', 'Lexoffice-Push fehlgeschlagen.', {
-        message: (err as Error).message,
-      }));
+      return reply.code(502).send(
+        apiError('EXTERNAL_API_FAILED', 'Lexoffice-Push fehlgeschlagen.', {
+          message: (err as Error).message,
+        }),
+      );
     }
   };
 }

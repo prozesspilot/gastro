@@ -30,34 +30,34 @@ export interface OcrWord {
  * nachgelagerten Stufe.
  */
 export interface OcrFields {
-  supplier_name?:    string;
-  supplier_vat_id?:  string;
+  supplier_name?: string;
+  supplier_vat_id?: string;
   supplier_address?: string;
-  document_number?:  string;
-  document_date?:    string; // YYYY-MM-DD
-  due_date?:         string; // YYYY-MM-DD
-  total_net?:        number;
-  total_gross?:      number;
-  total_tax?:        number;
-  tax_lines?:        Array<{ rate: number; amount: number }>;
-  currency?:         string;
-  payment_method?:   string;
+  document_number?: string;
+  document_date?: string; // YYYY-MM-DD
+  due_date?: string; // YYYY-MM-DD
+  total_net?: number;
+  total_gross?: number;
+  total_tax?: number;
+  tax_lines?: Array<{ rate: number; amount: number }>;
+  currency?: string;
+  payment_method?: string;
 }
 
 export interface OcrResult {
   /** Vollständiger Rohtext, blockweise getrennt durch \n. */
-  raw_text:    string;
+  raw_text: string;
   /** Durchschnittliche Konfidenz über alle Words (0..1). */
-  confidence:  number;
-  blocks:      OcrBlock[];
-  words:       OcrWord[];
-  page_count:  number;
+  confidence: number;
+  blocks: OcrBlock[];
+  words: OcrWord[];
+  page_count: number;
   /** Optionale strukturierte Felder (Phase 3: Mindee-Adapter). */
-  fields?:     OcrFields;
+  fields?: OcrFields;
 }
 
 export interface OcrAdapter {
-  readonly id:      OcrProviderId;
+  readonly id: OcrProviderId;
   readonly version: string;
   /**
    * Führt OCR auf den gegebenen Bytes aus.

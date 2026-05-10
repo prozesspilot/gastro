@@ -13,7 +13,7 @@
 
 import type Redis from 'ioredis';
 
-const RATE = 2;          // Tokens pro Sekunde
+const RATE = 2; // Tokens pro Sekunde
 const BURST = 2;
 const KEY_PREFIX = 'pp:lexoffice:ratelimit:';
 const MAX_WAIT_MS = 5000;
@@ -73,9 +73,9 @@ async function tryConsume(redis: Redis | null, customerId: string): Promise<bool
     end
   `;
   try {
-    const consumed = (await (redis as unknown as { eval: (...a: unknown[]) => Promise<number> }).eval(
-      lua, 1, key, RATE, BURST, now,
-    )) as number;
+    const consumed = (await (
+      redis as unknown as { eval: (...a: unknown[]) => Promise<number> }
+    ).eval(lua, 1, key, RATE, BURST, now)) as number;
     return consumed === 1;
   } catch {
     // Bei Redis-Fehler: nicht limitieren, weitermachen.

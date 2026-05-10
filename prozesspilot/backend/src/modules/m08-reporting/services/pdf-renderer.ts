@@ -34,10 +34,18 @@ export async function renderMonthlyReport(opts: RenderOptions): Promise<Buffer> 
   {
     const page = doc.addPage([595, 842]); // A4
     page.drawText('ProzessPilot', {
-      x: 50, y: 760, size: 28, font: helvBold, color: rgb(0.1, 0.2, 0.55),
+      x: 50,
+      y: 760,
+      size: 28,
+      font: helvBold,
+      color: rgb(0.1, 0.2, 0.55),
     });
     page.drawText('Monatsbericht', {
-      x: 50, y: 720, size: 22, font: helv, color: rgb(0.2, 0.2, 0.2),
+      x: 50,
+      y: 720,
+      size: 22,
+      font: helv,
+      color: rgb(0.2, 0.2, 0.2),
     });
     page.drawText(`Periode: ${period}`, { x: 50, y: 680, size: 14, font: helv });
     page.drawText(`Kunde: ${customerName}`, { x: 50, y: 660, size: 14, font: helv });
@@ -53,8 +61,13 @@ export async function renderMonthlyReport(opts: RenderOptions): Promise<Buffer> 
     const kpis: Array<[string, string]> = [
       ['Belege gesamt', String(totals.receipts_count)],
       ['Brutto-Summe', formatEuro(totals.gross_sum)],
-      ['Netto-Summe',  formatEuro(totals.net_sum)],
-      ['Trend vs. Vormonat', totals.trend_pct === null ? '–' : `${totals.trend_pct > 0 ? '+' : ''}${totals.trend_pct.toFixed(1)} %`],
+      ['Netto-Summe', formatEuro(totals.net_sum)],
+      [
+        'Trend vs. Vormonat',
+        totals.trend_pct === null
+          ? '–'
+          : `${totals.trend_pct > 0 ? '+' : ''}${totals.trend_pct.toFixed(1)} %`,
+      ],
     ];
 
     let y = 720;
@@ -116,7 +129,11 @@ export async function renderMonthlyReport(opts: RenderOptions): Promise<Buffer> 
     const p = pages[i];
     // Footer war mit '?' platziert — wir überschreiben einfach mit weißem Rect + neuem Text
     p.drawRectangle({
-      x: 50, y: 30, width: 495, height: 12, color: rgb(1, 1, 1),
+      x: 50,
+      y: 30,
+      width: 495,
+      height: 12,
+      color: rgb(1, 1, 1),
     });
     drawFooter(p, helv, i + 1, String(total));
   }
@@ -136,8 +153,10 @@ function drawTableHeader(
     page.drawText(cols[i], { x: xs[i], y, size: 11, font, color: rgb(0.1, 0.1, 0.1) });
   }
   page.drawLine({
-    start: { x: 50, y: y - 4 }, end: { x: 545, y: y - 4 },
-    thickness: 0.5, color: rgb(0.7, 0.7, 0.7),
+    start: { x: 50, y: y - 4 },
+    end: { x: 545, y: y - 4 },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7),
   });
 }
 
@@ -149,7 +168,11 @@ function drawFooter(
 ): void {
   const date = new Date().toISOString().slice(0, 10);
   page.drawText(`Erstellt von ProzessPilot am ${date}  ·  Seite ${pageIdx}/${total}`, {
-    x: 50, y: 30, size: 9, font, color: rgb(0.5, 0.5, 0.5),
+    x: 50,
+    y: 30,
+    size: 9,
+    font,
+    color: rgb(0.5, 0.5, 0.5),
   });
 }
 

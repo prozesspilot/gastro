@@ -5,14 +5,16 @@
  * Kein echter DB-Zugriff — db-Pool wird als Mock übergeben.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DropboxAdapter } from '../../src/core/adapters/archive-storage/dropbox.adapter';
-import type { UploadInput } from '../../src/core/adapters/archive-storage/adapter.interface';
 import type { Pool, QueryResult } from 'pg';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { UploadInput } from '../../src/core/adapters/archive-storage/adapter.interface';
+import { DropboxAdapter } from '../../src/core/adapters/archive-storage/dropbox.adapter';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeDb(queryFn?: (text: string, values?: unknown[]) => Promise<Partial<QueryResult>>): Pool {
+function makeDb(
+  queryFn?: (text: string, values?: unknown[]) => Promise<Partial<QueryResult>>,
+): Pool {
   return {
     query: queryFn ?? vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   } as unknown as Pool;
@@ -153,8 +155,8 @@ describe('DropboxAdapter', () => {
       expect(result.url).toBe('https://www.dropbox.com/s/abc123/rechnung.pdf?dl=0');
 
       // Prüfe Upload-Call
-      const uploadCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[0] as string).includes('/2/files/upload'),
+      const uploadCalls = fetchSpy.mock.calls.filter((c) =>
+        (c[0] as string).includes('/2/files/upload'),
       );
       expect(uploadCalls).toHaveLength(1);
 
@@ -168,14 +170,18 @@ describe('DropboxAdapter', () => {
 
     it('korrekte Body-Bytes werden übergeben', async () => {
       const fetchSpy = mockFetchSequence([
-        { ok: true, status: 200, body: { id: EXTERNAL_ID, path_display: PATH, name: 'rechnung.pdf' } },
+        {
+          ok: true,
+          status: 200,
+          body: { id: EXTERNAL_ID, path_display: PATH, name: 'rechnung.pdf' },
+        },
         { ok: true, status: 200, body: { url: 'https://www.dropbox.com/share' } },
       ]);
 
       await adapter.upload(UPLOAD_INPUT);
 
-      const uploadCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[0] as string).includes('/2/files/upload'),
+      const uploadCalls = fetchSpy.mock.calls.filter((c) =>
+        (c[0] as string).includes('/2/files/upload'),
       );
       const uploadBody = (uploadCalls[0][1] as RequestInit).body;
       // Body sollte die übergebenen Bytes sein
@@ -185,7 +191,11 @@ describe('DropboxAdapter', () => {
     it('Share-Link-Fehler → Upload trotzdem erfolgreich (url undefined)', async () => {
       mockFetchSequence([
         // Upload OK
-        { ok: true, status: 200, body: { id: EXTERNAL_ID, path_display: PATH, name: 'rechnung.pdf' } },
+        {
+          ok: true,
+          status: 200,
+          body: { id: EXTERNAL_ID, path_display: PATH, name: 'rechnung.pdf' },
+        },
         // Share-Link schlägt fehl
         { ok: false, status: 403, body: { error_summary: 'no_permission' } },
       ]);
@@ -207,12 +217,14 @@ describe('DropboxAdapter', () => {
 
       await adapter.delete(EXTERNAL_ID, CUSTOMER_ID);
 
-      const deleteCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[0] as string).includes('/2/files/delete_v2'),
+      const deleteCalls = fetchSpy.mock.calls.filter((c) =>
+        (c[0] as string).includes('/2/files/delete_v2'),
       );
       expect(deleteCalls).toHaveLength(1);
 
-      const body = JSON.parse((deleteCalls[0][1] as RequestInit).body as string) as { path: string };
+      const body = JSON.parse((deleteCalls[0][1] as RequestInit).body as string) as {
+        path: string;
+      };
       expect(body.path).toBe(EXTERNAL_ID);
     });
 
@@ -228,9 +240,7 @@ describe('DropboxAdapter', () => {
   describe('download', () => {
     it('gibt Buffer zurück', async () => {
       const pdfContent = new TextEncoder().encode('mock PDF content');
-      mockFetchSequence([
-        { ok: true, status: 200, body: {}, binaryBody: pdfContent.buffer },
-      ]);
+      mockFetchSequence([{ ok: true, status: 200, body: {}, binaryBody: pdfContent.buffer }]);
 
       const result = await adapter.download(EXTERNAL_ID, CUSTOMER_ID);
 
@@ -245,8 +255,8 @@ describe('DropboxAdapter', () => {
 
       await adapter.download(EXTERNAL_ID, CUSTOMER_ID);
 
-      const downloadCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[0] as string).includes('/2/files/download'),
+      const downloadCalls = fetchSpy.mock.calls.filter((c) =>
+        (c[0] as string).includes('/2/files/download'),
       );
       expect(downloadCalls).toHaveLength(1);
 
@@ -263,11 +273,13 @@ describe('DropboxAdapter', () => {
         vi.fn().mockImplementation((sql: string) => {
           if (sql.includes('customer_credentials')) {
             return Promise.resolve({
-              rows: [{
-                credential_id: 'cred-no-refresh',
-                plaintext: JSON.stringify({ access_token: 'expired-token' }),
-                expires_at: null,
-              }],
+              rows: [
+                {
+                  credential_id: 'cred-no-refresh',
+                  plaintext: JSON.stringify({ access_token: 'expired-token' }),
+                  expires_at: null,
+                },
+              ],
             });
           }
           return Promise.resolve({ rows: [] });

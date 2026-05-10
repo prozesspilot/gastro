@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 export const verifyInputSchema = z.object({
   raw_body_b64: z.string().min(1, 'raw_body_b64 darf nicht leer sein'),
-  signature:    z.string().min(8, 'signature darf nicht leer sein'),
+  signature: z.string().min(8, 'signature darf nicht leer sein'),
 });
 
 export type VerifyInput = z.infer<typeof verifyInputSchema>;

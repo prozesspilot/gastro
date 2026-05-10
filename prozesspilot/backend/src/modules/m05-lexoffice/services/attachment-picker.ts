@@ -25,9 +25,7 @@ export interface AttachmentPick {
   contentType: string;
 }
 
-export async function pickAttachmentBytes(
-  input: PickAttachmentInput,
-): Promise<AttachmentPick> {
+export async function pickAttachmentBytes(input: PickAttachmentInput): Promise<AttachmentPick> {
   // MVP: laden direkt aus MinIO (Original-Datei)
   const objectKey = input.receipt.file.object_key;
   const bytes = await downloadObject(input.s3, objectKey);
@@ -39,9 +37,10 @@ export async function pickAttachmentBytes(
   const filename =
     (archive?.path && lastSegment(archive.path)) ?? `${input.receipt.receipt_id}.pdf`;
 
-  const mime = input.receipt.file.mime_type === 'application/pdf'
-    ? 'application/pdf'
-    : input.receipt.file.mime_type;
+  const mime =
+    input.receipt.file.mime_type === 'application/pdf'
+      ? 'application/pdf'
+      : input.receipt.file.mime_type;
 
   return { bytes, filename, contentType: mime };
 }

@@ -48,20 +48,20 @@ function selectColumns(): string {
 
 function rowToResponse(row: ReceiptRow): ReceiptResponse {
   return {
-    id:              row.id,
-    tenant_id:       row.tenant_id,
-    customer_id:     row.customer_id,
-    status:          row.status as ReceiptResponse['status'],
-    original_name:   row.original_name ?? null,
-    mime_type:       row.mime_type ?? null,
-    storage_key:     row.storage_key ?? null,
+    id: row.id,
+    tenant_id: row.tenant_id,
+    customer_id: row.customer_id,
+    status: row.status as ReceiptResponse['status'],
+    original_name: row.original_name ?? null,
+    mime_type: row.mime_type ?? null,
+    storage_key: row.storage_key ?? null,
     file_size_bytes: row.file_size_bytes ?? null,
-    file_sha256:     row.file_sha256 ?? null,
-    source:          row.source as ReceiptResponse['source'],
-    metadata:        row.metadata ?? {},
-    error_message:   row.error_message ?? null,
-    created_at:      row.created_at.toISOString(),
-    updated_at:      row.updated_at.toISOString(),
+    file_sha256: row.file_sha256 ?? null,
+    source: row.source as ReceiptResponse['source'],
+    metadata: row.metadata ?? {},
+    error_message: row.error_message ?? null,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
   };
 }
 
@@ -120,8 +120,10 @@ export async function createReceipt(
   } catch (err) {
     // 23505 = unique_violation
     if (
-      typeof err === 'object' && err !== null &&
-      'code' in err && (err as { code: string }).code === '23505' &&
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === '23505' &&
       input.file_sha256
     ) {
       const { rows: existingRows } = await db.query<{ id: string }>(
@@ -201,11 +203,12 @@ export async function listReceipts(
     `SELECT COUNT(*) as count FROM receipts ${where}`,
     params,
   );
-  const total = parseInt(countResult.rows[0]?.count ?? '0', 10);
+  const total = Number.parseInt(countResult.rows[0]?.count ?? '0', 10);
 
-  const orderBy = searchParamIndex !== null
-    ? `ORDER BY ts_rank(search_vector, plainto_tsquery('german', $${searchParamIndex})) DESC, created_at DESC`
-    : 'ORDER BY created_at DESC';
+  const orderBy =
+    searchParamIndex !== null
+      ? `ORDER BY ts_rank(search_vector, plainto_tsquery('german', $${searchParamIndex})) DESC, created_at DESC`
+      : 'ORDER BY created_at DESC';
 
   // Daten mit Pagination
   const dataParams = [...params];
@@ -285,37 +288,34 @@ export async function updateReceiptStorageKey(
 export interface ReceiptStats {
   total: number;
   by_status: {
-    pending:    number;
+    pending: number;
     processing: number;
-    done:       number;
-    error:      number;
+    done: number;
+    error: number;
   };
   by_source: {
-    manual:   number;
+    manual: number;
     whatsapp: number;
-    email:    number;
+    email: number;
   };
-  today_count:     number;
+  today_count: number;
   this_week_count: number;
 }
 
 interface StatsRow {
-  total:           string;
-  status_pending:  string;
+  total: string;
+  status_pending: string;
   status_processing: string;
-  status_done:     string;
-  status_error:    string;
-  source_manual:   string;
+  status_done: string;
+  status_error: string;
+  source_manual: string;
   source_whatsapp: string;
-  source_email:    string;
-  today_count:     string;
-  week_count:      string;
+  source_email: string;
+  today_count: string;
+  week_count: string;
 }
 
-export async function getReceiptStats(
-  db: Pool,
-  tenantId: string,
-): Promise<ReceiptStats> {
+export async function getReceiptStats(db: Pool, tenantId: string): Promise<ReceiptStats> {
   const { rows } = await db.query<StatsRow>(
     `
     SELECT
@@ -335,23 +335,23 @@ export async function getReceiptStats(
     [tenantId],
   );
 
-  const r = rows[0] ?? {} as StatsRow;
-  const toNum = (v: string | undefined) => parseInt(v ?? '0', 10);
+  const r = rows[0] ?? ({} as StatsRow);
+  const toNum = (v: string | undefined) => Number.parseInt(v ?? '0', 10);
 
   return {
     total: toNum(r.total),
     by_status: {
-      pending:    toNum(r.status_pending),
+      pending: toNum(r.status_pending),
       processing: toNum(r.status_processing),
-      done:       toNum(r.status_done),
-      error:      toNum(r.status_error),
+      done: toNum(r.status_done),
+      error: toNum(r.status_error),
     },
     by_source: {
-      manual:   toNum(r.source_manual),
+      manual: toNum(r.source_manual),
       whatsapp: toNum(r.source_whatsapp),
-      email:    toNum(r.source_email),
+      email: toNum(r.source_email),
     },
-    today_count:     toNum(r.today_count),
+    today_count: toNum(r.today_count),
     this_week_count: toNum(r.week_count),
   };
 }
@@ -394,15 +394,15 @@ export async function bulkUpdateStatus(
 // ── Export für CSV ────────────────────────────────────────────────────────
 
 export interface ReceiptExportRow {
-  id:            string;
-  status:        string;
+  id: string;
+  status: string;
   original_name: string | null;
-  source:        string;
-  category:      string | null;
-  amount:        number | null;
-  currency:      string | null;
-  date:          string | null;
-  created_at:    string;
+  source: string;
+  category: string | null;
+  amount: number | null;
+  currency: string | null;
+  date: string | null;
+  created_at: string;
 }
 
 export async function listReceiptsForExport(
@@ -423,15 +423,15 @@ export async function listReceiptsForExport(
     const cat = (row.metadata ?? {}) as { categorization?: Record<string, unknown> };
     const c = cat.categorization;
     return {
-      id:            row.id,
-      status:        row.status,
+      id: row.id,
+      status: row.status,
       original_name: row.original_name,
-      source:        row.source,
-      category:      typeof c?.category === 'string' ? c.category : null,
-      amount:        typeof c?.amount === 'number' ? c.amount : null,
-      currency:      typeof c?.currency === 'string' ? c.currency : null,
-      date:          typeof c?.date === 'string' ? c.date : null,
-      created_at:    row.created_at.toISOString(),
+      source: row.source,
+      category: typeof c?.category === 'string' ? c.category : null,
+      amount: typeof c?.amount === 'number' ? c.amount : null,
+      currency: typeof c?.currency === 'string' ? c.currency : null,
+      date: typeof c?.date === 'string' ? c.date : null,
+      created_at: row.created_at.toISOString(),
     };
   });
 }

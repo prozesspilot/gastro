@@ -10,12 +10,12 @@
  *   3. (Simulated) Webhook-Event mit HMAC-Signature pruefung
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHmac } from 'node:crypto';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import pg from 'pg';
+import { type IncomingMessage, type ServerResponse, createServer } from 'node:http';
+import type pg from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app';
-import { setupTestDb, cleanTestDb } from './setup';
+import { cleanTestDb, setupTestDb } from './setup';
 
 const TEST_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const TEST_HMAC_SECRET = 'test-secret-min-32-chars-required-here';
@@ -88,9 +88,7 @@ afterAll(async () => {
 function buildAuthHeaders(method: string, path: string, body: string): Record<string, string> {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const message = `${method.toUpperCase()}:${path}:${timestamp}:${body}`;
-  const signature = createHmac('sha256', TEST_HMAC_SECRET)
-    .update(message)
-    .digest('hex');
+  const signature = createHmac('sha256', TEST_HMAC_SECRET).update(message).digest('hex');
   return {
     'x-pp-tenant-id': TEST_TENANT_ID,
     'x-pp-timestamp': timestamp,
@@ -108,7 +106,7 @@ describe('Plugin Dispatcher Integration', () => {
       body: JSON.stringify({ test: true }),
     });
     expect(response.status).toBe(200);
-    const data = await response.json() as { received: boolean };
+    const data = (await response.json()) as { received: boolean };
     expect(data.received).toBe(true);
   });
 
@@ -118,22 +116,16 @@ describe('Plugin Dispatcher Integration', () => {
     const timestamp = '1735689600';
     const message = `${timestamp}:${payload}`;
 
-    const sig1 = createHmac('sha256', PLUGIN_WEBHOOK_SECRET)
-      .update(message)
-      .digest('hex');
+    const sig1 = createHmac('sha256', PLUGIN_WEBHOOK_SECRET).update(message).digest('hex');
 
-    const sig2 = createHmac('sha256', PLUGIN_WEBHOOK_SECRET)
-      .update(message)
-      .digest('hex');
+    const sig2 = createHmac('sha256', PLUGIN_WEBHOOK_SECRET).update(message).digest('hex');
 
     // Gleicher Input → gleiche Signatur
     expect(sig1).toBe(sig2);
     expect(sig1).toHaveLength(64); // hex-kodierter SHA-256
 
     // Anderes Secret → andere Signatur
-    const sig3 = createHmac('sha256', 'different-secret-here-xx')
-      .update(message)
-      .digest('hex');
+    const sig3 = createHmac('sha256', 'different-secret-here-xx').update(message).digest('hex');
     expect(sig1).not.toBe(sig3);
   });
 

@@ -27,8 +27,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import { logger } from '../../../core/logger';
 import type { CategorizationContext, CategorizationResult } from './types';
@@ -171,7 +171,9 @@ export class ClaudeCategorizer {
 
     // 2) Wenn kein Anthropic-Client konfiguriert, Fallback (Tests / Dev ohne Key)
     if (!this.client) {
-      logger.warn('Kein Anthropic-Client konfiguriert — Claude-Categorizer fällt auf Fallback zurück');
+      logger.warn(
+        'Kein Anthropic-Client konfiguriert — Claude-Categorizer fällt auf Fallback zurück',
+      );
       return FALLBACK_RESULT;
     }
 
@@ -195,7 +197,7 @@ export class ClaudeCategorizer {
 
     while (attempt <= RETRY_DELAYS_MS.length) {
       try {
-        const resp = await this.client!.messages.create({
+        const resp = await this.client?.messages.create({
           model: this.model,
           max_tokens: 1024,
           system: SYSTEM_PROMPT,
@@ -226,7 +228,7 @@ export class ClaudeCategorizer {
         }
 
         // Ungültige Antwort → 1× Re-Prompt
-        const reResp = await this.client!.messages.create({
+        const reResp = await this.client?.messages.create({
           model: this.model,
           max_tokens: 1024,
           system: `${SYSTEM_PROMPT}\n\nRespond ONLY via the tool 'categorize_receipt'.`,
@@ -263,8 +265,9 @@ export class ClaudeCategorizer {
         return FALLBACK_RESULT;
       } catch (err) {
         lastErr = err as Error;
-        const httpStatus = (err as { status?: number; statusCode?: number }).status
-          ?? (err as { status?: number; statusCode?: number }).statusCode;
+        const httpStatus =
+          (err as { status?: number; statusCode?: number }).status ??
+          (err as { status?: number; statusCode?: number }).statusCode;
         const isRetryable = !httpStatus || httpStatus >= 500 || httpStatus === 429;
         if (!isRetryable) {
           logger.warn({ err, status: httpStatus }, 'Claude-API: nicht-retryable Fehler');

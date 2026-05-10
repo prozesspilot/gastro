@@ -33,7 +33,7 @@ export interface RowResult {
   /** 1-basierte Zeilennummer der zuletzt geschriebenen Zeile. */
   row_index: number;
   /** Direkt anklickbare URL auf die Zelle. */
-  url:       string;
+  url: string;
 }
 
 /**

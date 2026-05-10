@@ -21,7 +21,9 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(async () => { await app.close(); });
+afterAll(async () => {
+  await app.close();
+});
 
 // ── x-trace-id Header ─────────────────────────────────────────────────────────
 
@@ -29,7 +31,7 @@ describe('x-trace-id Response-Header', () => {
   it('wird automatisch gesetzt wenn nicht im Request vorhanden', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/health',
+      url: '/api/v1/health',
     });
 
     // DECISION: /health gibt 503 wenn DB nicht erreichbar (kein Docker in CI).
@@ -44,8 +46,8 @@ describe('x-trace-id Response-Header', () => {
     const myTraceId = 'trc_aabbccdd11223344';
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/health',
+      method: 'GET',
+      url: '/api/v1/health',
       headers: { 'x-trace-id': myTraceId },
     });
 
@@ -57,7 +59,7 @@ describe('x-trace-id Response-Header', () => {
   it('setzt Header auch bei 404-Antworten', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/nicht-vorhanden',
+      url: '/nicht-vorhanden',
     });
 
     // 404 ist normal für unbekannte Routen
@@ -118,7 +120,7 @@ describe('Ready-Endpoint', () => {
   it('/ready gibt x-trace-id zurück', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/ready',
+      url: '/api/v1/ready',
     });
 
     // /ready kann 200 oder 503 sein (je nach DB/Redis)

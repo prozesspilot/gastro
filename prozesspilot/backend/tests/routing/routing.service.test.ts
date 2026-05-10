@@ -10,13 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('../../src/modules/routing/routing.repository', () => ({
-  createJob:         vi.fn(),
-  findJobById:       vi.fn(),
-  updateJobStatus:   vi.fn(),
-  failJob:           vi.fn(),
-  claimNextJob:      vi.fn(),
-  listJobs:          vi.fn(),
-  resetJobForRetry:  vi.fn(),
+  createJob: vi.fn(),
+  findJobById: vi.fn(),
+  updateJobStatus: vi.fn(),
+  failJob: vi.fn(),
+  claimNextJob: vi.fn(),
+  listJobs: vi.fn(),
+  resetJobForRetry: vi.fn(),
 }));
 
 vi.mock('../../src/core/n8n/client', () => ({
@@ -42,30 +42,30 @@ import {
 
 function makeJob(overrides: Record<string, unknown> = {}) {
   return {
-    id:            'job-uuid-1',
-    tenant_id:     'tenant-uuid-1',
-    document_id:   'doc-uuid-1',
-    status:        'queued',
-    attempts:      0,
-    max_attempts:  3,
+    id: 'job-uuid-1',
+    tenant_id: 'tenant-uuid-1',
+    document_id: 'doc-uuid-1',
+    status: 'queued',
+    attempts: 0,
+    max_attempts: 3,
     error_message: null,
-    payload:       {},
-    result:        null,
-    run_at:        new Date().toISOString(),
-    created_at:    new Date().toISOString(),
-    updated_at:    new Date().toISOString(),
+    payload: {},
+    result: null,
+    run_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   };
 }
 
 // Typen der Mocks
-const mockCreateJob        = vi.mocked(createJob);
-const mockClaimNextJob     = vi.mocked(claimNextJob);
-const mockUpdateJobStatus  = vi.mocked(updateJobStatus);
-const mockFailJob          = vi.mocked(failJob);
-const mockFindJobById      = vi.mocked(findJobById);
+const mockCreateJob = vi.mocked(createJob);
+const mockClaimNextJob = vi.mocked(claimNextJob);
+const mockUpdateJobStatus = vi.mocked(updateJobStatus);
+const mockFailJob = vi.mocked(failJob);
+const mockFindJobById = vi.mocked(findJobById);
 const mockResetJobForRetry = vi.mocked(resetJobForRetry);
-const mockTriggerWebhook   = vi.mocked(triggerWebhook);
+const mockTriggerWebhook = vi.mocked(triggerWebhook);
 
 // Dummy-Pool — wird von Service-Funktionen durchgereicht
 const pool = {} as Parameters<typeof createJobForDocument>[0];
@@ -81,7 +81,7 @@ describe('createJobForDocument', () => {
     mockTriggerWebhook.mockResolvedValue(null);
 
     const result = await createJobForDocument(pool, {
-      tenantId:   'tenant-uuid-1',
+      tenantId: 'tenant-uuid-1',
       documentId: 'doc-uuid-1',
     });
 
@@ -181,12 +181,7 @@ describe('retryJob', () => {
 
     const result = await retryJob(pool, 'tenant-1', job.id);
 
-    expect(mockResetJobForRetry).toHaveBeenCalledWith(
-      pool,
-      'tenant-1',
-      job.id,
-      expect.any(Date),
-    );
+    expect(mockResetJobForRetry).toHaveBeenCalledWith(pool, 'tenant-1', job.id, expect.any(Date));
     expect(result?.status).toBe('queued');
   });
 

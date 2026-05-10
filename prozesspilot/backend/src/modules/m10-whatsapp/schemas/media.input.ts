@@ -12,9 +12,9 @@
 import { z } from 'zod';
 
 export const mediaInputSchema = z.object({
-  media_id:    z.string().min(1, 'media_id Pflicht'),
+  media_id: z.string().min(1, 'media_id Pflicht'),
   customer_id: z.string().min(1, 'customer_id Pflicht'),
-  trace_id:    z.string().optional(),
+  trace_id: z.string().optional(),
 });
 
 export type MediaInput = z.infer<typeof mediaInputSchema>;

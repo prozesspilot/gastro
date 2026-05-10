@@ -24,13 +24,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  delete process.env.N8N_WEBHOOK_SECRET;
+  Reflect.deleteProperty(process.env, 'N8N_WEBHOOK_SECRET');
 });
 
 // ── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
 function sign(body: string, secret = SECRET): string {
-  return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 }
 
 function webhookHeaders(body: string, secret = SECRET) {
@@ -46,8 +46,8 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('gibt 200 zurück bei gültigem Webhook', async () => {
     const payload = JSON.stringify({ tenant_id: 'abc', status: 'done', data: { result: 42 } });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/document-routed',
+      method: 'POST',
+      url: '/webhooks/n8n/document-routed',
       headers: webhookHeaders(payload),
       payload,
     });
@@ -60,10 +60,10 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('gibt 401 bei falscher Signatur zurück', async () => {
     const payload = JSON.stringify({ tenant_id: 'abc', status: 'done' });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/test-workflow',
+      method: 'POST',
+      url: '/webhooks/n8n/test-workflow',
       headers: {
-        'content-type':    'application/json',
+        'content-type': 'application/json',
         'x-n8n-signature': 'sha256=deadbeef',
       },
       payload,
@@ -76,8 +76,8 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('gibt 401 zurück wenn Signatur-Header fehlt', async () => {
     const payload = JSON.stringify({ tenant_id: 'abc', status: 'done' });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/test-workflow',
+      method: 'POST',
+      url: '/webhooks/n8n/test-workflow',
       headers: { 'content-type': 'application/json' },
       payload,
     });
@@ -88,8 +88,8 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('gibt 422 bei fehlendem tenant_id zurück', async () => {
     const payload = JSON.stringify({ status: 'done' });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/test-workflow',
+      method: 'POST',
+      url: '/webhooks/n8n/test-workflow',
       headers: webhookHeaders(payload),
       payload,
     });
@@ -101,8 +101,8 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('gibt 422 bei fehlendem status zurück', async () => {
     const payload = JSON.stringify({ tenant_id: 'abc' });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/test-workflow',
+      method: 'POST',
+      url: '/webhooks/n8n/test-workflow',
       headers: webhookHeaders(payload),
       payload,
     });
@@ -113,8 +113,8 @@ describe('POST /webhooks/n8n/:workflowType', () => {
   it('akzeptiert status=failed', async () => {
     const payload = JSON.stringify({ tenant_id: 'abc', status: 'failed', job_id: 'j1' });
     const res = await app.inject({
-      method:  'POST',
-      url:     '/webhooks/n8n/invoice-extraction',
+      method: 'POST',
+      url: '/webhooks/n8n/invoice-extraction',
       headers: webhookHeaders(payload),
       payload,
     });

@@ -24,13 +24,12 @@ export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 
 export const updateTenantSchema = z
   .object({
-    name:   nonEmptyStringSchema.max(200).optional(),
+    name: nonEmptyStringSchema.max(200).optional(),
     active: z.boolean().optional(),
   })
-  .refine(
-    (data) => Object.keys(data).length > 0,
-    { message: 'Mindestens ein Feld muss angegeben werden.' },
-  );
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'Mindestens ein Feld muss angegeben werden.',
+  });
 
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 
@@ -38,10 +37,10 @@ export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 
 /** Wie ein Tenant aus der DB kommt (nach Entschlüsselung, vor dem Senden) */
 export const tenantResponseSchema = z.object({
-  id:         uuidSchema,
-  slug:       slugSchema,
-  name:       z.string(),
-  active:     z.boolean(),
+  id: uuidSchema,
+  slug: slugSchema,
+  name: z.string(),
+  active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
 });

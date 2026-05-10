@@ -13,20 +13,20 @@
 import type { Pool } from 'pg';
 
 export interface ExistingReceiptFile {
-  receiptId:   string;
-  objectKey:   string;
-  mimeType:    string;
-  sizeBytes:   number;
-  sha256:      string;
+  receiptId: string;
+  objectKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
 }
 
 interface ReceiptRow {
-  receipt_id:      string;
+  receipt_id: string;
   file_object_key: string;
-  file_sha256:     string;
-  payload:         {
+  file_sha256: string;
+  payload: {
     file?: {
-      mime_type?:  string;
+      mime_type?: string;
       size_bytes?: number;
     };
   };
@@ -54,10 +54,10 @@ export async function findReceiptByHash(
   if (!row) return null;
 
   return {
-    receiptId:  row.receipt_id,
-    objectKey:  row.file_object_key,
-    mimeType:   row.payload.file?.mime_type  ?? 'application/octet-stream',
-    sizeBytes:  row.payload.file?.size_bytes ?? 0,
-    sha256:     row.file_sha256,
+    receiptId: row.receipt_id,
+    objectKey: row.file_object_key,
+    mimeType: row.payload.file?.mime_type ?? 'application/octet-stream',
+    sizeBytes: row.payload.file?.size_bytes ?? 0,
+    sha256: row.file_sha256,
   };
 }

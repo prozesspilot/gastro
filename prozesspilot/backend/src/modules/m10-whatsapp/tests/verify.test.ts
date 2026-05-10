@@ -14,12 +14,12 @@ import { describe, expect, it } from 'vitest';
 import { verifyWhatsAppSignature } from '../services/webhook-verifier';
 
 function sign(body: Buffer, secret: string): string {
-  return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 }
 
 describe('webhook-verifier (M10 §7.1)', () => {
   const secret = 'meta-app-secret-test';
-  const body   = Buffer.from(JSON.stringify({ object: 'whatsapp_business_account' }));
+  const body = Buffer.from(JSON.stringify({ object: 'whatsapp_business_account' }));
 
   it('akzeptiert eine gültige Signatur', () => {
     const sig = sign(body, secret);
@@ -68,7 +68,7 @@ describe('webhook-verifier (M10 §7.1)', () => {
   });
 
   it('vergleicht timing-safe (gleiche Hex-Länge, andere Bytes)', () => {
-    const sig = 'sha256=' + 'a'.repeat(64);
+    const sig = `sha256=${'a'.repeat(64)}`;
     expect(verifyWhatsAppSignature(body, sig, secret)).toEqual({
       ok: false,
       code: 'INVALID_SIGNATURE',

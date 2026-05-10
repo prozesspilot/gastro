@@ -24,23 +24,20 @@ declare module 'fastify' {
   }
 }
 
-export async function hmacMiddleware(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
+export async function hmacMiddleware(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Dev-Bypass — in Production wirft config bereits einen Fehler beim Start
   if (config.PP_AUTH_DISABLED) {
     return;
   }
 
   const result = verifyHmac({
-    secret:         config.PP_HMAC_SECRET,
+    secret: config.PP_HMAC_SECRET,
     maxSkewSeconds: config.PP_HMAC_TIMESTAMP_SKEW,
-    method:         req.method,
-    url:            req.url,
-    timestamp:      req.headers['x-pp-timestamp'] as string | undefined,
-    signature:      req.headers['x-pp-signature'] as string | undefined,
-    rawBody:        req.rawBody ?? Buffer.alloc(0),
+    method: req.method,
+    url: req.url,
+    timestamp: req.headers['x-pp-timestamp'] as string | undefined,
+    signature: req.headers['x-pp-signature'] as string | undefined,
+    rawBody: req.rawBody ?? Buffer.alloc(0),
   });
 
   if (!result.ok) {

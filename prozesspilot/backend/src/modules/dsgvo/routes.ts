@@ -8,13 +8,13 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { buildRequestDeletionHandler } from './handlers/request-deletion.handler';
+import { buildDataExportHandler } from './handlers/data-export.handler';
 import {
   buildDeletionStatusHandler,
   buildExecuteDeletionHandler,
 } from './handlers/deletion-status.handler';
-import { buildDataExportHandler } from './handlers/data-export.handler';
 import { buildPiiInventoryHandler } from './handlers/pii-inventory.handler';
+import { buildRequestDeletionHandler } from './handlers/request-deletion.handler';
 
 /** Registriert unter /dsgvo */
 export async function dsgvoRoutes(app: FastifyInstance): Promise<void> {

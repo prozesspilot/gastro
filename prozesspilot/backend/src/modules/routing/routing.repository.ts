@@ -14,7 +14,7 @@
 
 import type { Pool } from 'pg';
 import { withTenant } from '../../core/db/tenant';
-import { buildPaginationMeta, type PaginationMeta } from '../../core/schemas/common';
+import { type PaginationMeta, buildPaginationMeta } from '../../core/schemas/common';
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
@@ -22,29 +22,29 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'dead';
 
 export interface CreateJobInput {
   document_id?: string | null;
-  payload:      Record<string, unknown>;
+  payload: Record<string, unknown>;
   max_attempts?: number;
-  run_at?:      Date;
+  run_at?: Date;
 }
 
 export interface JobResponse {
-  id:            string;
-  tenant_id:     string;
-  document_id:   string | null;
-  status:        JobStatus;
-  attempts:      number;
-  max_attempts:  number;
+  id: string;
+  tenant_id: string;
+  document_id: string | null;
+  status: JobStatus;
+  attempts: number;
+  max_attempts: number;
   error_message: string | null;
-  payload:       Record<string, unknown>;
-  result:        Record<string, unknown> | null;
-  run_at:        string;
-  created_at:    string;
-  updated_at:    string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  run_at: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ListJobsQuery {
-  page:    number;
-  limit:   number;
+  page: number;
+  limit: number;
   status?: JobStatus;
 }
 
@@ -52,18 +52,18 @@ export interface ListJobsQuery {
 
 function rowToResponse(row: Record<string, unknown>): JobResponse {
   return {
-    id:            row.id as string,
-    tenant_id:     row.tenant_id as string,
-    document_id:   (row.document_id as string | null) ?? null,
-    status:        row.status as JobStatus,
-    attempts:      Number(row.attempts),
-    max_attempts:  Number(row.max_attempts),
+    id: row.id as string,
+    tenant_id: row.tenant_id as string,
+    document_id: (row.document_id as string | null) ?? null,
+    status: row.status as JobStatus,
+    attempts: Number(row.attempts),
+    max_attempts: Number(row.max_attempts),
     error_message: (row.error_message as string | null) ?? null,
-    payload:       (row.payload as Record<string, unknown>) ?? {},
-    result:        (row.result as Record<string, unknown> | null) ?? null,
-    run_at:        (row.run_at as Date).toISOString(),
-    created_at:    (row.created_at as Date).toISOString(),
-    updated_at:    (row.updated_at as Date).toISOString(),
+    payload: (row.payload as Record<string, unknown>) ?? {},
+    result: (row.result as Record<string, unknown> | null) ?? null,
+    run_at: (row.run_at as Date).toISOString(),
+    created_at: (row.created_at as Date).toISOString(),
+    updated_at: (row.updated_at as Date).toISOString(),
   };
 }
 
@@ -102,7 +102,7 @@ export async function findJobById(
 ): Promise<JobResponse | null> {
   return withTenant(pool, tenantId, async (client) => {
     const { rows } = await client.query<Record<string, unknown>>(
-      `SELECT * FROM routing_jobs WHERE id = $1`,
+      'SELECT * FROM routing_jobs WHERE id = $1',
       [id],
     );
     return rows[0] ? rowToResponse(rows[0]) : null;
@@ -119,7 +119,7 @@ export async function listJobs(
 
   return withTenant(pool, tenantId, async (client) => {
     const conditionParams: unknown[] = [];
-    const conditions:  string[]  = [];
+    const conditions: string[] = [];
 
     if (query.status) {
       conditionParams.push(query.status);
@@ -132,10 +132,10 @@ export async function listJobs(
       `SELECT COUNT(*) AS count FROM routing_jobs ${where}`,
       conditionParams,
     );
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = Number.parseInt(countResult.rows[0].count, 10);
 
     const dataParams = [...conditionParams, query.limit, offset];
-    const limitIdx  = dataParams.length - 1;
+    const limitIdx = dataParams.length - 1;
     const offsetIdx = dataParams.length;
 
     const { rows } = await client.query<Record<string, unknown>>(
@@ -149,7 +149,7 @@ export async function listJobs(
     );
 
     return {
-      data:       rows.map(rowToResponse),
+      data: rows.map(rowToResponse),
       pagination: buildPaginationMeta(query.page, query.limit, total),
     };
   });
@@ -164,7 +164,7 @@ export async function updateJobStatus(
   result?: Record<string, unknown> | null,
 ): Promise<JobResponse | null> {
   return withTenant(pool, tenantId, async (client) => {
-    const sets:   string[]  = ['status = $2', 'updated_at = now()'];
+    const sets: string[] = ['status = $2', 'updated_at = now()'];
     const params: unknown[] = [id, status];
 
     if (result !== undefined) {

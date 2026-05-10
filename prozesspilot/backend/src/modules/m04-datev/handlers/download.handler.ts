@@ -6,8 +6,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError } from '../../../core/schemas/common';
 
 export function buildDownloadCsvHandler() {
   return async function downloadCsvHandler(
@@ -33,9 +33,7 @@ export function buildDownloadCsvHandler() {
       );
 
       if (!rows[0]) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Export ${exportId} nicht gefunden.`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Export ${exportId} nicht gefunden.`));
       }
 
       const { period_year, period_month, csv_object_key } = rows[0];
@@ -48,9 +46,7 @@ export function buildDownloadCsvHandler() {
         .send({ csv_object_key, filename, export_id: exportId });
     } catch (err) {
       logger.error({ err, exportId }, 'M04 download-csv fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'CSV-Download fehlgeschlagen.'),
-      );
+      return reply.code(500).send(apiError('INTERNAL_ERROR', 'CSV-Download fehlgeschlagen.'));
     }
   };
 }
@@ -78,15 +74,18 @@ export function buildDownloadZipHandler() {
       );
 
       if (!rows[0]) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Export ${exportId} nicht gefunden.`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Export ${exportId} nicht gefunden.`));
       }
 
       if (!rows[0].zip_object_key) {
-        return reply.code(404).send(
-          apiError('NO_ZIP', 'Kein ZIP-Archiv für diesen Export vorhanden. Build mit include_pdfs=true.'),
-        );
+        return reply
+          .code(404)
+          .send(
+            apiError(
+              'NO_ZIP',
+              'Kein ZIP-Archiv für diesen Export vorhanden. Build mit include_pdfs=true.',
+            ),
+          );
       }
 
       const { period_year, period_month, zip_object_key } = rows[0];
@@ -98,9 +97,7 @@ export function buildDownloadZipHandler() {
         .send({ zip_object_key, filename, export_id: exportId });
     } catch (err) {
       logger.error({ err, exportId }, 'M04 download-zip fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'ZIP-Download fehlgeschlagen.'),
-      );
+      return reply.code(500).send(apiError('INTERNAL_ERROR', 'ZIP-Download fehlgeschlagen.'));
     }
   };
 }

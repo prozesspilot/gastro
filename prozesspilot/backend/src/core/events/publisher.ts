@@ -35,9 +35,11 @@ export async function publishEvent(
   // ioredis erwartet: xadd(stream, id, field1, value1, field2, value2, …)
   const flat = Object.entries(fields).flat();
   try {
-    return await (redis as unknown as {
-      xadd(stream: string, id: string, ...args: string[]): Promise<string | null>;
-    }).xadd(stream, '*', ...flat);
+    return await (
+      redis as unknown as {
+        xadd(stream: string, id: string, ...args: string[]): Promise<string | null>;
+      }
+    ).xadd(stream, '*', ...flat);
   } catch (err) {
     logger.warn({ err, stream, fields }, 'Event publish fehlgeschlagen');
     return null;
@@ -65,9 +67,9 @@ export async function publishCustomerEvent(
   };
 
   await publishEvent(redis, STREAMS.customers, {
-    type:       event.type,
-    tenant_id:  event.tenant_id,
-    timestamp:  event.timestamp,
-    payload:    JSON.stringify(event.payload),
+    type: event.type,
+    tenant_id: event.tenant_id,
+    timestamp: event.timestamp,
+    payload: JSON.stringify(event.payload),
   });
 }

@@ -22,8 +22,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const planInputSchema = z.object({
   receipt_id: z.string().min(1),
@@ -84,9 +84,9 @@ export function buildPlanHandler() {
     const receipt = receiptResult.rows[0] ?? null;
     if (!receipt) {
       logger.warn({ receipt_id, customer_id }, 'route_plan: receipt NOT FOUND in DB');
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customer_id}.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customer_id}.`));
     }
     logger.info({ receipt_id, customer_id, status: receipt.status }, 'route_plan: receipt found');
 
@@ -101,7 +101,10 @@ export function buildPlanHandler() {
     );
 
     if (!profileRow.rows.length) {
-      logger.warn({ customer_id }, 'route_plan: NO customer_profiles row found → FALLBACK plan [M01, M07]');
+      logger.warn(
+        { customer_id },
+        'route_plan: NO customer_profiles row found → FALLBACK plan [M01, M07]',
+      );
       const fallback: RoutePlanResponse = {
         receipt_id,
         customer_id,
@@ -118,37 +121,49 @@ export function buildPlanHandler() {
     // Normalize module codes: support both 'M01' and 'm01_ingestion' formats
     const rawModules = asStringArray(profile.modules_enabled);
     logger.info({ customer_id, rawModules }, 'route_plan: profile found, raw modules_enabled');
-    const enabled = new Set(rawModules.flatMap((m) => {
-      const upper = m.toUpperCase();
-      // Map new-format codes to legacy M-codes
-      const legacyMap: Record<string, string> = {
-        'M01_INGESTION': 'M01', 'M02_ARCHIVING': 'M02', 'M03_EXTRACTION': 'M03',
-        'M04_CATEGORIZATION': 'M04', 'M05_LEXOFFICE': 'M05', 'M06_PORTAL': 'M06',
-        'M07_NOTIFICATIONS': 'M07', 'M08_REPORTING': 'M08', 'M09_SUPPLIER_COMM': 'M09',
-      };
-      const normalized = legacyMap[upper] ?? upper;
-      return [m, normalized]; // Keep both forms
-    }));
+    const enabled = new Set(
+      rawModules.flatMap((m) => {
+        const upper = m.toUpperCase();
+        // Map new-format codes to legacy M-codes
+        const legacyMap: Record<string, string> = {
+          M01_INGESTION: 'M01',
+          M02_ARCHIVING: 'M02',
+          M03_EXTRACTION: 'M03',
+          M04_CATEGORIZATION: 'M04',
+          M05_LEXOFFICE: 'M05',
+          M06_PORTAL: 'M06',
+          M07_NOTIFICATIONS: 'M07',
+          M08_REPORTING: 'M08',
+          M09_SUPPLIER_COMM: 'M09',
+        };
+        const normalized = legacyMap[upper] ?? upper;
+        return [m, normalized]; // Keep both forms
+      }),
+    );
     const integrations = (profile.integrations ?? {}) as Record<string, unknown>;
     const routing = (profile.routing ?? {}) as Record<string, unknown>;
 
     // Credentials abfragen (kind-Liste).
     const credRes = await db.query<CredentialRow>(
-      `SELECT kind FROM customer_credentials WHERE customer_id = $1`,
+      'SELECT kind FROM customer_credentials WHERE customer_id = $1',
       [customer_id],
     );
     const credentialKinds = new Set(credRes.rows.map((r) => r.kind));
 
     const steps: RouteStep[] = [];
 
-    const isExtractedAlready = receipt.status === 'extracted'
-      || receipt.status === 'categorized'
-      || receipt.status === 'archived'
-      || receipt.status === 'exported'
-      || receipt.status === 'completed';
+    const isExtractedAlready =
+      receipt.status === 'extracted' ||
+      receipt.status === 'categorized' ||
+      receipt.status === 'archived' ||
+      receipt.status === 'exported' ||
+      receipt.status === 'completed';
 
     // Phase 1: M01 — Extraktion
-    if (enabled.has('M01') && (receipt.status === 'received' || receipt.status === 'requires_review')) {
+    if (
+      enabled.has('M01') &&
+      (receipt.status === 'received' || receipt.status === 'requires_review')
+    ) {
       steps.push({ module: 'M01', required: true });
     }
 
@@ -159,12 +174,17 @@ export function buildPlanHandler() {
       // categorization is extracted as a JSON string from metadata JSONB
       let cat: { confidence?: number } | undefined;
       try {
-        cat = typeof receipt.categorization === 'string'
-          ? JSON.parse(receipt.categorization) as { confidence?: number }
-          : (receipt.categorization as { confidence?: number } | undefined);
-      } catch { cat = undefined; }
-      const threshold = (routing as { low_confidence_threshold?: number }).low_confidence_threshold ?? 0.75;
-      const alreadyCategorizedHighConf = cat?.confidence !== undefined && cat.confidence >= threshold;
+        cat =
+          typeof receipt.categorization === 'string'
+            ? (JSON.parse(receipt.categorization) as { confidence?: number })
+            : (receipt.categorization as { confidence?: number } | undefined);
+      } catch {
+        cat = undefined;
+      }
+      const threshold =
+        (routing as { low_confidence_threshold?: number }).low_confidence_threshold ?? 0.75;
+      const alreadyCategorizedHighConf =
+        cat?.confidence !== undefined && cat.confidence >= threshold;
       if (!alreadyCategorizedHighConf) {
         steps.push({ module: 'M03', required: true });
       }
@@ -178,16 +198,17 @@ export function buildPlanHandler() {
     // Phase 4: Exporte
     // DECISION: Check both customer_credentials table AND integrations JSONB
     // (new profiles store credentials in integrations, not customer_credentials table)
-    const hasLexofficeKey = credentialKinds.has('lexoffice_api_key')
-      || Boolean((integrations as { lexoffice_api_key?: unknown }).lexoffice_api_key);
-    const hasSevdeskKey = credentialKinds.has('sevdesk_api_key')
-      || Boolean((integrations as { sevdesk_api_token?: unknown }).sevdesk_api_token);
+    const hasLexofficeKey =
+      credentialKinds.has('lexoffice_api_key') ||
+      Boolean((integrations as { lexoffice_api_key?: unknown }).lexoffice_api_key);
+    const hasSevdeskKey =
+      credentialKinds.has('sevdesk_api_key') ||
+      Boolean((integrations as { sevdesk_api_token?: unknown }).sevdesk_api_token);
 
     // M07 — WhatsApp-Benachrichtigung: läuft wenn whatsapp_number im custom-Profil gesetzt ist
     const customData = (profileRow.rows[0].custom ?? {}) as Record<string, unknown>;
     const hasWhatsapp = Boolean(
-      customData.whatsapp_number
-      || (integrations as { whatsapp_number?: unknown }).whatsapp_number,
+      customData.whatsapp_number || (integrations as { whatsapp_number?: unknown }).whatsapp_number,
     );
 
     if (enabled.has('M05') && hasLexofficeKey) {
@@ -205,7 +226,10 @@ export function buildPlanHandler() {
       steps.push({ module: 'M01', required: true });
     }
 
-    logger.info({ customer_id, receipt_id, steps: steps.map((s) => s.module) }, 'route_plan: FINAL plan');
+    logger.info(
+      { customer_id, receipt_id, steps: steps.map((s) => s.module) },
+      'route_plan: FINAL plan',
+    );
     const response: RoutePlanResponse = {
       receipt_id,
       customer_id,

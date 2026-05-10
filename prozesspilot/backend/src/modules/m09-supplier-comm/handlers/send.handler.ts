@@ -9,14 +9,14 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
 import nodemailer from 'nodemailer';
+import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
-import { logger } from '../../../core/logger';
 import { config } from '../../../core/config';
 import { publishEvent } from '../../../core/events/publisher';
+import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const bodySchema = z.object({
   draft: z.object({
@@ -37,15 +37,18 @@ const bodySchema = z.object({
 
 // Mock-Transporter wenn SMTP-ENVs fehlen
 function createTransporter() {
-  const host = (config as unknown as Record<string, string>)['SMTP_HOST'];
-  const user = (config as unknown as Record<string, string>)['SMTP_USER'];
+  const host = (config as unknown as Record<string, string>).SMTP_HOST;
+  const user = (config as unknown as Record<string, string>).SMTP_USER;
 
   if (!host || !user) {
     return null; // Mock-Mode
   }
 
-  const port = parseInt((config as unknown as Record<string, string>)['SMTP_PORT'] ?? '587', 10);
-  const pass = (config as unknown as Record<string, string>)['SMTP_PASS'];
+  const port = Number.parseInt(
+    (config as unknown as Record<string, string>).SMTP_PORT ?? '587',
+    10,
+  );
+  const pass = (config as unknown as Record<string, string>).SMTP_PASS;
 
   return nodemailer.createTransport({
     host,
@@ -56,10 +59,7 @@ function createTransporter() {
 }
 
 export function buildSendHandler() {
-  return async function sendHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function sendHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const parsed = bodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(422).send(zodToApiError(parsed.error));
@@ -73,7 +73,10 @@ export function buildSendHandler() {
 
     try {
       const transporter = createTransporter();
-      const fromAddr = (config as unknown as Record<string, string>)['SMTP_FROM'] ?? draft.from ?? 'noreply@prozesspilot.de';
+      const fromAddr =
+        (config as unknown as Record<string, string>).SMTP_FROM ??
+        draft.from ??
+        'noreply@prozesspilot.de';
 
       if (!transporter) {
         // Mock-Mode: nur loggen
@@ -102,7 +105,10 @@ export function buildSendHandler() {
         });
         externalId = info.messageId ?? null;
         status = 'sent';
-        logger.info({ communication_id: draft.communication_id, messageId: info.messageId }, 'M09: Mail versendet');
+        logger.info(
+          { communication_id: draft.communication_id, messageId: info.messageId },
+          'M09: Mail versendet',
+        );
       }
 
       // Persistieren in communications Tabelle
@@ -155,7 +161,10 @@ export function buildSendHandler() {
         }),
       );
     } catch (err) {
-      logger.error({ err, communication_id: draft.communication_id }, 'send-communication handler error');
+      logger.error(
+        { err, communication_id: draft.communication_id },
+        'send-communication handler error',
+      );
       return reply.code(500).send(apiError('INTERNAL_ERROR', 'Fehler beim E-Mail-Versand.'));
     }
   };

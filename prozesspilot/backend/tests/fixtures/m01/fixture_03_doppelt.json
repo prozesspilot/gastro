@@ -4,8 +4,8 @@
   "expected_fields": {
     "supplier_vat_id": "DE123456789",
     "document_number": "RE-2026-1042",
-    "document_date":   "2026-04-28",
-    "total_gross":     142.85
+    "document_date": "2026-04-28",
+    "total_gross": 142.85
   },
   "expected_status": "requires_review",
   "expected_confidence_range": [0.85, 1.0],

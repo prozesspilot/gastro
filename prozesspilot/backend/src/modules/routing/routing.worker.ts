@@ -18,7 +18,7 @@ import { STREAMS } from '../../core/events/types';
 import { logger } from '../../core/logger';
 import { createJobForDocument, processNextJob } from './routing.service';
 
-const GROUP    = 'routing';
+const GROUP = 'routing';
 const CONSUMER = 'routing-worker-1';
 
 /** Verarbeitet ein einzelnes document.received-Event aus dem Stream. */
@@ -29,9 +29,9 @@ async function handleDocumentEvent(
 ): Promise<void> {
   const f = fields as unknown as Record<string, string>;
 
-  const tenantId   = f['tenant_id'];
-  const documentId = f['document_id'] ?? f['id'];
-  const eventType  = f['event_type'] ?? f['type'];
+  const tenantId = f.tenant_id;
+  const documentId = f.document_id ?? f.id;
+  const eventType = f.event_type ?? f.type;
 
   if (!tenantId || !documentId) {
     logger.warn({ fields }, 'document-Event ohne tenant_id/document_id übersprungen');

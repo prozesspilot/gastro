@@ -11,7 +11,7 @@ import { parse as parseYaml } from 'yaml';
 
 // Cache, damit wir die Datei nur einmal lesen
 let cachedYaml: string | null = null;
-let cachedJson: unknown      = null;
+let cachedJson: unknown = null;
 
 function load(): { yaml: string; json: unknown } {
   if (cachedYaml === null || cachedJson === null) {
@@ -27,9 +27,7 @@ export async function docsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api-docs', (_req, reply) => {
     try {
       const { yaml } = load();
-      return reply
-        .header('content-type', 'text/yaml; charset=utf-8')
-        .send(yaml);
+      return reply.header('content-type', 'text/yaml; charset=utf-8').send(yaml);
     } catch (err) {
       return reply.code(500).send({
         ok: false,

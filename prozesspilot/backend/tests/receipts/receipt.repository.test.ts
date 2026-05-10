@@ -40,15 +40,15 @@ afterAll(async () => {
 beforeEach(async () => {
   if (!E2E) return;
   const { rows: tRows } = await db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-repo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Repo Test'],
   );
   tenantId = tRows[0].id;
 
   // Customer via HTTP-Endpoint anlegen (PII-Felder werden verschlüsselt)
   const cRes = await app.inject({
-    method:  'POST',
-    url:     '/api/v1/customers',
+    method: 'POST',
+    url: '/api/v1/customers',
     headers: { 'content-type': 'application/json', 'x-pp-tenant-id': tenantId },
     payload: { name: 'Test Customer' },
   });
@@ -57,7 +57,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
 });
 
 describe.skipIf(!E2E)('createReceipt', () => {
@@ -77,7 +77,7 @@ describe.skipIf(!E2E)('getReceipt', () => {
 
     // Anderer Tenant
     const { rows } = await db.query<{ id: string }>(
-      `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
       [`test-other-${Date.now()}`, 'Other'],
     );
     const otherTenant = rows[0].id;
@@ -85,7 +85,7 @@ describe.skipIf(!E2E)('getReceipt', () => {
       const found = await getReceipt(db, otherTenant, r.id);
       expect(found).toBeNull();
     } finally {
-      await db.query(`DELETE FROM tenants WHERE id = $1`, [otherTenant]);
+      await db.query('DELETE FROM tenants WHERE id = $1', [otherTenant]);
     }
   });
 
@@ -120,7 +120,12 @@ describe.skipIf(!E2E)('updateReceiptStatus', () => {
   });
 
   it('gibt null bei unbekannter ID', async () => {
-    const u = await updateReceiptStatus(db, tenantId, '00000000-0000-0000-0000-000000000000', 'done');
+    const u = await updateReceiptStatus(
+      db,
+      tenantId,
+      '00000000-0000-0000-0000-000000000000',
+      'done',
+    );
     expect(u).toBeNull();
   });
 });
@@ -161,21 +166,18 @@ describe.skipIf(!E2E)('bulkUpdateStatus', () => {
 describe.skipIf(!E2E)('listReceiptsForExport', () => {
   it('mappt categorization aus metadata', async () => {
     const r = await createReceipt(db, tenantId, { customer_id: customerId });
-    await db.query(
-      `UPDATE receipts SET metadata = $2 WHERE id = $1`,
-      [
-        r.id,
-        JSON.stringify({
-          categorization: {
-            category: 'Reise',
-            amount: 42.5,
-            currency: 'EUR',
-            date: '2026-04-30',
-            confidence: 0.9,
-          },
-        }),
-      ],
-    );
+    await db.query('UPDATE receipts SET metadata = $2 WHERE id = $1', [
+      r.id,
+      JSON.stringify({
+        categorization: {
+          category: 'Reise',
+          amount: 42.5,
+          currency: 'EUR',
+          date: '2026-04-30',
+          confidence: 0.9,
+        },
+      }),
+    ]);
 
     const rows = await listReceiptsForExport(db, tenantId);
     expect(rows).toHaveLength(1);

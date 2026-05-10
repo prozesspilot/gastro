@@ -28,9 +28,9 @@ import type {
 } from './adapter.interface';
 
 import {
+  type DropboxCredential,
   loadDropboxCredential,
   refreshDropboxCredential,
-  type DropboxCredential,
 } from './dropbox-credentials';
 
 // ── API-Endpunkte ─────────────────────────────────────────────────────────────
@@ -76,11 +76,7 @@ class DropboxAuthExpiredError extends Error {
 
 // ── Fetch-Helpers ─────────────────────────────────────────────────────────────
 
-async function dbxApiPost<T>(
-  accessToken: string,
-  path: string,
-  body: unknown,
-): Promise<T> {
+async function dbxApiPost<T>(accessToken: string, path: string, body: unknown): Promise<T> {
   const resp = await fetch(`${DBX_API}${path}`, {
     method: 'POST',
     headers: {
@@ -143,9 +139,7 @@ async function dbxContentDownload(
   if (resp.status === 401) throw new DropboxAuthExpiredError();
   if (!resp.ok) {
     const errBody = (await resp.json().catch(() => ({}))) as DbxErrorPayload;
-    throw new Error(
-      `Dropbox download → ${resp.status}: ${errBody.error_summary ?? 'unknown'}`,
-    );
+    throw new Error(`Dropbox download → ${resp.status}: ${errBody.error_summary ?? 'unknown'}`);
   }
 
   const arrayBuffer = await resp.arrayBuffer();
@@ -242,7 +236,10 @@ export class DropboxAdapter implements ArchiveStorageAdapter {
     const cred = await this.loadCred(customerId);
     return this.withAuth(customerId, cred, async (token) => {
       const buf = await dbxContentDownload(token, { path: externalId });
-      logger.info({ externalId, customerId, bytes: buf.length }, 'M02 Dropbox download: Datei geladen');
+      logger.info(
+        { externalId, customerId, bytes: buf.length },
+        'M02 Dropbox download: Datei geladen',
+      );
       return buf;
     });
   }

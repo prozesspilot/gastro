@@ -15,17 +15,17 @@
  *   6) UPDATE delivery_log (append)
  */
 
+import type { S3Client } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import type { S3Client } from '@aws-sdk/client-s3';
 import { z } from 'zod';
 
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
-import { sendMonthlyReport, MailNotConfiguredError } from '../services/mail-sender';
-import { sendMonthlyReportSummary } from '../services/whatsapp-sender';
 import { writeReportAudit } from '../services/audit.service';
+import { MailNotConfiguredError, sendMonthlyReport } from '../services/mail-sender';
+import { sendMonthlyReportSummary } from '../services/whatsapp-sender';
 
 const deliverBodySchema = z.object({
   period: z.string().regex(/^\d{4}-\d{2}$/),
@@ -66,7 +66,9 @@ export function buildDeliverHandler() {
     );
     const report = reportRes.rows[0];
     if (!report) {
-      return reply.code(404).send(apiError('NOT_FOUND', `Report ${customer_id}/${period} nicht gefunden.`));
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Report ${customer_id}/${period} nicht gefunden.`));
     }
     if (report.status !== 'done') {
       return reply.code(409).send(apiError('REPORT_NOT_READY', `Report-Status: ${report.status}`));
@@ -76,7 +78,13 @@ export function buildDeliverHandler() {
     const totals = (report.totals ?? {}) as Record<string, unknown>;
     const recipients = pickRecipients(customer_profile);
 
-    const deliveries: Array<{ channel: string; to: string; status: 'delivered' | 'failed'; error?: string; delivered_at: string }> = [];
+    const deliveries: Array<{
+      channel: string;
+      to: string;
+      status: 'delivered' | 'failed';
+      error?: string;
+      delivered_at: string;
+    }> = [];
 
     for (const channel of channels) {
       for (const r of recipients.filter((rp) => rp.channel === channel)) {
@@ -86,21 +94,35 @@ export function buildDeliverHandler() {
             const fakePdf = Buffer.from('PDF-PLACEHOLDER');
             await sendMonthlyReport(r.to, period, fakePdf, totals as never);
           } else if (channel === 'whatsapp') {
-            await sendMonthlyReportSummary('phone_id_default', r.to, totals as never, 'access_token_stub');
+            await sendMonthlyReportSummary(
+              'phone_id_default',
+              r.to,
+              totals as never,
+              'access_token_stub',
+            );
           }
           deliveries.push({
-            channel, to: r.to, status: 'delivered', delivered_at: new Date().toISOString(),
+            channel,
+            to: r.to,
+            status: 'delivered',
+            delivered_at: new Date().toISOString(),
           });
         } catch (err) {
           if (err instanceof MailNotConfiguredError) {
             deliveries.push({
-              channel, to: r.to, status: 'failed', error: err.message,
+              channel,
+              to: r.to,
+              status: 'failed',
+              error: err.message,
               delivered_at: new Date().toISOString(),
             });
           } else {
             logger.warn({ err, channel, to: r.to }, 'Report-Versand fehlgeschlagen');
             deliveries.push({
-              channel, to: r.to, status: 'failed', error: (err as Error).message,
+              channel,
+              to: r.to,
+              status: 'failed',
+              error: (err as Error).message,
               delivered_at: new Date().toISOString(),
             });
           }
@@ -128,11 +150,13 @@ export function buildDeliverHandler() {
       traceId: trace_id,
     });
 
-    return reply.send(apiOk({
-      report_id: report.report_id,
-      period,
-      delivered: deliveries,
-    }));
+    return reply.send(
+      apiOk({
+        report_id: report.report_id,
+        period,
+        delivered: deliveries,
+      }),
+    );
   };
 }
 
@@ -152,6 +176,9 @@ function pickRecipients(profile?: Record<string, unknown>): Array<{ channel: str
   const recs = reporting?.recipients as Array<{ channel?: string; to?: string }> | undefined;
   if (!Array.isArray(recs)) return [];
   return recs
-    .filter((r): r is { channel: string; to: string } => typeof r.channel === 'string' && typeof r.to === 'string')
+    .filter(
+      (r): r is { channel: string; to: string } =>
+        typeof r.channel === 'string' && typeof r.to === 'string',
+    )
     .map((r) => ({ channel: r.channel, to: r.to }));
 }

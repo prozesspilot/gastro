@@ -13,37 +13,39 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  renderDatevCsv,
-  toDatevRow,
-  formatDecimalDE,
-  formatBelegdatum,
-  sanitizeText,
-} from '../services/csv-renderer';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
+import {
+  formatBelegdatum,
+  formatDecimalDE,
+  renderDatevCsv,
+  sanitizeText,
+  toDatevRow,
+} from '../services/csv-renderer';
 
 // ── Test-Fixtures ─────────────────────────────────────────────────────────────
 
-function makeReceipt(overrides: Partial<{
-  receipt_id: string;
-  vendor_name: string;
-  doc_number: string;
-  doc_date: string;
-  total_gross: number;
-  total_net: number;
-  tax_rate: number;
-  tax_amount: number;
-  skr_account: string;
-}>= {}): Receipt {
+function makeReceipt(
+  overrides: Partial<{
+    receipt_id: string;
+    vendor_name: string;
+    doc_number: string;
+    doc_date: string;
+    total_gross: number;
+    total_net: number;
+    tax_rate: number;
+    tax_amount: number;
+    skr_account: string;
+  }> = {},
+): Receipt {
   const {
     receipt_id = 'rcpt_test_001',
     vendor_name = 'Metro AG',
     doc_number = 'RE-2026-0042',
     doc_date = '2026-04-15',
-    total_gross = 119.00,
-    total_net = 100.00,
+    total_gross = 119.0,
+    total_net = 100.0,
     tax_rate = 0.19,
-    tax_amount = 19.00,
+    tax_amount = 19.0,
     skr_account = '3100',
   } = overrides;
 
@@ -200,9 +202,11 @@ describe('M04 CSV-Renderer', () => {
     });
 
     it('Goldmaster 10: Buchungstext max 60 Zeichen', () => {
-      const receipts = [makeReceipt({
-        vendor_name: 'Sehr langer Lieferantenname GmbH & Co. KG aus München-Schwabing',
-      })];
+      const receipts = [
+        makeReceipt({
+          vendor_name: 'Sehr langer Lieferantenname GmbH & Co. KG aus München-Schwabing',
+        }),
+      ];
       const { csv } = renderDatevCsv({ receipts, profile: testProfile, period: testPeriod });
 
       const text = csv.toString('utf-8');
@@ -243,9 +247,9 @@ describe('M04 CSV-Renderer', () => {
 
     it('Goldmaster 14: Mehrere Receipts → mehrere Datenzeilen', () => {
       const receipts = [
-        makeReceipt({ receipt_id: 'r1', total_gross: 100.00 }),
-        makeReceipt({ receipt_id: 'r2', total_gross: 200.00 }),
-        makeReceipt({ receipt_id: 'r3', total_gross: 300.00 }),
+        makeReceipt({ receipt_id: 'r1', total_gross: 100.0 }),
+        makeReceipt({ receipt_id: 'r2', total_gross: 200.0 }),
+        makeReceipt({ receipt_id: 'r3', total_gross: 300.0 }),
       ];
       const { csv, rows_count } = renderDatevCsv({
         receipts,
@@ -270,7 +274,7 @@ describe('M04 CSV-Renderer', () => {
     });
 
     it('-119.00 → "119,00" (Absolutwert)', () => {
-      expect(formatDecimalDE(-119.00)).toBe('119,00');
+      expect(formatDecimalDE(-119.0)).toBe('119,00');
     });
 
     it('100.1 → "100,10" (2 Dezimalstellen)', () => {

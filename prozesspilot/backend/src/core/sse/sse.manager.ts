@@ -8,7 +8,7 @@
  */
 
 export interface SseSink {
-  write(chunk: string): boolean | void;
+  write(chunk: string): boolean | undefined;
 }
 
 export class SseManager {

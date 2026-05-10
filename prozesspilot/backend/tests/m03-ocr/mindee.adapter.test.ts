@@ -46,7 +46,12 @@ vi.mock('mindee', () => {
 });
 
 // Erst nach vi.mock importieren — sonst greift der Mock nicht.
-import { MindeeAdapter, mapMindeeToOcrFields, __setMindeeClientForTests, __setMindeeSdkForTests } from '../../src/core/adapters/ocr/mindee.adapter';
+import {
+  MindeeAdapter,
+  __setMindeeClientForTests,
+  __setMindeeSdkForTests,
+  mapMindeeToOcrFields,
+} from '../../src/core/adapters/ocr/mindee.adapter';
 
 // ── Helpers --------------------------------------------------------------
 
@@ -69,18 +74,14 @@ function makeFullPrediction() {
           totalNet: field(120.04, 0.97),
           totalAmount: field(142.85, 0.96),
           totalTax: field(22.81, 0.92),
-          taxes: [
-            { rate: 19, value: 22.81, confidence: 0.93 },
-          ],
+          taxes: [{ rate: 19, value: 22.81, confidence: 0.93 }],
           locale: { currency: 'EUR', confidence: 0.99 },
         },
         pages: [{ prediction: {} }],
       },
       ocr: {
         mvisionV1: {
-          pages: [
-            { allWords: { content: 'Metro AG\nRE-2026-1042' } },
-          ],
+          pages: [{ allWords: { content: 'Metro AG\nRE-2026-1042' } }],
         },
       },
     },
@@ -96,7 +97,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.MINDEE_API_KEY;
+  Reflect.deleteProperty(process.env, 'MINDEE_API_KEY');
 });
 
 describe('MindeeAdapter', () => {
@@ -152,7 +153,7 @@ describe('MindeeAdapter', () => {
   });
 
   it('wirft mit klarer Message, wenn MINDEE_API_KEY fehlt', async () => {
-    delete process.env.MINDEE_API_KEY;
+    Reflect.deleteProperty(process.env, 'MINDEE_API_KEY');
     const adapter = new MindeeAdapter();
     await expect(adapter.extract(Buffer.from('x'))).rejects.toThrow(/MINDEE_API_KEY/);
   });

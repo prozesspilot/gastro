@@ -9,11 +9,11 @@
  * (LRU-Folder-Cache, Auth-State).
  */
 
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 import type { ArchiveProviderId, ArchiveStorageAdapter } from './adapter.interface';
-import { GoogleDriveAdapter } from './google-drive.adapter';
 import { DropboxAdapter } from './dropbox.adapter';
+import { GoogleDriveAdapter } from './google-drive.adapter';
 
 export interface ArchiveStorageAdapterFactory {
   for(provider: ArchiveProviderId): ArchiveStorageAdapter;

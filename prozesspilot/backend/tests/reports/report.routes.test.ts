@@ -9,7 +9,6 @@ import { buildApp } from '../../src/app';
 // Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
 const E2E = process.env.PP_E2E === '1';
 
-
 let app: FastifyInstance;
 let tenantId: string;
 let customerId: string;
@@ -28,14 +27,14 @@ afterAll(async () => {
 beforeEach(async () => {
   if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-rep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'Report Mandant'],
   );
   tenantId = rows[0].id;
 
   const cRes = await app.inject({
-    method:  'POST',
-    url:     '/api/v1/customers',
+    method: 'POST',
+    url: '/api/v1/customers',
     headers: { 'content-type': 'application/json', 'x-pp-tenant-id': tenantId },
     payload: { name: 'Report Customer' },
   });
@@ -44,7 +43,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
 });
 
 function headers() {
@@ -54,15 +53,15 @@ function headers() {
 describe.skipIf(!E2E)('GET /api/v1/reports/receipts', () => {
   it('liefert PDF mit Content-Type application/pdf', async () => {
     await app.inject({
-      method:  'POST',
-      url:     '/api/v1/receipts',
+      method: 'POST',
+      url: '/api/v1/receipts',
       headers: headers(),
       payload: { customer_id: customerId, original_name: 'beleg.pdf' },
     });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/reports/receipts',
+      method: 'GET',
+      url: '/api/v1/reports/receipts',
       headers: headers(),
     });
 
@@ -76,8 +75,8 @@ describe.skipIf(!E2E)('GET /api/v1/reports/receipts', () => {
 
   it('liefert PDF auch ohne Belege (leerer Mandant)', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/reports/receipts',
+      method: 'GET',
+      url: '/api/v1/reports/receipts',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
@@ -87,8 +86,8 @@ describe.skipIf(!E2E)('GET /api/v1/reports/receipts', () => {
 
   it('akzeptiert status-Filter', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/reports/receipts?status=done',
+      method: 'GET',
+      url: '/api/v1/reports/receipts?status=done',
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);

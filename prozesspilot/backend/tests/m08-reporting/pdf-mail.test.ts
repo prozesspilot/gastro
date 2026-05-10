@@ -12,13 +12,13 @@
  * Kein echter Resend/SMTP nötig — MailNotConfiguredError ist der Happy-Path ohne Config.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { renderMonthlyReport } from '../../src/modules/m08-reporting/services/pdf-renderer';
-import {
-  sendMonthlyReport,
-  MailNotConfiguredError,
-} from '../../src/modules/m08-reporting/services/mail-sender';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MonthlyTotals } from '../../src/modules/m08-reporting/services/aggregator';
+import {
+  MailNotConfiguredError,
+  sendMonthlyReport,
+} from '../../src/modules/m08-reporting/services/mail-sender';
+import { renderMonthlyReport } from '../../src/modules/m08-reporting/services/pdf-renderer';
 
 // ── Test-Fixtures ─────────────────────────────────────────────────────────────
 

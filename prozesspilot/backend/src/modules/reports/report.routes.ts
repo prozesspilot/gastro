@@ -11,20 +11,20 @@ import type { Pool } from 'pg';
 import { z } from 'zod';
 import { tenantContextHook } from '../../core/hooks/tenant-context';
 import { apiError, zodToApiError } from '../../core/schemas/common';
-import { generateReceiptReport, type ReportReceipt } from './report.generator';
+import { type ReportReceipt, generateReceiptReport } from './report.generator';
 
 const reportQuerySchema = z.object({
   date_from: z.string().datetime().optional(),
-  date_to:   z.string().datetime().optional(),
-  status:    z.enum(['pending', 'processing', 'done', 'error']).optional(),
+  date_to: z.string().datetime().optional(),
+  status: z.enum(['pending', 'processing', 'done', 'error']).optional(),
 });
 
 interface ReportRow {
-  id:            string;
-  status:        string;
+  id: string;
+  status: string;
   original_name: string | null;
-  metadata:      Record<string, unknown>;
-  created_at:    Date;
+  metadata: Record<string, unknown>;
+  created_at: Date;
 }
 
 async function loadReportData(
@@ -63,24 +63,23 @@ async function loadReportData(
     params,
   );
 
-  const tenantQ = await db.query<{ name: string }>(
-    `SELECT name FROM tenants WHERE id = $1`,
-    [tenantId],
-  );
+  const tenantQ = await db.query<{ name: string }>('SELECT name FROM tenants WHERE id = $1', [
+    tenantId,
+  ]);
   const tenantName = tenantQ.rows[0]?.name ?? 'Unbekannt';
 
   const receipts: ReportReceipt[] = rows.map((row) => {
     const m = (row.metadata ?? {}) as { categorization?: Record<string, unknown> };
     const c = m.categorization ?? {};
     return {
-      id:            row.id,
-      status:        row.status,
+      id: row.id,
+      status: row.status,
       original_name: row.original_name,
-      category:      typeof c.category === 'string' ? (c.category as string) : null,
-      amount:        typeof c.amount === 'number' ? (c.amount as number) : null,
-      currency:      typeof c.currency === 'string' ? (c.currency as string) : null,
-      date:          typeof c.date === 'string' ? (c.date as string) : null,
-      created_at:    row.created_at.toISOString(),
+      category: typeof c.category === 'string' ? (c.category as string) : null,
+      amount: typeof c.amount === 'number' ? (c.amount as number) : null,
+      currency: typeof c.currency === 'string' ? (c.currency as string) : null,
+      date: typeof c.date === 'string' ? (c.date as string) : null,
+      created_at: row.created_at.toISOString(),
     };
   });
 

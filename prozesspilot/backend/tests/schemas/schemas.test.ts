@@ -134,15 +134,17 @@ describe('createCustomerSchema', () => {
   });
   it('akzeptiert vollständige Eingaben', () => {
     const result = createCustomerSchema.safeParse({
-      name:        'Max Mustermann',
-      email:       'max@example.com',
-      tax_number:  'DE123456789',
+      name: 'Max Mustermann',
+      email: 'max@example.com',
+      tax_number: 'DE123456789',
       external_id: 'DATEV-001',
     });
     expect(result.success).toBe(true);
   });
   it('lehnt ungültige E-Mail ab', () => {
-    expect(createCustomerSchema.safeParse({ name: 'Test', email: 'keine-email' }).success).toBe(false);
+    expect(createCustomerSchema.safeParse({ name: 'Test', email: 'keine-email' }).success).toBe(
+      false,
+    );
   });
   it('lehnt leeren Namen ab', () => {
     expect(createCustomerSchema.safeParse({ name: '' }).success).toBe(false);
@@ -179,17 +181,19 @@ describe('listCustomersQuerySchema', () => {
 
 describe('createDocumentSchema', () => {
   const valid = {
-    storage_key:   'tenants/abc/docs/invoice.pdf',
+    storage_key: 'tenants/abc/docs/invoice.pdf',
     original_name: 'Rechnung_2024.pdf',
-    content_type:  'application/pdf',
-    size_bytes:    102400,
+    content_type: 'application/pdf',
+    size_bytes: 102400,
   };
 
   it('akzeptiert gültige Dokument-Metadaten', () => {
     expect(createDocumentSchema.safeParse(valid).success).toBe(true);
   });
   it('lehnt unerlaubte MIME-Types ab', () => {
-    expect(createDocumentSchema.safeParse({ ...valid, content_type: 'text/html' }).success).toBe(false);
+    expect(createDocumentSchema.safeParse({ ...valid, content_type: 'text/html' }).success).toBe(
+      false,
+    );
   });
   it('lehnt size_bytes = 0 ab', () => {
     expect(createDocumentSchema.safeParse({ ...valid, size_bytes: 0 }).success).toBe(false);

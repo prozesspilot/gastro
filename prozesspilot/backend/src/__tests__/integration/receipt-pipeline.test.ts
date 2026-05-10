@@ -16,16 +16,16 @@
  *   6. Tenant-Isolation
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import pg from 'pg';
-import { setupTestDb, cleanTestDb } from './setup';
+import type pg from 'pg';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   create,
-  findById,
   findByHash,
+  findById,
   update,
 } from '../../modules/_shared/receipts/receipt.repository';
 import type { Receipt, ReceiptFile } from '../../modules/_shared/receipts/receipt.repository';
+import { cleanTestDb, setupTestDb } from './setup';
 
 // DECISION: Integration-Tests laufen nur wenn DB erreichbar.
 // Bei fehlendem DB-Server wird der gesamte Describe-Block geskippt.
@@ -92,7 +92,7 @@ describe('Receipt Pipeline Integration', () => {
 
     const loaded = await findById(pool, receiptId, customerId);
     expect(loaded).not.toBeNull();
-    expect(loaded!.status).toBe('received');
+    expect(loaded?.status).toBe('received');
   });
 
   it('Test 2: OCR (gemockt) → status=extracted', async () => {
@@ -116,7 +116,7 @@ describe('Receipt Pipeline Integration', () => {
       extraction: {
         fields: {
           supplier_name: 'METRO Cash & Carry',
-          total_amount: 125.50,
+          total_amount: 125.5,
           currency: 'EUR',
           invoice_date: '2026-04-15',
           invoice_number: 'RE-2026-001',
@@ -213,7 +213,7 @@ describe('Receipt Pipeline Integration', () => {
     // Zweiter Versuch mit gleicher sha256: findByHash sollte den Ersten finden
     const existing = await findByHash(pool, customerId, sha256);
     expect(existing).not.toBeNull();
-    expect(existing!.receipt_id).toBe(receiptId);
+    expect(existing?.receipt_id).toBe(receiptId);
   });
 
   it('Test 6: Tenant-Isolation — anderer Customer sieht Beleg nicht', async () => {

@@ -19,7 +19,6 @@ import { buildApp } from '../../src/app';
 // Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
 const E2E = process.env.PP_E2E === '1';
 
-
 // ── Test-Setup ────────────────────────────────────────────────────────────────
 
 let app: FastifyInstance;
@@ -31,12 +30,15 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(async () => { if (!E2E) return; await app.close(); });
+afterAll(async () => {
+  if (!E2E) return;
+  await app.close();
+});
 
 beforeEach(async () => {
   if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-routing-${Date.now()}`, 'Routing-Test-Mandant'],
   );
   tenantId = rows[0].id;
@@ -44,8 +46,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await app.db.query(`DELETE FROM routing_jobs WHERE tenant_id = $1`, [tenantId]);
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM routing_jobs WHERE tenant_id = $1', [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
   vi.clearAllMocks();
 });
 
@@ -68,8 +70,8 @@ async function createJob(payload: Record<string, unknown> = {}) {
 describe.skipIf(!E2E)('GET /api/v1/routing/jobs', () => {
   it('gibt leere Liste zurück wenn keine Jobs vorhanden', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs',
+      method: 'GET',
+      url: '/api/v1/routing/jobs',
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -83,7 +85,7 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs', () => {
   it('gibt 400 ohne x-pp-tenant-id zurück', async () => {
     const res = await app.inject({
       method: 'GET',
-      url:    '/api/v1/routing/jobs',
+      url: '/api/v1/routing/jobs',
     });
     expect(res.statusCode).toBe(400);
   });
@@ -93,8 +95,8 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs', () => {
     await createJob({ type: 'test-b' });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs?page=1&limit=10',
+      method: 'GET',
+      url: '/api/v1/routing/jobs?page=1&limit=10',
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -107,14 +109,11 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs', () => {
   it('filtert nach Status', async () => {
     const jobId = await createJob();
     // Status auf 'done' setzen
-    await app.db.query(
-      `UPDATE routing_jobs SET status = 'done' WHERE id = $1`,
-      [jobId],
-    );
+    await app.db.query(`UPDATE routing_jobs SET status = 'done' WHERE id = $1`, [jobId]);
 
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs?status=done',
+      method: 'GET',
+      url: '/api/v1/routing/jobs?status=done',
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -125,8 +124,8 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs', () => {
 
   it('gibt 422 bei ungültigem Status zurück', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs?status=invalid',
+      method: 'GET',
+      url: '/api/v1/routing/jobs?status=invalid',
       headers: { 'x-pp-tenant-id': tenantId },
     });
     expect(res.statusCode).toBe(422);
@@ -140,8 +139,8 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs/:id', () => {
     const jobId = await createJob({ test: true });
 
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/routing/jobs/${jobId}`,
+      method: 'GET',
+      url: `/api/v1/routing/jobs/${jobId}`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -152,8 +151,8 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs/:id', () => {
 
   it('gibt 404 zurück wenn nicht vorhanden', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs/00000000-0000-0000-0000-000000000000',
+      method: 'GET',
+      url: '/api/v1/routing/jobs/00000000-0000-0000-0000-000000000000',
       headers: { 'x-pp-tenant-id': tenantId },
     });
     expect(res.statusCode).toBe(404);
@@ -161,8 +160,8 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs/:id', () => {
 
   it('gibt 422 bei ungültiger UUID zurück', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/routing/jobs/not-a-uuid',
+      method: 'GET',
+      url: '/api/v1/routing/jobs/not-a-uuid',
       headers: { 'x-pp-tenant-id': tenantId },
     });
     expect(res.statusCode).toBe(422);
@@ -172,7 +171,7 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs/:id', () => {
     const jobId = await createJob();
     const res = await app.inject({
       method: 'GET',
-      url:    `/api/v1/routing/jobs/${jobId}`,
+      url: `/api/v1/routing/jobs/${jobId}`,
     });
     expect(res.statusCode).toBe(400);
   });
@@ -183,14 +182,13 @@ describe.skipIf(!E2E)('GET /api/v1/routing/jobs/:id', () => {
 describe.skipIf(!E2E)('POST /api/v1/routing/jobs/:id/retry', () => {
   it('stellt failed-Job wieder in Warteschlange', async () => {
     const jobId = await createJob();
-    await app.db.query(
-      `UPDATE routing_jobs SET status = 'failed', attempts = 2 WHERE id = $1`,
-      [jobId],
-    );
+    await app.db.query(`UPDATE routing_jobs SET status = 'failed', attempts = 2 WHERE id = $1`, [
+      jobId,
+    ]);
 
     const res = await app.inject({
-      method:  'POST',
-      url:     `/api/v1/routing/jobs/${jobId}/retry`,
+      method: 'POST',
+      url: `/api/v1/routing/jobs/${jobId}/retry`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -200,14 +198,13 @@ describe.skipIf(!E2E)('POST /api/v1/routing/jobs/:id/retry', () => {
 
   it('stellt dead-Job wieder in Warteschlange', async () => {
     const jobId = await createJob();
-    await app.db.query(
-      `UPDATE routing_jobs SET status = 'dead', attempts = 3 WHERE id = $1`,
-      [jobId],
-    );
+    await app.db.query(`UPDATE routing_jobs SET status = 'dead', attempts = 3 WHERE id = $1`, [
+      jobId,
+    ]);
 
     const res = await app.inject({
-      method:  'POST',
-      url:     `/api/v1/routing/jobs/${jobId}/retry`,
+      method: 'POST',
+      url: `/api/v1/routing/jobs/${jobId}/retry`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -218,8 +215,8 @@ describe.skipIf(!E2E)('POST /api/v1/routing/jobs/:id/retry', () => {
     const jobId = await createJob(); // status = 'queued'
 
     const res = await app.inject({
-      method:  'POST',
-      url:     `/api/v1/routing/jobs/${jobId}/retry`,
+      method: 'POST',
+      url: `/api/v1/routing/jobs/${jobId}/retry`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -228,8 +225,8 @@ describe.skipIf(!E2E)('POST /api/v1/routing/jobs/:id/retry', () => {
 
   it('gibt 409 wenn Job nicht gefunden', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/routing/jobs/00000000-0000-0000-0000-000000000000/retry',
+      method: 'POST',
+      url: '/api/v1/routing/jobs/00000000-0000-0000-0000-000000000000/retry',
       headers: { 'x-pp-tenant-id': tenantId },
     });
     expect(res.statusCode).toBe(409);
@@ -239,7 +236,7 @@ describe.skipIf(!E2E)('POST /api/v1/routing/jobs/:id/retry', () => {
     const jobId = await createJob();
     const res = await app.inject({
       method: 'POST',
-      url:    `/api/v1/routing/jobs/${jobId}/retry`,
+      url: `/api/v1/routing/jobs/${jobId}/retry`,
     });
     expect(res.statusCode).toBe(400);
   });

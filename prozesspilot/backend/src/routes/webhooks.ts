@@ -32,9 +32,9 @@ import { apiError, apiOk } from '../core/schemas/common';
 
 interface N8nWebhookBody {
   tenant_id: string;
-  job_id?:   string;
-  status:    'done' | 'failed';
-  data?:     Record<string, unknown>;
+  job_id?: string;
+  status: 'done' | 'failed';
+  data?: Record<string, unknown>;
 }
 
 // ── HMAC-Validierung ──────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ interface N8nWebhookBody {
 function verifyN8nSignature(rawBody: Buffer, signature: string | undefined): boolean {
   // process.env direkt lesen (nicht config-Singleton) damit Tests funktionieren,
   // die das Secret erst nach dem Modulimport in process.env setzen.
-  const secret = process.env['N8N_WEBHOOK_SECRET'] ?? config.N8N_WEBHOOK_SECRET;
+  const secret = process.env.N8N_WEBHOOK_SECRET ?? config.N8N_WEBHOOK_SECRET;
   if (!secret) {
     // Secret nicht konfiguriert → Signaturprüfung überspringen (Dev-Modus)
     logger.warn('N8N_WEBHOOK_SECRET nicht gesetzt — Signaturprüfung deaktiviert');
@@ -54,9 +54,7 @@ function verifyN8nSignature(rawBody: Buffer, signature: string | undefined): boo
   const [algo, hex] = signature.split('=');
   if (algo !== 'sha256' || !hex) return false;
 
-  const expected = createHmac('sha256', secret)
-    .update(rawBody)
-    .digest('hex');
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
 
   try {
     return timingSafeEqual(Buffer.from(hex, 'hex'), Buffer.from(expected, 'hex'));
@@ -73,50 +71,47 @@ export async function webhookRoutes(app: FastifyInstance): Promise<void> {
    *
    * workflowType: z. B. "document-routed", "invoice-extracted", "customer-synced"
    */
-  app.post<{ Params: { workflowType: string } }>(
-    '/n8n/:workflowType',
-    async (req, reply) => {
-      const { workflowType } = req.params;
+  app.post<{ Params: { workflowType: string } }>('/n8n/:workflowType', async (req, reply) => {
+    const { workflowType } = req.params;
 
-      // ── Signatur prüfen ────────────────────────────────────────────────────
-      const signature = req.headers['x-n8n-signature'] as string | undefined;
-      const rawBody   = req.rawBody ?? Buffer.alloc(0);
+    // ── Signatur prüfen ────────────────────────────────────────────────────
+    const signature = req.headers['x-n8n-signature'] as string | undefined;
+    const rawBody = req.rawBody ?? Buffer.alloc(0);
 
-      if (!verifyN8nSignature(rawBody, signature)) {
-        logger.warn({ workflowType }, 'Ungültige n8n-Webhook-Signatur');
-        return reply.code(401).send(
-          apiError('INVALID_SIGNATURE', 'Webhook-Signatur ungültig oder fehlend.'),
-        );
-      }
+    if (!verifyN8nSignature(rawBody, signature)) {
+      logger.warn({ workflowType }, 'Ungültige n8n-Webhook-Signatur');
+      return reply
+        .code(401)
+        .send(apiError('INVALID_SIGNATURE', 'Webhook-Signatur ungültig oder fehlend.'));
+    }
 
-      // ── Body parsen & validieren ───────────────────────────────────────────
-      const body = req.body as Partial<N8nWebhookBody>;
+    // ── Body parsen & validieren ───────────────────────────────────────────
+    const body = req.body as Partial<N8nWebhookBody>;
 
-      if (!body.tenant_id || !body.status) {
-        return reply.code(422).send(
-          apiError('VALIDATION_ERROR', 'tenant_id und status sind Pflichtfelder.'),
-        );
-      }
+    if (!body.tenant_id || !body.status) {
+      return reply
+        .code(422)
+        .send(apiError('VALIDATION_ERROR', 'tenant_id und status sind Pflichtfelder.'));
+    }
 
-      logger.info(
-        { workflowType, tenant_id: body.tenant_id, job_id: body.job_id, status: body.status },
-        'n8n-Webhook empfangen',
-      );
+    logger.info(
+      { workflowType, tenant_id: body.tenant_id, job_id: body.job_id, status: body.status },
+      'n8n-Webhook empfangen',
+    );
 
-      // ── Event in Redis publizieren (best-effort) ───────────────────────────
-      // Importiert lazy, damit die Route nicht vom Event-Bus abhängt
-      const { publishEvent } = await import('../core/events/publisher');
-      const stream = `pp:n8n.${workflowType}`;
-      void publishEvent(app.redis, stream, {
-        workflow_type: workflowType,
-        tenant_id:     body.tenant_id,
-        job_id:        body.job_id ?? '',
-        status:        body.status,
-        data:          JSON.stringify(body.data ?? {}),
-        timestamp:     new Date().toISOString(),
-      });
+    // ── Event in Redis publizieren (best-effort) ───────────────────────────
+    // Importiert lazy, damit die Route nicht vom Event-Bus abhängt
+    const { publishEvent } = await import('../core/events/publisher');
+    const stream = `pp:n8n.${workflowType}`;
+    void publishEvent(app.redis, stream, {
+      workflow_type: workflowType,
+      tenant_id: body.tenant_id,
+      job_id: body.job_id ?? '',
+      status: body.status,
+      data: JSON.stringify(body.data ?? {}),
+      timestamp: new Date().toISOString(),
+    });
 
-      return reply.code(200).send(apiOk({ received: true, workflowType }));
-    },
-  );
+    return reply.code(200).send(apiOk({ received: true, workflowType }));
+  });
 }

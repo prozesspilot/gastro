@@ -7,9 +7,7 @@
     "total_gross": 2975.0,
     "total_net": 2500.0,
     "currency": "EUR",
-    "tax_lines": [
-      { "rate": 0.19, "base": 2500.0, "amount": 475.0 }
-    ],
+    "tax_lines": [{ "rate": 0.19, "base": 2500.0, "amount": 475.0 }],
     "items": [
       { "description": "Miete Gewerbefläche 150qm Januar 2026", "qty": 1, "unit_price": 2500.0 }
     ]

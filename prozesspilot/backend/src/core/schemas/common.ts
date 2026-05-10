@@ -9,9 +9,7 @@ import { z } from 'zod';
 
 // ── Primitive ──────────────────────────────────────────────────────────────
 
-export const uuidSchema = z
-  .string()
-  .uuid({ message: 'Muss eine gültige UUID sein.' });
+export const uuidSchema = z.string().uuid({ message: 'Muss eine gültige UUID sein.' });
 
 export const slugSchema = z
   .string()
@@ -27,10 +25,7 @@ export const isoDateSchema = z
   .datetime({ message: 'Muss ein gültiges ISO-8601-Datum sein.' });
 
 /** Nicht-leerer, getrimmter String */
-export const nonEmptyStringSchema = z
-  .string()
-  .trim()
-  .min(1, 'Darf nicht leer sein.');
+export const nonEmptyStringSchema = z.string().trim().min(1, 'Darf nicht leer sein.');
 
 /** Optionaler, getrimmter String — wird bei '' zu undefined normalisiert */
 export const optionalStringSchema = z
@@ -43,7 +38,7 @@ export const optionalStringSchema = z
 
 export const paginationQuerySchema = z.object({
   /** Seite (1-basiert) */
-  page:  z.coerce.number().int().min(1).default(1),
+  page: z.coerce.number().int().min(1).default(1),
   /** Einträge pro Seite (max. 100) */
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -51,17 +46,13 @@ export const paginationQuerySchema = z.object({
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 
 export interface PaginationMeta {
-  page:       number;
-  limit:      number;
-  total:      number;
+  page: number;
+  limit: number;
+  total: number;
   totalPages: number;
 }
 
-export function buildPaginationMeta(
-  page: number,
-  limit: number,
-  total: number,
-): PaginationMeta {
+export function buildPaginationMeta(page: number, limit: number, total: number): PaginationMeta {
   return {
     page,
     limit,
@@ -74,22 +65,22 @@ export function buildPaginationMeta(
 
 /** Erfolgreiche Antwort ohne Pagination */
 export interface ApiOk<T> {
-  ok:   true;
+  ok: true;
   data: T;
 }
 
 /** Erfolgreiche Antwort mit Pagination */
 export interface ApiOkPaged<T> {
-  ok:         true;
-  data:       T[];
+  ok: true;
+  data: T[];
   pagination: PaginationMeta;
 }
 
 /** Fehlerantwort */
 export interface ApiError {
-  ok:    false;
+  ok: false;
   error: {
-    code:    string;
+    code: string;
     message: string;
     details?: unknown;
   };
@@ -99,18 +90,11 @@ export function apiOk<T>(data: T): ApiOk<T> {
   return { ok: true, data };
 }
 
-export function apiOkPaged<T>(
-  data: T[],
-  pagination: PaginationMeta,
-): ApiOkPaged<T> {
+export function apiOkPaged<T>(data: T[], pagination: PaginationMeta): ApiOkPaged<T> {
   return { ok: true, data, pagination };
 }
 
-export function apiError(
-  code: string,
-  message: string,
-  details?: unknown,
-): ApiError {
+export function apiError(code: string, message: string, details?: unknown): ApiError {
   return { ok: false, error: { code, message, details } };
 }
 
@@ -119,11 +103,7 @@ export function apiError(
 import type { ZodError } from 'zod';
 
 export function zodToApiError(err: ZodError): ApiError {
-  return apiError(
-    'VALIDATION_ERROR',
-    'Ungültige Eingabedaten.',
-    err.flatten().fieldErrors,
-  );
+  return apiError('VALIDATION_ERROR', 'Ungültige Eingabedaten.', err.flatten().fieldErrors);
 }
 
 // ── Timestamps (für DB-Rows) ───────────────────────────────────────────────
@@ -137,6 +117,4 @@ export const timestampsSchema = z.object({
 
 export type SortOrder = 'asc' | 'desc';
 
-export const sortOrderSchema = z
-  .enum(['asc', 'desc'])
-  .default('desc');
+export const sortOrderSchema = z.enum(['asc', 'desc']).default('desc');

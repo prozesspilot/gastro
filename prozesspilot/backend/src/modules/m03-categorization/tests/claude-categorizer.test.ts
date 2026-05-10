@@ -90,7 +90,10 @@ describe('M03 claude-categorizer', () => {
   it('Cache-Hit (DB) → engine=claude_cached, kein API-Call', async () => {
     const pool = fakePool();
     // Pre-warm cache
-    const cat1 = new ClaudeCategorizer({ pool: pool as never, client: makeMockClient([VALID_RESPONSE]) });
+    const cat1 = new ClaudeCategorizer({
+      pool: pool as never,
+      client: makeMockClient([VALID_RESPONSE]),
+    });
     const r1 = await cat1.categorize(REQ);
     expect(r1.engine).toBe('claude_sonnet_4_6');
     expect(pool.stored.size).toBe(1);

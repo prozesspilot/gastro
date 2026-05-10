@@ -5,8 +5,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const requestSchema = z.object({
   customer_id: z.string().optional(),
@@ -66,9 +66,9 @@ export function buildRequestDeletionHandler() {
       );
     } catch (err) {
       logger.error({ err, tenantId }, 'Loeschantrag konnte nicht erstellt werden');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Loeschantrag konnte nicht erstellt werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Loeschantrag konnte nicht erstellt werden'));
     }
   };
 }

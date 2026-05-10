@@ -4,14 +4,11 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildListHandler() {
-  return async function listHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function listHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const db: Pool = req.server.db;
     const tenantId = req.headers['x-pp-tenant-id'] as string | undefined;
 
@@ -32,9 +29,9 @@ export function buildListHandler() {
       return reply.send(apiOk({ plugins: rows, count: rows.length }));
     } catch (err) {
       logger.error({ err, tenantId }, 'Plugin-Liste konnte nicht geladen werden');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Plugin-Liste konnte nicht geladen werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Plugin-Liste konnte nicht geladen werden'));
     }
   };
 }

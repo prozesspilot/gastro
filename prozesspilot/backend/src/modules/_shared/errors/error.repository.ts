@@ -81,8 +81,14 @@ export async function listErrors(
   const conditions = ['customer_id = $1'];
   const params: unknown[] = [customerId];
   let p = 2;
-  if (opts.receiptId) { conditions.push(`receipt_id = $${p++}`); params.push(opts.receiptId); }
-  if (typeof opts.resolved === 'boolean') { conditions.push(`resolved = $${p++}`); params.push(opts.resolved); }
+  if (opts.receiptId) {
+    conditions.push(`receipt_id = $${p++}`);
+    params.push(opts.receiptId);
+  }
+  if (typeof opts.resolved === 'boolean') {
+    conditions.push(`resolved = $${p++}`);
+    params.push(opts.resolved);
+  }
   params.push(opts.limit ?? 100);
   const sql = `SELECT error_id, customer_id, receipt_id, stage, error_type, error_message,
                       stack_trace, trace_id, resolved, resolved_at, resolved_by, created_at

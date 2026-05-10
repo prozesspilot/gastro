@@ -10,8 +10,8 @@
  * Spec-Referenz: M01 §6, §7
  */
 
-import type { FastifyInstance } from 'fastify';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyInstance } from 'fastify';
 import { createS3Client } from '../../core/storage/storage.service';
 import { buildExtractHandler } from './handlers/extract.handler';
 

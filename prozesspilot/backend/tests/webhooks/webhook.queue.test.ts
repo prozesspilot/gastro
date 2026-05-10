@@ -10,7 +10,6 @@ import { enqueue, processNext } from '../../src/core/webhooks/webhook.queue';
 // Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
 const E2E = process.env.PP_E2E === '1';
 
-
 let app: FastifyInstance;
 let tenantId: string;
 
@@ -28,7 +27,7 @@ afterAll(async () => {
 beforeEach(async () => {
   if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-wh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'WH Test'],
   );
   tenantId = rows[0].id;
@@ -36,14 +35,14 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
 });
 
 describe.skipIf(!E2E)('webhook.queue', () => {
   it('enqueue legt Job in DB ab', async () => {
     const id = await enqueue(app.db, tenantId, 'http://example/x', { foo: 'bar' });
     const { rows } = await app.db.query<{ status: string; attempts: number }>(
-      `SELECT status, attempts FROM webhook_queue WHERE id = $1`,
+      'SELECT status, attempts FROM webhook_queue WHERE id = $1',
       [id],
     );
     expect(rows[0].status).toBe('pending');
@@ -59,7 +58,7 @@ describe.skipIf(!E2E)('webhook.queue', () => {
     expect(handled).toBe(true);
 
     const { rows } = await app.db.query<{ status: string; last_error: string | null }>(
-      `SELECT status, last_error FROM webhook_queue WHERE id = $1`,
+      'SELECT status, last_error FROM webhook_queue WHERE id = $1',
       [id],
     );
     expect(rows[0].status).toBe('done');
@@ -75,16 +74,16 @@ describe.skipIf(!E2E)('webhook.queue', () => {
     await processNext(app.db, { fetcher, now: () => fixedNow });
 
     const { rows } = await app.db.query<{
-      status: string; attempts: number; last_error: string | null; next_retry_at: Date;
-    }>(
-      `SELECT status, attempts, last_error, next_retry_at FROM webhook_queue WHERE id = $1`,
-      [id],
-    );
+      status: string;
+      attempts: number;
+      last_error: string | null;
+      next_retry_at: Date;
+    }>('SELECT status, attempts, last_error, next_retry_at FROM webhook_queue WHERE id = $1', [id]);
     expect(rows[0].status).toBe('pending');
     expect(rows[0].attempts).toBe(1);
     expect(rows[0].last_error).toContain('HTTP 500');
     // attempts=1 → backoff 2^1 * 30s = 60s
-    const expectedMs = fixedNow + (2 * 30_000);
+    const expectedMs = fixedNow + 2 * 30_000;
     expect(Math.abs(rows[0].next_retry_at.getTime() - expectedMs)).toBeLessThan(1000);
   });
 
@@ -96,12 +95,12 @@ describe.skipIf(!E2E)('webhook.queue', () => {
     // Versuch 1 → Fehler → pending
     // Erst next_retry_at zurückdatieren, damit der nächste Tick greift
     await processNext(app.db, { fetcher, now: () => Date.now() });
-    await app.db.query(`UPDATE webhook_queue SET next_retry_at = now() WHERE id = $1`, [id]);
+    await app.db.query('UPDATE webhook_queue SET next_retry_at = now() WHERE id = $1', [id]);
     // Versuch 2 → Fehler → failed
     await processNext(app.db, { fetcher, now: () => Date.now() });
 
     const { rows } = await app.db.query<{ status: string; attempts: number }>(
-      `SELECT status, attempts FROM webhook_queue WHERE id = $1`,
+      'SELECT status, attempts FROM webhook_queue WHERE id = $1',
       [id],
     );
     expect(rows[0].status).toBe('failed');

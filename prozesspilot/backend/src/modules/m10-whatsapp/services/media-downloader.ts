@@ -19,29 +19,29 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { Pool } from 'pg';
 import { logger } from '../../../core/logger';
 import { uploadObject } from '../../../core/storage/storage.service';
 import { loadWaCredential } from './credential.service';
-import { findReceiptByHash } from './receipt.repository';
-import { buildObjectKey } from './object-key';
 import type { MetaGraphClient } from './meta-graph.client';
+import { buildObjectKey } from './object-key';
+import { findReceiptByHash } from './receipt.repository';
 
 // ── Typen ──────────────────────────────────────────────────────────────────
 
 export interface MediaPersisted {
-  object_key:   string;
-  sha256:       string;
-  mime_type:    string;
-  size_bytes:   number;
+  object_key: string;
+  sha256: string;
+  mime_type: string;
+  size_bytes: number;
   is_duplicate: boolean;
 }
 
 export interface DownloadMediaDeps {
-  db:           Pool;
-  s3:           S3Client;
-  metaClient:   MetaGraphClient;
+  db: Pool;
+  s3: S3Client;
+  metaClient: MetaGraphClient;
 }
 
 // ── Hilfsfunktion ──────────────────────────────────────────────────────────
@@ -77,10 +77,10 @@ export async function downloadMedia(
       'Media-Download Idempotenz-Treffer — kein Re-Upload',
     );
     return {
-      object_key:   existing.objectKey,
-      sha256:       existing.sha256,
-      mime_type:    existing.mimeType || meta.mime_type,
-      size_bytes:   existing.sizeBytes || bytes.length,
+      object_key: existing.objectKey,
+      sha256: existing.sha256,
+      mime_type: existing.mimeType || meta.mime_type,
+      size_bytes: existing.sizeBytes || bytes.length,
       is_duplicate: true,
     };
   }
@@ -95,10 +95,10 @@ export async function downloadMedia(
 
   // 7) Result
   return {
-    object_key:   key,
-    sha256:       sha,
-    mime_type:    meta.mime_type,
-    size_bytes:   bytes.length,
+    object_key: key,
+    sha256: sha,
+    mime_type: meta.mime_type,
+    size_bytes: bytes.length,
     is_duplicate: false,
   };
 }

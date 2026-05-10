@@ -56,7 +56,9 @@ const fakeDb: FakeDb = {
     if (/UPDATE customer_hooks/i.test(sql)) {
       const customerId = params[0] as string;
       const hookId = params[1] as string;
-      const idx = fakeDb.hooks.findIndex((h) => h.customer_id === customerId && h.hook_id === hookId);
+      const idx = fakeDb.hooks.findIndex(
+        (h) => h.customer_id === customerId && h.hook_id === hookId,
+      );
       if (idx === -1) return { rows: [] };
       // Sehr einfacher Patch-Apply: parse alle SET-Ausdrücke
       const setMatch = sql.match(/SET\s+(.+?)\s+WHERE/i);
@@ -82,7 +84,9 @@ const fakeDb: FakeDb = {
     if (/DELETE FROM customer_hooks/i.test(sql)) {
       const [customerId, hookId] = params as [string, string];
       const before = fakeDb.hooks.length;
-      fakeDb.hooks = fakeDb.hooks.filter((h) => !(h.customer_id === customerId && h.hook_id === hookId));
+      fakeDb.hooks = fakeDb.hooks.filter(
+        (h) => !(h.customer_id === customerId && h.hook_id === hookId),
+      );
       return { rowCount: before - fakeDb.hooks.length, rows: [] };
     }
     // SELECT customer_hooks (single by id)
@@ -102,7 +106,17 @@ const fakeDb: FakeDb = {
       const [customerId, hookId] = params as [string, string];
       const list = fakeDb.executions
         .filter((e) => e.customer_id === customerId && e.hook_id === hookId)
-        .map((e) => ({ ...e, response_status: null, request_payload: null, response_body: null, duration_ms: null, error_message: null, trace_id: null, hook_point: 'after_categorization', execution_id: 'ex_x' }));
+        .map((e) => ({
+          ...e,
+          response_status: null,
+          request_payload: null,
+          response_body: null,
+          duration_ms: null,
+          error_message: null,
+          trace_id: null,
+          hook_point: 'after_categorization',
+          execution_id: 'ex_x',
+        }));
       return { rows: list };
     }
     return { rows: [] };

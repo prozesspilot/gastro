@@ -6,10 +6,7 @@
  * profile.integrations.spreadsheet.provider gesetzt.
  */
 
-import {
-  type SpreadsheetAdapter,
-  type SpreadsheetProviderId,
-} from './adapter.interface';
+import type { SpreadsheetAdapter, SpreadsheetProviderId } from './adapter.interface';
 import { ExcelOneDriveAdapter } from './excel-onedrive.adapter';
 import { GoogleSheetsAdapter } from './google-sheets.adapter';
 
@@ -18,7 +15,7 @@ export interface SpreadsheetAdapterFactory {
 }
 
 let cachedGoogle: GoogleSheetsAdapter | null = null;
-let cachedExcel:  ExcelOneDriveAdapter | null = null;
+let cachedExcel: ExcelOneDriveAdapter | null = null;
 
 export const spreadsheetAdapterFactory: SpreadsheetAdapterFactory = {
   for(provider: SpreadsheetProviderId): SpreadsheetAdapter {

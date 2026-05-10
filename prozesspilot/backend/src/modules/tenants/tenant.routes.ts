@@ -18,19 +18,10 @@ import {
   paginationQuerySchema,
   zodToApiError,
 } from '../../core/schemas/common';
-import {
-  createTenantSchema,
-  updateTenantSchema,
-} from '../../core/schemas/tenant';
-import {
-  createTenant,
-  findTenantById,
-  listTenants,
-  updateTenant,
-} from './tenant.repository';
+import { createTenantSchema, updateTenantSchema } from '../../core/schemas/tenant';
+import { createTenant, findTenantById, listTenants, updateTenant } from './tenant.repository';
 
 export async function tenantRoutes(app: FastifyInstance): Promise<void> {
-
   // ── POST /tenants ──────────────────────────────────────────────────────────
 
   app.post('/', async (req, reply) => {
@@ -44,9 +35,9 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(201).send(apiOk(tenant));
     } catch (err: unknown) {
       if (isUniqueViolation(err)) {
-        return reply.code(409).send(
-          apiError('DUPLICATE_SLUG', 'Ein Mandant mit diesem Slug existiert bereits.'),
-        );
+        return reply
+          .code(409)
+          .send(apiError('DUPLICATE_SLUG', 'Ein Mandant mit diesem Slug existiert bereits.'));
       }
       throw err;
     }
@@ -55,7 +46,7 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /tenants ───────────────────────────────────────────────────────────
 
   app.get('/', async (req, reply) => {
-    const base   = paginationQuerySchema.safeParse(req.query);
+    const base = paginationQuerySchema.safeParse(req.query);
     if (!base.success) {
       return reply.code(422).send(zodToApiError(base.error));
     }
@@ -69,9 +60,9 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
     const tenant = await findTenantById(app.db, req.params.id);
     if (!tenant) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Mandant ${req.params.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Mandant ${req.params.id} nicht gefunden.`));
     }
     return reply.send(apiOk(tenant));
   });
@@ -86,9 +77,9 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
 
     const tenant = await updateTenant(app.db, req.params.id, parsed.data);
     if (!tenant) {
-      return reply.code(404).send(
-        apiError('NOT_FOUND', `Mandant ${req.params.id} nicht gefunden.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Mandant ${req.params.id} nicht gefunden.`));
     }
     return reply.send(apiOk(tenant));
   });

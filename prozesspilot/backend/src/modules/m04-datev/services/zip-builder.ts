@@ -85,7 +85,10 @@ async function buildSingleZip(
               const bytes = await getFileBytes(receipt.file.object_key);
               archive.append(Readable.from(bytes), { name: fileName });
             } catch (err) {
-              logger.warn({ err, receipt_id: receipt.receipt_id }, 'PDF-Laden für ZIP fehlgeschlagen — überspringe');
+              logger.warn(
+                { err, receipt_id: receipt.receipt_id },
+                'PDF-Laden für ZIP fehlgeschlagen — überspringe',
+              );
             }
           } else {
             // Platzhalter-PDF falls kein Storage-Zugriff
@@ -99,8 +102,11 @@ async function buildSingleZip(
     });
   } catch (err) {
     // archiver nicht installiert → leeres ZIP-Dummy zurückgeben
-    logger.warn({ err }, 'archiver nicht verfügbar — leeres ZIP zurückgegeben. npm install archiver --save');
-    return Buffer.from('PK\x05\x06' + '\x00'.repeat(18)); // Minimal leeres ZIP
+    logger.warn(
+      { err },
+      'archiver nicht verfügbar — leeres ZIP zurückgegeben. npm install archiver --save',
+    );
+    return Buffer.from(`PK\x05\x06${'\x00'.repeat(18)}`); // Minimal leeres ZIP
   }
 }
 
@@ -109,9 +115,8 @@ async function buildSingleZip(
  * Format: YYYY-MM-DD_Lieferant_Rechnungsnummer.pdf
  */
 export function buildPdfFileName(receipt: Receipt): string {
-  const fields = (
-    (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}
-  ) as {
+  const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+    ?.fields ?? {}) as {
     document_date?: string;
     vendor_name?: string;
     document_number?: string;

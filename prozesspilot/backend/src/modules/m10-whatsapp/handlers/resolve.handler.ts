@@ -16,16 +16,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { resolveInputSchema } from '../schemas/resolve.input';
-import {
-  CustomerNotFoundError,
-  resolveCustomer,
-} from '../services/customer-resolver';
 import { writeAudit } from '../services/audit.service';
+import { CustomerNotFoundError, resolveCustomer } from '../services/customer-resolver';
 
-export async function resolveHandler(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
+export async function resolveHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const parsed = resolveInputSchema.safeParse(req.body);
   if (!parsed.success) {
     return reply.code(422).send(zodToApiError(parsed.error));
@@ -39,16 +33,16 @@ export async function resolveHandler(
       // Audit: nicht-whitelisted Sender (Best-Effort)
       void writeAudit(req.server.db, {
         customerId: result.customerId,
-        eventType:  'whatsapp.sender.rejected',
-        payload:    { from, phone_number_id, reason: result.reason },
-        traceId:    req.headers['x-trace-id'] as string | undefined,
+        eventType: 'whatsapp.sender.rejected',
+        payload: { from, phone_number_id, reason: result.reason },
+        traceId: req.headers['x-trace-id'] as string | undefined,
       });
 
       return reply.send(
         apiOk({
           customer_id: result.customerId,
-          allowed:     false,
-          reason:      result.reason,
+          allowed: false,
+          reason: result.reason,
         }),
       );
     }
@@ -56,7 +50,7 @@ export async function resolveHandler(
     return reply.send(
       apiOk({
         customer_id: result.customerId,
-        allowed:     true,
+        allowed: true,
         sender: {
           name: result.sender?.name,
           role: result.sender?.role,
@@ -65,9 +59,9 @@ export async function resolveHandler(
     );
   } catch (err) {
     if (err instanceof CustomerNotFoundError) {
-      return reply.code(404).send(
-        apiError('CUSTOMER_NOT_FOUND', `Kein Kunde für phone_number_id=${phone_number_id}.`),
-      );
+      return reply
+        .code(404)
+        .send(apiError('CUSTOMER_NOT_FOUND', `Kein Kunde für phone_number_id=${phone_number_id}.`));
     }
     throw err;
   }

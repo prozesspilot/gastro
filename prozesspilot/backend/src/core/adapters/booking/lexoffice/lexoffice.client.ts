@@ -13,18 +13,18 @@
  * Retry: 3× exponential bei 5xx + 429 (Retry-After Header berücksichtigt).
  */
 
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import { logger } from '../../../logger';
 import { LexofficeNotConfiguredError, loadApiKey } from './auth';
-import { acquireToken } from './rate-limiter';
 import type {
   LexofficeCategory,
   LexofficeCreateResponse,
   LexofficeUuid,
   LexofficeVoucher,
 } from './lexoffice.types';
+import { acquireToken } from './rate-limiter';
 
 export interface LexofficeClientOpts {
   apiKey: string;
@@ -36,7 +36,11 @@ export interface LexofficeClientOpts {
 }
 
 export class LexofficeApiError extends Error {
-  constructor(public status: number, message: string, public body?: unknown) {
+  constructor(
+    public status: number,
+    message: string,
+    public body?: unknown,
+  ) {
     super(message);
     this.name = 'LexofficeApiError';
   }
@@ -56,7 +60,8 @@ export class LexofficeClient {
     this.baseUrl = opts.baseUrl ?? process.env.LEXOFFICE_API_BASE ?? 'https://api.lexoffice.io';
     this.redis = opts.redis ?? null;
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.timeoutMs = opts.defaultTimeoutMs ?? Number(process.env.LEXOFFICE_DEFAULT_TIMEOUT_MS ?? '15000');
+    this.timeoutMs =
+      opts.defaultTimeoutMs ?? Number(process.env.LEXOFFICE_DEFAULT_TIMEOUT_MS ?? '15000');
   }
 
   // ── Public API ─────────────────────────────────────────────────────────
@@ -171,7 +176,9 @@ export class LexofficeClient {
       clearTimeout(timer);
 
       if (res.status === 429) {
-        const wait = parseRetryAfter(res.headers.get('retry-after')) ?? RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        const wait =
+          parseRetryAfter(res.headers.get('retry-after')) ??
+          RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
         if (attempt >= RETRY_DELAYS_MS.length) {
           const txt = await res.text().catch(() => '');
           throw new LexofficeApiError(429, `Lexoffice 429 (Rate-Limit) — ${txt}`);
@@ -194,7 +201,11 @@ export class LexofficeClient {
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         let parsed: unknown;
-        try { parsed = JSON.parse(txt); } catch { parsed = txt; }
+        try {
+          parsed = JSON.parse(txt);
+        } catch {
+          parsed = txt;
+        }
         throw new LexofficeApiError(res.status, `Lexoffice ${res.status}`, parsed);
       }
 

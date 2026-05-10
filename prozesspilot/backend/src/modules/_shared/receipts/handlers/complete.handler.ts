@@ -11,12 +11,12 @@
 
 import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 import { z } from 'zod';
 
-import { apiError, apiOk, zodToApiError } from '../../../../core/schemas/common';
 import { publishEvent } from '../../../../core/events/publisher';
+import { apiError, apiOk, zodToApiError } from '../../../../core/schemas/common';
 import * as receiptRepo from '../receipt.repository';
 import type { Receipt } from '../receipt.repository';
 
@@ -61,12 +61,16 @@ export function buildCompleteHandler() {
     }
 
     if (!TERMINAL_INPUT_STATUSES.has(receipt.status)) {
-      return reply
-        .code(422)
-        .send(apiError('INVALID_STATUS', `Receipt-Status '${receipt.status}' nicht akzeptiert für /complete.`, {
-          status: receipt.status,
-          accepted: Array.from(TERMINAL_INPUT_STATUSES),
-        }));
+      return reply.code(422).send(
+        apiError(
+          'INVALID_STATUS',
+          `Receipt-Status '${receipt.status}' nicht akzeptiert für /complete.`,
+          {
+            status: receipt.status,
+            accepted: Array.from(TERMINAL_INPUT_STATUSES),
+          },
+        ),
+      );
     }
 
     const completedAt = new Date().toISOString();

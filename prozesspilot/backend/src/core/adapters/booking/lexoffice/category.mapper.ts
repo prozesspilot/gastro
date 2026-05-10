@@ -12,9 +12,9 @@
  */
 
 import type { Pool } from 'pg';
+import { logger } from '../../../logger';
 import type { LexofficeClient } from './lexoffice.client';
 import type { LexofficeUuid } from './lexoffice.types';
-import { logger } from '../../../logger';
 
 const FALLBACK_SONSTIGE = '00000000-0000-4000-8000-000000004980';
 
@@ -36,10 +36,7 @@ export class CategoryMapper {
     this.client = opts.client;
   }
 
-  async mapSkrToLexoffice(
-    skrAccount: string,
-    customerId: string,
-  ): Promise<LexofficeUuid> {
+  async mapSkrToLexoffice(skrAccount: string, customerId: string): Promise<LexofficeUuid> {
     // 1) Customer-spezifische Map
     const cust = await this.lookup(customerId, skrAccount);
     if (cust) return cust;
@@ -55,7 +52,9 @@ export class CategoryMapper {
            ON CONFLICT (customer_id, skr_account) DO NOTHING`,
           [customerId, skrAccount, def],
         )
-        .catch(() => {/* best-effort */});
+        .catch(() => {
+          /* best-effort */
+        });
       return def;
     }
 
@@ -117,8 +116,6 @@ function pickByHeuristic(
   if (!needles) return null;
 
   const expense = cats.filter((c) => /expense/i.test(c.type));
-  const candidates = expense.filter((c) =>
-    needles.some((n) => c.name.toLowerCase().includes(n)),
-  );
+  const candidates = expense.filter((c) => needles.some((n) => c.name.toLowerCase().includes(n)));
   return candidates[0] ?? null;
 }

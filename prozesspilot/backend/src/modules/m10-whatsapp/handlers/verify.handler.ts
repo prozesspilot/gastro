@@ -19,10 +19,7 @@ import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { verifyInputSchema } from '../schemas/verify.input';
 import { verifyWhatsAppSignature } from '../services/webhook-verifier';
 
-export async function verifyHandler(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
+export async function verifyHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const parsed = verifyInputSchema.safeParse(req.body);
   if (!parsed.success) {
     return reply.code(422).send(zodToApiError(parsed.error));
@@ -33,10 +30,16 @@ export async function verifyHandler(
   try {
     rawBody = Buffer.from(parsed.data.raw_body_b64, 'base64');
   } catch {
-    return reply.code(422).send(apiError('VALIDATION_ERROR', 'raw_body_b64 ist kein gültiges Base64.'));
+    return reply
+      .code(422)
+      .send(apiError('VALIDATION_ERROR', 'raw_body_b64 ist kein gültiges Base64.'));
   }
 
-  const result = verifyWhatsAppSignature(rawBody, parsed.data.signature, config.WHATSAPP_APP_SECRET);
+  const result = verifyWhatsAppSignature(
+    rawBody,
+    parsed.data.signature,
+    config.WHATSAPP_APP_SECRET,
+  );
   if (!result.ok) {
     // Spec sagt für jede Fehlerkategorie: 401 + INVALID_SIGNATURE.
     return reply.code(401).send(apiError('INVALID_SIGNATURE', 'Webhook-Signatur ungültig.'));

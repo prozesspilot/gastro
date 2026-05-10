@@ -15,7 +15,6 @@ import { buildApp } from '../../src/app';
 // Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
 const E2E = process.env.PP_E2E === '1';
 
-
 // ── Test-Setup ──────────────────────────────────────────────────────────────
 
 let app: FastifyInstance;
@@ -36,7 +35,7 @@ beforeEach(async () => {
   if (!E2E) return;
   // Frischen Test-Mandanten anlegen
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-tenant-${Date.now()}`, 'Test-Mandant'],
   );
   tenantId = rows[0].id;
@@ -45,7 +44,7 @@ beforeEach(async () => {
 afterEach(async () => {
   if (!E2E) return;
   // Testdaten bereinigen (kaskadiert auf customers)
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
 });
 
 // ── Hilfsfunktion ───────────────────────────────────────────────────────────
@@ -56,8 +55,8 @@ function headers() {
 
 async function createTestCustomer(overrides: Record<string, unknown> = {}) {
   return app.inject({
-    method:  'POST',
-    url:     '/api/v1/customers',
+    method: 'POST',
+    url: '/api/v1/customers',
     headers: headers(),
     payload: { name: 'Max Mustermann', email: 'max@example.com', ...overrides },
   });
@@ -67,22 +66,20 @@ async function createTestCustomer(overrides: Record<string, unknown> = {}) {
 
 describe.skipIf(!E2E)('POST /api/v1/customers', () => {
   it('legt einen neuen Kunden an und gibt 201 zurück', async () => {
-    const res  = await createTestCustomer();
+    const res = await createTestCustomer();
     const body = res.json();
 
     expect(res.statusCode).toBe(201);
     expect(body.ok).toBe(true);
     expect(body.data.name).toBe('Max Mustermann');
     expect(body.data.email).toBe('max@example.com');
-    expect(body.data.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(body.data.tenant_id).toBe(tenantId);
     expect(body.data.active).toBe(true);
   });
 
   it('legt Kunden ohne optionale Felder an', async () => {
-    const res  = await createTestCustomer({ email: undefined });
+    const res = await createTestCustomer({ email: undefined });
     const body = res.json();
 
     expect(res.statusCode).toBe(201);
@@ -92,8 +89,8 @@ describe.skipIf(!E2E)('POST /api/v1/customers', () => {
 
   it('gibt 422 bei fehlenden Pflichtfeldern zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/customers',
+      method: 'POST',
+      url: '/api/v1/customers',
       headers: headers(),
       payload: {},
     });
@@ -109,10 +106,10 @@ describe.skipIf(!E2E)('POST /api/v1/customers', () => {
 
   it('gibt 400 bei fehlendem x-pp-tenant-id Header zurück', async () => {
     const res = await app.inject({
-      method:   'POST',
-      url:      '/api/v1/customers',
-      headers:  { 'content-type': 'application/json' },
-      payload:  { name: 'Test' },
+      method: 'POST',
+      url: '/api/v1/customers',
+      headers: { 'content-type': 'application/json' },
+      payload: { name: 'Test' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('MISSING_TENANT');
@@ -136,7 +133,7 @@ describe.skipIf(!E2E)('GET /api/v1/customers', () => {
   });
 
   it('gibt paginierte Liste zurück', async () => {
-    const res  = await app.inject({ method: 'GET', url: '/api/v1/customers', headers: headers() });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/customers', headers: headers() });
     const body = res.json();
 
     expect(res.statusCode).toBe(200);
@@ -146,9 +143,9 @@ describe.skipIf(!E2E)('GET /api/v1/customers', () => {
   });
 
   it('filtert nach external_id', async () => {
-    const res  = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/customers?external_id=EXT-B',
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/customers?external_id=EXT-B',
       headers: headers(),
     });
     const body = res.json();
@@ -159,9 +156,9 @@ describe.skipIf(!E2E)('GET /api/v1/customers', () => {
   });
 
   it('respektiert page und limit', async () => {
-    const res  = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/customers?page=1&limit=1',
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/customers?page=1&limit=1',
       headers: headers(),
     });
     const body = res.json();
@@ -178,7 +175,11 @@ describe.skipIf(!E2E)('GET /api/v1/customers/:id', () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;
 
-    const res  = await app.inject({ method: 'GET', url: `/api/v1/customers/${id}`, headers: headers() });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/customers/${id}`,
+      headers: headers(),
+    });
     const body = res.json();
 
     expect(res.statusCode).toBe(200);
@@ -188,8 +189,8 @@ describe.skipIf(!E2E)('GET /api/v1/customers/:id', () => {
 
   it('gibt 404 zurück wenn Kunde nicht existiert', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/customers/00000000-0000-0000-0000-000000000000',
+      method: 'GET',
+      url: '/api/v1/customers/00000000-0000-0000-0000-000000000000',
       headers: headers(),
     });
     expect(res.statusCode).toBe(404);
@@ -203,9 +204,9 @@ describe.skipIf(!E2E)('PATCH /api/v1/customers/:id', () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;
 
-    const res  = await app.inject({
-      method:  'PATCH',
-      url:     `/api/v1/customers/${id}`,
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/customers/${id}`,
       headers: headers(),
       payload: { name: 'Neuer Name' },
     });
@@ -219,8 +220,8 @@ describe.skipIf(!E2E)('PATCH /api/v1/customers/:id', () => {
   it('gibt 422 bei leerem Update-Objekt zurück', async () => {
     const created = (await createTestCustomer()).json();
     const res = await app.inject({
-      method:  'PATCH',
-      url:     `/api/v1/customers/${created.data.id}`,
+      method: 'PATCH',
+      url: `/api/v1/customers/${created.data.id}`,
       headers: headers(),
       payload: {},
     });
@@ -229,8 +230,8 @@ describe.skipIf(!E2E)('PATCH /api/v1/customers/:id', () => {
 
   it('gibt 404 zurück wenn Kunde nicht existiert', async () => {
     const res = await app.inject({
-      method:  'PATCH',
-      url:     '/api/v1/customers/00000000-0000-0000-0000-000000000000',
+      method: 'PATCH',
+      url: '/api/v1/customers/00000000-0000-0000-0000-000000000000',
       headers: headers(),
       payload: { name: 'Test' },
     });
@@ -245,18 +246,26 @@ describe.skipIf(!E2E)('DELETE /api/v1/customers/:id', () => {
     const created = (await createTestCustomer()).json();
     const id = created.data.id;
 
-    const del = await app.inject({ method: 'DELETE', url: `/api/v1/customers/${id}`, headers: headers() });
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/customers/${id}`,
+      headers: headers(),
+    });
     expect(del.statusCode).toBe(204);
 
     // Kunde ist danach nicht mehr abrufbar (active = false)
-    const get = await app.inject({ method: 'GET', url: `/api/v1/customers/${id}`, headers: headers() });
+    const get = await app.inject({
+      method: 'GET',
+      url: `/api/v1/customers/${id}`,
+      headers: headers(),
+    });
     expect(get.statusCode).toBe(404);
   });
 
   it('gibt 404 zurück wenn Kunde nicht existiert', async () => {
     const res = await app.inject({
-      method:  'DELETE',
-      url:     '/api/v1/customers/00000000-0000-0000-0000-000000000000',
+      method: 'DELETE',
+      url: '/api/v1/customers/00000000-0000-0000-0000-000000000000',
       headers: headers(),
     });
     expect(res.statusCode).toBe(404);

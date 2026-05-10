@@ -19,7 +19,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 // ── Typen ──────────────────────────────────────────────────────────────────
 
-export type HmacVerifyOk    = { ok: true };
+export type HmacVerifyOk = { ok: true };
 export type HmacVerifyError = { ok: false; code: HmacErrorCode; message: string };
 export type HmacVerifyResult = HmacVerifyOk | HmacVerifyError;
 
@@ -122,7 +122,11 @@ export function verifyHmac(opts: HmacVerifyOptions): HmacVerifyResult {
   // 2. Timestamp ist eine gültige ganze Zahl?
   const ts = Number(timestamp);
   if (!Number.isInteger(ts) || ts <= 0) {
-    return { ok: false, code: 'INVALID_TIMESTAMP', message: 'x-pp-timestamp muss ein Unix-Timestamp (Sekunden) sein.' };
+    return {
+      ok: false,
+      code: 'INVALID_TIMESTAMP',
+      message: 'x-pp-timestamp muss ein Unix-Timestamp (Sekunden) sein.',
+    };
   }
 
   // 3. Timestamp liegt im erlaubten Fenster?
@@ -136,9 +140,9 @@ export function verifyHmac(opts: HmacVerifyOptions): HmacVerifyResult {
   }
 
   // 4. Signatur berechnen und vergleichen
-  const bodyHash  = sha256Hex(rawBody);
+  const bodyHash = sha256Hex(rawBody);
   const canonical = buildCanonicalString(method, url, timestamp, bodyHash);
-  const expected  = computeSignature(secret, canonical);
+  const expected = computeSignature(secret, canonical);
 
   if (!safeCompare(expected, signature)) {
     return { ok: false, code: 'INVALID_SIGNATURE', message: 'Signatur ungültig.' };

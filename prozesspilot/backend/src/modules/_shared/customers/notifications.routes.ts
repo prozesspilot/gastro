@@ -47,7 +47,9 @@ export async function operatorNotificationsRoutes(app: FastifyInstance): Promise
       );
     } catch (err) {
       logger.warn({ err }, 'Operator-Notification konnte nicht persistiert werden');
-      return reply.code(202).send(apiError('PARTIAL_SUCCESS', 'Loggt, aber audit_log fehlgeschlagen.'));
+      return reply
+        .code(202)
+        .send(apiError('PARTIAL_SUCCESS', 'Loggt, aber audit_log fehlgeschlagen.'));
     }
     return reply.send(apiOk({ delivered: 'log' }));
   });

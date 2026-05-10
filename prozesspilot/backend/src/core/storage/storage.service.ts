@@ -34,11 +34,11 @@ import { logger } from '../logger';
 
 export function createS3Client(overrides?: Partial<S3ClientConfig>): S3Client {
   return new S3Client({
-    endpoint:         config.MINIO_ENDPOINT,
-    region:           'us-east-1',        // MinIO ignoriert die Region, muss aber gesetzt sein
-    forcePathStyle:   true,               // MinIO-Pflicht: http://host/bucket/key statt Subdomain
+    endpoint: config.MINIO_ENDPOINT,
+    region: 'us-east-1', // MinIO ignoriert die Region, muss aber gesetzt sein
+    forcePathStyle: true, // MinIO-Pflicht: http://host/bucket/key statt Subdomain
     credentials: {
-      accessKeyId:     config.MINIO_ACCESS_KEY,
+      accessKeyId: config.MINIO_ACCESS_KEY,
       secretAccessKey: config.MINIO_SECRET_KEY,
     },
     ...overrides,
@@ -48,9 +48,9 @@ export function createS3Client(overrides?: Partial<S3ClientConfig>): S3Client {
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 export interface UploadResult {
-  key:          string;
-  bucket:       string;
-  size_bytes:   number;
+  key: string;
+  bucket: string;
+  size_bytes: number;
   content_type: string;
 }
 
@@ -70,18 +70,20 @@ export async function uploadObject(
 ): Promise<UploadResult> {
   logger.debug({ key, bucket: config.MINIO_BUCKET, size: body.length }, 'Datei hochladen');
 
-  await client.send(new PutObjectCommand({
-    Bucket:      config.MINIO_BUCKET,
-    Key:         key,
-    Body:        body,
-    ContentType: contentType,
-    ContentLength: body.length,
-  }));
+  await client.send(
+    new PutObjectCommand({
+      Bucket: config.MINIO_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ContentLength: body.length,
+    }),
+  );
 
   return {
     key,
-    bucket:       config.MINIO_BUCKET,
-    size_bytes:   body.length,
+    bucket: config.MINIO_BUCKET,
+    size_bytes: body.length,
     content_type: contentType,
   };
 }
@@ -101,7 +103,7 @@ export async function getPresignedDownloadUrl(
 ): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: config.MINIO_BUCKET,
-    Key:    key,
+    Key: key,
   });
   return getSignedUrl(client, command, { expiresIn });
 }
@@ -114,10 +116,12 @@ export async function getPresignedDownloadUrl(
  */
 export async function deleteObject(client: S3Client, key: string): Promise<boolean> {
   try {
-    await client.send(new DeleteObjectCommand({
-      Bucket: config.MINIO_BUCKET,
-      Key:    key,
-    }));
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: config.MINIO_BUCKET,
+        Key: key,
+      }),
+    );
     return true;
   } catch (err) {
     logger.warn({ err, key }, 'Objekt konnte nicht gelöscht werden');
@@ -136,12 +140,14 @@ export async function headObject(
   key: string,
 ): Promise<{ size_bytes: number; content_type: string } | null> {
   try {
-    const res = await client.send(new HeadObjectCommand({
-      Bucket: config.MINIO_BUCKET,
-      Key:    key,
-    }));
+    const res = await client.send(
+      new HeadObjectCommand({
+        Bucket: config.MINIO_BUCKET,
+        Key: key,
+      }),
+    );
     return {
-      size_bytes:   res.ContentLength ?? 0,
+      size_bytes: res.ContentLength ?? 0,
       content_type: res.ContentType ?? 'application/octet-stream',
     };
   } catch {

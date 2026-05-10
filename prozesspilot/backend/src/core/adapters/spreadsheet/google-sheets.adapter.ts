@@ -16,22 +16,22 @@
  *    findRowByReceiptId() das gesamte Sheet scannen — bei großen Sheets teuer.
  */
 
-import type { Pool } from 'pg';
+import type { OAuth2Client } from 'google-auth-library';
 import { google, type sheets_v4 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import type { Pool } from 'pg';
 
-import { logger } from '../../logger';
 import { config } from '../../config';
+import { logger } from '../../logger';
 
 import {
-  HeaderConflictError,
-  SpreadsheetNotFoundError,
   type ColumnDef,
+  HeaderConflictError,
   type RowRef,
   type RowResult,
   type RowValue,
   type SpreadsheetAdapter,
   type SpreadsheetAdapterContext,
+  SpreadsheetNotFoundError,
 } from './adapter.interface';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,9 +41,9 @@ const SHEETS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 interface OAuthRow {
   credential_id: string;
   refresh_token: string;
-  access_token:  string | null;
-  expires_at:    Date | null;
-  scope:         string | null;
+  access_token: string | null;
+  expires_at: Date | null;
+  scope: string | null;
 }
 
 /**
@@ -55,7 +55,9 @@ interface OAuthRow {
  */
 async function loadOAuthClient(db: Pool, customerId: string): Promise<OAuth2Client> {
   if (!config.PP_PGCRYPTO_KEY) {
-    throw new Error('PP_PGCRYPTO_KEY ist nicht gesetzt — Sheets-Credential kann nicht entschlüsselt werden.');
+    throw new Error(
+      'PP_PGCRYPTO_KEY ist nicht gesetzt — Sheets-Credential kann nicht entschlüsselt werden.',
+    );
   }
 
   const { rows } = await db.query<OAuthRow>(
@@ -81,10 +83,13 @@ async function loadOAuthClient(db: Pool, customerId: string): Promise<OAuth2Clie
   }
 
   // Wenn nur gdrive_oauth vorliegt: prüfen, dass Sheets-Scope abgedeckt ist.
-  if (row.scope && !SHEETS_SCOPES.some((s) => row.scope!.includes(s)) && !row.scope.includes('drive')) {
+  if (
+    row.scope &&
+    !SHEETS_SCOPES.some((s) => row.scope?.includes(s)) &&
+    !row.scope.includes('drive')
+  ) {
     throw new Error(
-      `OAuth-Credential für customer_id=${customerId} hat keinen Sheets-Scope (scope='${row.scope}'). ` +
-        `Bitte separates Credential mit kind='sheets_oauth' anlegen.`,
+      `OAuth-Credential für customer_id=${customerId} hat keinen Sheets-Scope (scope='${row.scope}'). Bitte separates Credential mit kind='sheets_oauth' anlegen.`,
     );
   }
 
@@ -94,9 +99,9 @@ async function loadOAuthClient(db: Pool, customerId: string): Promise<OAuth2Clie
   );
   oauth2.setCredentials({
     refresh_token: row.refresh_token,
-    access_token:  row.access_token ?? undefined,
-    expiry_date:   row.expires_at ? row.expires_at.getTime() : undefined,
-    scope:         row.scope ?? SHEETS_SCOPES.join(' '),
+    access_token: row.access_token ?? undefined,
+    expiry_date: row.expires_at ? row.expires_at.getTime() : undefined,
+    scope: row.scope ?? SHEETS_SCOPES.join(' '),
   });
   return oauth2;
 }
@@ -149,7 +154,7 @@ export class GoogleSheetsAdapter implements SpreadsheetAdapter {
     try {
       const res = await sheets.spreadsheets.get({
         spreadsheetId: sheetId,
-        fields:        'sheets(properties(sheetId,title))',
+        fields: 'sheets(properties(sheetId,title))',
       });
       meta = res.data;
     } catch (err) {
@@ -185,7 +190,7 @@ export class GoogleSheetsAdapter implements SpreadsheetAdapter {
 
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range:         headerRange,
+      range: headerRange,
     });
     const actualRow = (res.data.values?.[0] as string[] | undefined) ?? [];
 
@@ -193,18 +198,20 @@ export class GoogleSheetsAdapter implements SpreadsheetAdapter {
     if (isEmpty) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range:         headerRange,
+        range: headerRange,
         valueInputOption: 'USER_ENTERED',
-        requestBody:   { values: [expected] },
+        requestBody: { values: [expected] },
       });
-      logger.info({ sheetId, tab, columns: expected.length }, 'M07 ensureHeader: Header geschrieben');
+      logger.info(
+        { sheetId, tab, columns: expected.length },
+        'M07 ensureHeader: Header geschrieben',
+      );
       return;
     }
 
     // Vorhanden: Strikt vergleichen. M07 §12: KEINE Auto-Korrektur.
     const matches =
-      actualRow.length === expected.length &&
-      expected.every((h, i) => actualRow[i] === h);
+      actualRow.length === expected.length && expected.every((h, i) => actualRow[i] === h);
     if (!matches) {
       throw new HeaderConflictError(sheetId, tab, expected, actualRow);
     }
@@ -240,16 +247,16 @@ export class GoogleSheetsAdapter implements SpreadsheetAdapter {
 
     const range = `${quoteTab(tab)}!A1:${endColLetter(row.length)}1`;
     const res = await sheets.spreadsheets.values.append({
-      spreadsheetId:    sheetId,
+      spreadsheetId: sheetId,
       range,
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
-      requestBody:      { values: [row] },
+      requestBody: { values: [row] },
     });
 
     const rowIndex = parseRowFromUpdatedRange(res.data.updates?.updatedRange);
-    const gid      = await getGidByTab(sheets, sheetId, tab);
-    const url      = buildCellUrl(sheetId, gid, rowIndex);
+    const gid = await getGidByTab(sheets, sheetId, tab);
+    const url = buildCellUrl(sheetId, gid, rowIndex);
 
     await ctx.db.query(
       `INSERT INTO spreadsheet_row_index (customer_id, sheet_id, tab, receipt_id, row_index)
@@ -275,12 +282,12 @@ export class GoogleSheetsAdapter implements SpreadsheetAdapter {
     const sheets = sheetsClient(auth);
 
     const endCol = endColLetter(row.length);
-    const range  = `${quoteTab(tab)}!A${rowIndex}:${endCol}${rowIndex}`;
+    const range = `${quoteTab(tab)}!A${rowIndex}:${endCol}${rowIndex}`;
     await sheets.spreadsheets.values.update({
-      spreadsheetId:    sheetId,
+      spreadsheetId: sheetId,
       range,
       valueInputOption: 'USER_ENTERED',
-      requestBody:      { values: [row] },
+      requestBody: { values: [row] },
     });
 
     await ctx.db.query(
@@ -316,7 +323,7 @@ async function getGidByTab(
 
   const res = await sheets.spreadsheets.get({
     spreadsheetId: sheetId,
-    fields:        'sheets(properties(sheetId,title))',
+    fields: 'sheets(properties(sheetId,title))',
   });
   const sheetList: SheetMeta[] = (res.data.sheets ?? []) as SheetMeta[];
   const found = sheetList.find((s) => s.properties?.title === tab);
@@ -330,12 +337,12 @@ async function getGidByTab(
 interface SheetMeta {
   properties?: {
     sheetId?: number;
-    title?:   string;
+    title?: string;
   };
 }
 
 interface MaybeApiError {
-  code?:     number;
+  code?: number;
   response?: { status?: number };
 }
 

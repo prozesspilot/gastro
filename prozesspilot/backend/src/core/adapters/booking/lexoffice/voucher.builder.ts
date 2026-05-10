@@ -21,7 +21,8 @@ export interface BuildVoucherInput {
 
 export function buildLexofficeVoucher(input: BuildVoucherInput): LexofficeVoucher {
   const { receipt, lexofficeCategoryId, contactId } = input;
-  const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}) as {
+  const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+    ?.fields ?? {}) as {
     document_number?: string;
     document_date?: string;
     total_gross?: number;

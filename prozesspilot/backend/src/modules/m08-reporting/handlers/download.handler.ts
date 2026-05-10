@@ -4,9 +4,9 @@
  * Leitet zur presigned S3-URL des PDFs weiter (oder streamt es direkt).
  */
 
+import type { S3Client } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import type { S3Client } from '@aws-sdk/client-s3';
 import { apiError } from '../../../core/schemas/common';
 import { getPresignedDownloadUrl } from '../../../core/storage/storage.service';
 
@@ -51,9 +51,11 @@ export function buildDownloadHandler() {
       const url = await getPresignedDownloadUrl(s3, report.pdf_object_key, 900); // 15 min
       return reply.redirect(302, url);
     } catch (err) {
-      return reply.code(500).send(apiError('STORAGE_ERROR', 'PDF-Download-URL konnte nicht erstellt werden.', {
-        message: (err as Error).message,
-      }));
+      return reply.code(500).send(
+        apiError('STORAGE_ERROR', 'PDF-Download-URL konnte nicht erstellt werden.', {
+          message: (err as Error).message,
+        }),
+      );
     }
   };
 }

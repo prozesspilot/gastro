@@ -4,8 +4,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildDataExportHandler() {
   return async function dataExportHandler(
@@ -21,9 +21,9 @@ export function buildDataExportHandler() {
     }
 
     if (!customerId) {
-      return reply.code(422).send(
-        apiError('MISSING_CUSTOMER_ID', 'customer_id Query-Parameter ist erforderlich'),
-      );
+      return reply
+        .code(422)
+        .send(apiError('MISSING_CUSTOMER_ID', 'customer_id Query-Parameter ist erforderlich'));
     }
 
     try {
@@ -95,9 +95,7 @@ export function buildDataExportHandler() {
       return reply.send(apiOk(exportData));
     } catch (err) {
       logger.error({ err, tenantId, customerId }, 'DSGVO Daten-Export fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Daten-Export fehlgeschlagen'),
-      );
+      return reply.code(500).send(apiError('INTERNAL_ERROR', 'Daten-Export fehlgeschlagen'));
     }
   };
 }

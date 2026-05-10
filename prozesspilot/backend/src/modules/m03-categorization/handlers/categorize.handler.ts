@@ -18,8 +18,8 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
@@ -28,18 +28,18 @@ import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
 
-import { categorizeInputSchema, type CustomerProfile } from '../schemas/categorize.input';
-import { resolveOverride } from '../services/override-resolver';
-import { resolveFromMasterData } from '../services/master-data-resolver';
+import { type CustomerProfile, categorizeInputSchema } from '../schemas/categorize.input';
+import { writeAudit } from '../services/audit.service';
 import {
-  ClaudeCategorizer,
-  createClaudeCategorizer,
   type AnthropicLikeClient,
+  type ClaudeCategorizer,
+  createClaudeCategorizer,
 } from '../services/claude-categorizer';
 import { combineCategorizationConfidence } from '../services/confidence-scorer';
-import { getCategoryLabel, mapSkrAccount, mapTaxKey, type SkrChart } from '../services/skr-mapper';
-import { writeAudit } from '../services/audit.service';
 import { emitCategorizationEvent } from '../services/event-emitter';
+import { resolveFromMasterData } from '../services/master-data-resolver';
+import { resolveOverride } from '../services/override-resolver';
+import { type SkrChart, getCategoryLabel, mapSkrAccount, mapTaxKey } from '../services/skr-mapper';
 import type { CategorizationContext, CategorizationResult } from '../services/types';
 
 const ACCEPTED_INPUT_STATUSES = new Set<string>(['extracted']);
@@ -72,21 +72,30 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
     if (!receipt) {
       return reply.code(404).send(
         apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customerId}.`, {
-          receipt_id, customer_id: customerId,
+          receipt_id,
+          customer_id: customerId,
         }),
       );
     }
     if (!ACCEPTED_INPUT_STATUSES.has(receipt.status)) {
       return reply.code(422).send(
-        apiError('INVALID_STATUS', `Receipt-Status '${receipt.status}' nicht akzeptiert für /categorize.`, {
-          status: receipt.status, accepted: Array.from(ACCEPTED_INPUT_STATUSES),
-        }),
+        apiError(
+          'INVALID_STATUS',
+          `Receipt-Status '${receipt.status}' nicht akzeptiert für /categorize.`,
+          {
+            status: receipt.status,
+            accepted: Array.from(ACCEPTED_INPUT_STATUSES),
+          },
+        ),
       );
     }
 
     try {
       // 2) Hook before_categorization
-      receipt = await hookRunner.run('before_categorization', { receipt, profile: customer_profile });
+      receipt = await hookRunner.run('before_categorization', {
+        receipt,
+        profile: customer_profile,
+      });
 
       // Receipt-Felder extrahieren (typensicher)
       const ctx = buildCategorizationContext(receipt, customerId);
@@ -101,10 +110,14 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
 
       // 4) Strategie 2: Master-Data
       if (!result) {
-        result = await resolveFromMasterData(db, {
-          supplierName: ctx.supplierName,
-          vatId: ctx.supplierVatId,
-        }, async (cid) => (await getCategoryLabel(db, cid)) ?? cid);
+        result = await resolveFromMasterData(
+          db,
+          {
+            supplierName: ctx.supplierName,
+            vatId: ctx.supplierVatId,
+          },
+          async (cid) => (await getCategoryLabel(db, cid)) ?? cid,
+        );
       }
 
       // 5) Strategie 3: Claude
@@ -135,20 +148,26 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
       const finalTaxKey =
         result.tax_key && result.tax_key.length > 0
           ? result.tax_key
-          : await mapTaxKey(db, result.category, dominantTaxRate, customer_profile.routing?.tax_keys_map);
+          : await mapTaxKey(
+              db,
+              result.category,
+              dominantTaxRate,
+              customer_profile.routing?.tax_keys_map,
+            );
 
       // 5b) Sicherstellen, dass label gesetzt ist
       const finalLabel =
         result.category_label && result.category_label.length > 0
           ? result.category_label
-          : (await getCategoryLabel(db, result.category)) ?? result.category;
+          : ((await getCategoryLabel(db, result.category)) ?? result.category);
 
       // 6) Cost-Center via branch_rules
       const branchRules = customer_profile.custom?.branch_rules as
         | Record<string, { cost_center?: string }>
         | undefined;
-      const branch = (receipt.meta as { branch?: string } | undefined)?.branch
-        ?? pickString(customer_profile.custom, 'default_branch');
+      const branch =
+        (receipt.meta as { branch?: string } | undefined)?.branch ??
+        pickString(customer_profile.custom, 'default_branch');
       const branchCostCenter = branch && branchRules?.[branch]?.cost_center;
       const finalCostCenter = result.cost_center ?? branchCostCenter ?? null;
 
@@ -160,7 +179,8 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
         hasSkrAccount: Boolean(finalSkr),
       });
       const threshold = customer_profile.routing?.low_confidence_threshold ?? 0.75;
-      const newStatus: Receipt['status'] = finalConfidence < threshold ? 'requires_review' : 'categorized';
+      const newStatus: Receipt['status'] =
+        finalConfidence < threshold ? 'requires_review' : 'categorized';
 
       // 8) Hook after_categorization
       const auditEvents = [
@@ -200,7 +220,8 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
       void writeAudit(db, {
         customerId,
         receiptId: receipt_id,
-        eventType: newStatus === 'categorized' ? 'pp.receipt.categorized' : 'pp.receipt.requires_review',
+        eventType:
+          newStatus === 'categorized' ? 'pp.receipt.categorized' : 'pp.receipt.requires_review',
         payload: {
           engine: result.engine,
           confidence: finalConfidence,
@@ -257,11 +278,11 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
         status: 'error',
         trace_id,
       });
-      return reply
-        .code(502)
-        .send(apiError('EXTERNAL_API_FAILED', 'Kategorisierung fehlgeschlagen.', {
+      return reply.code(502).send(
+        apiError('EXTERNAL_API_FAILED', 'Kategorisierung fehlgeschlagen.', {
           message: (err as Error).message,
-        }));
+        }),
+      );
     }
   };
 }
@@ -269,7 +290,8 @@ export function buildCategorizeHandler(deps: CategorizeHandlerDeps = {}) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildCategorizationContext(receipt: Receipt, customerId: string): CategorizationContext {
-  const fields = (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {};
+  const fields =
+    (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {};
   const taxLinesRaw = (fields.tax_lines as Array<Record<string, unknown>> | undefined) ?? [];
   const taxLines = taxLinesRaw
     .map((t) => ({
@@ -283,7 +305,8 @@ function buildCategorizationContext(receipt: Receipt, customerId: string): Categ
   return {
     customerId,
     supplierName: typeof fields.supplier_name === 'string' ? fields.supplier_name : undefined,
-    supplierVatId: typeof fields.supplier_vat_id === 'string' ? (fields.supplier_vat_id as string) : null,
+    supplierVatId:
+      typeof fields.supplier_vat_id === 'string' ? (fields.supplier_vat_id as string) : null,
     documentDate: typeof fields.document_date === 'string' ? fields.document_date : undefined,
     totalGross: typeof fields.total_gross === 'number' ? (fields.total_gross as number) : undefined,
     totalNet: typeof fields.total_net === 'number' ? (fields.total_net as number) : undefined,
@@ -346,11 +369,7 @@ function pickExamples(
     | undefined;
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   return raw
-    .filter(
-      (r) =>
-        typeof r.supplier === 'string' &&
-        typeof r.category === 'string',
-    )
+    .filter((r) => typeof r.supplier === 'string' && typeof r.category === 'string')
     .map((r) => ({
       supplier: r.supplier as string,
       category: r.category as string,

@@ -17,16 +17,22 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 
+import { config } from '../../../core/config';
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
-import { config } from '../../../core/config';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
-import { SevDeskClient, SevDeskApiError } from '../../../core/adapters/booking/sevdesk/sevdesk.client';
-import { getApiToken, SevDeskNotConfiguredError } from '../../../core/adapters/booking/sevdesk/auth';
-import { buildSevDeskVoucher } from '../../../core/adapters/booking/sevdesk/voucher.builder';
 import { mapSkrToSevDeskAccountId } from '../../../core/adapters/booking/sevdesk/account-mapper';
+import {
+  SevDeskNotConfiguredError,
+  getApiToken,
+} from '../../../core/adapters/booking/sevdesk/auth';
+import {
+  SevDeskApiError,
+  SevDeskClient,
+} from '../../../core/adapters/booking/sevdesk/sevdesk.client';
 import { mapTaxRuleId } from '../../../core/adapters/booking/sevdesk/tax-mapper';
+import { buildSevDeskVoucher } from '../../../core/adapters/booking/sevdesk/voucher.builder';
 
 import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
@@ -76,10 +82,14 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
     }
     if (!ACCEPTED_INPUT_STATUSES.has(receipt.status)) {
       return reply.code(422).send(
-        apiError('INVALID_STATUS', `Receipt-Status '${receipt.status}' nicht akzeptiert für /exports/sevdesk.`, {
-          status: receipt.status,
-          accepted: Array.from(ACCEPTED_INPUT_STATUSES),
-        }),
+        apiError(
+          'INVALID_STATUS',
+          `Receipt-Status '${receipt.status}' nicht akzeptiert für /exports/sevdesk.`,
+          {
+            status: receipt.status,
+            accepted: Array.from(ACCEPTED_INPUT_STATUSES),
+          },
+        ),
       );
     }
 
@@ -113,28 +123,34 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
       }
 
       // SKR-Konto aus Kategorisierung
-      const cat = (receipt.categorization as { skr_account?: string; skr03_konto?: string } | undefined) ?? {};
+      const cat =
+        (receipt.categorization as { skr_account?: string; skr03_konto?: string } | undefined) ??
+        {};
       const skrAccount = cat.skr_account ?? cat.skr03_konto ?? '';
       if (!skrAccount) {
         return reply.code(422).send(
-          apiError('VALIDATION_FAILED', 'Receipt hat kein SKR-Konto — Kategorisierung muss vor sevDesk-Push laufen.', {
-            receipt_id: receiptId,
-          }),
+          apiError(
+            'VALIDATION_FAILED',
+            'Receipt hat kein SKR-Konto — Kategorisierung muss vor sevDesk-Push laufen.',
+            {
+              receipt_id: receiptId,
+            },
+          ),
         );
       }
 
       // Steuersatz ermitteln
-      const fields = (
-        (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}
-      ) as { tax_lines?: Array<{ rate: number; amount: number }> };
+      const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+        ?.fields ?? {}) as { tax_lines?: Array<{ rate: number; amount: number }> };
 
       const taxLines = fields.tax_lines ?? [];
-      const dominantRate = taxLines.length > 0
-        ? Math.round(
-            [...taxLines].sort((a, b) => b.amount - a.amount)[0].rate *
-              (taxLines[0].rate <= 1 ? 100 : 1),
-          )
-        : 19;
+      const dominantRate =
+        taxLines.length > 0
+          ? Math.round(
+              [...taxLines].sort((a, b) => b.amount - a.amount)[0].rate *
+                (taxLines[0].rate <= 1 ? 100 : 1),
+            )
+          : 19;
 
       // 4) Account + Tax Mapping auflösen
       const [accountingTypeId, taxRuleId] = await Promise.all([
@@ -143,14 +159,17 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
       ]);
 
       // Voucher bauen
-      let voucher = buildSevDeskVoucher({ receipt, accountingTypeId, taxRuleId });
+      const voucher = buildSevDeskVoucher({ receipt, accountingTypeId, taxRuleId });
 
       // 5) Hook before_export.sevdesk
-      receipt = await hookRunner.run('before_export.sevdesk' as Parameters<typeof hookRunner.run>[0], {
-        receipt,
-        profile: customer_profile as { customer_id?: string; [k: string]: unknown },
-        extra: { voucher },
-      });
+      receipt = await hookRunner.run(
+        'before_export.sevdesk' as Parameters<typeof hookRunner.run>[0],
+        {
+          receipt,
+          profile: customer_profile as { customer_id?: string; [k: string]: unknown },
+          extra: { voucher },
+        },
+      );
 
       // 6) Voucher pushen
       const saved = await client.saveVoucher(voucher);
@@ -193,11 +212,14 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
       };
 
       // 9) Hook after_export.sevdesk
-      const afterReceipt = await hookRunner.run('after_export.sevdesk' as Parameters<typeof hookRunner.run>[0], {
-        receipt: patchedReceipt,
-        profile: customer_profile as { customer_id?: string; [k: string]: unknown },
-        extra: { voucher_id: voucherId },
-      });
+      const afterReceipt = await hookRunner.run(
+        'after_export.sevdesk' as Parameters<typeof hookRunner.run>[0],
+        {
+          receipt: patchedReceipt,
+          profile: customer_profile as { customer_id?: string; [k: string]: unknown },
+          extra: { voucher_id: voucherId },
+        },
+      );
 
       // Persist Receipt
       const finalReceipt = await receiptRepo.update(db, afterReceipt);
@@ -210,9 +232,7 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
            ON CONFLICT DO NOTHING`,
           [receiptId, customerId, String(voucherId)],
         )
-        .catch((err) =>
-          logger.warn({ err }, 'sevdesk_exports Insert fehlgeschlagen'),
-        );
+        .catch((err) => logger.warn({ err }, 'sevdesk_exports Insert fehlgeschlagen'));
 
       // Audit-Log (best-effort)
       void db
@@ -247,9 +267,7 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
       logger.error({ err, receiptId, customerId }, 'M06 sevDesk push fehlgeschlagen');
 
       if (err instanceof SevDeskNotConfiguredError) {
-        return reply
-          .code(412)
-          .send(apiError('SEVDESK_NOT_CONFIGURED', err.message));
+        return reply.code(412).send(apiError('SEVDESK_NOT_CONFIGURED', err.message));
       }
       if (err instanceof SevDeskApiError) {
         return reply.code(502).send(
@@ -270,9 +288,7 @@ export function buildPushHandler(deps: PushHandlerDeps = {}) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function asAuditEvents(
-  v: unknown,
-): { at: string; type: string; actor: string }[] {
+function asAuditEvents(v: unknown): { at: string; type: string; actor: string }[] {
   return Array.isArray(v) ? (v as { at: string; type: string; actor: string }[]) : [];
 }
 

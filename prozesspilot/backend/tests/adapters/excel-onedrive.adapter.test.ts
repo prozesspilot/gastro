@@ -5,15 +5,17 @@
  * Kein echter DB-Zugriff — db-Pool wird als Mock übergeben.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ExcelOneDriveAdapter } from '../../src/core/adapters/spreadsheet/excel-onedrive.adapter';
+import type { Pool, QueryResult } from 'pg';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderConflictError } from '../../src/core/adapters/spreadsheet/adapter.interface';
 import type { SpreadsheetAdapterContext } from '../../src/core/adapters/spreadsheet/adapter.interface';
-import type { Pool, QueryResult } from 'pg';
+import { ExcelOneDriveAdapter } from '../../src/core/adapters/spreadsheet/excel-onedrive.adapter';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeCtx(queryFn?: (text: string, values?: unknown[]) => Promise<QueryResult>): SpreadsheetAdapterContext {
+function makeCtx(
+  queryFn?: (text: string, values?: unknown[]) => Promise<QueryResult>,
+): SpreadsheetAdapterContext {
   const db = {
     query: queryFn ?? vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   } as unknown as Pool;
@@ -128,11 +130,11 @@ describe('ExcelOneDriveAdapter', () => {
       await adapter.ensureTabExists(ctx, CUSTOMER_ID, SHEET_ID, TAB);
 
       const fetchSpy = vi.mocked(global.fetch);
-      const postCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[1] as RequestInit)?.method === 'POST',
-      );
+      const postCalls = fetchSpy.mock.calls.filter((c) => (c[1] as RequestInit)?.method === 'POST');
       expect(postCalls).toHaveLength(1);
-      const postBody = JSON.parse((postCalls[0][1] as RequestInit).body as string) as { name: string };
+      const postBody = JSON.parse((postCalls[0][1] as RequestInit).body as string) as {
+        name: string;
+      };
       expect(postBody.name).toBe(TAB);
     });
   });
@@ -140,17 +142,17 @@ describe('ExcelOneDriveAdapter', () => {
   // ── ensureHeader ────────────────────────────────────────────────────────────
 
   describe('ensureHeader', () => {
-    const columns = [
-      { header: 'Datum' },
-      { header: 'Lieferant' },
-      { header: 'Betrag' },
-    ];
+    const columns = [{ header: 'Datum' }, { header: 'Lieferant' }, { header: 'Betrag' }];
 
     it('leere erste Zeile → Header wird geschrieben', async () => {
       const ctx = makeCredCtx();
       mockFetchSequence([
         // GET range A1:C1 → leer
-        { ok: true, status: 200, body: { values: [[null, null, null]], rowCount: 1, columnCount: 3 } },
+        {
+          ok: true,
+          status: 200,
+          body: { values: [[null, null, null]], rowCount: 1, columnCount: 3 },
+        },
         // PATCH range → Header gesetzt
         { ok: true, status: 200, body: {} },
       ]);
@@ -162,7 +164,9 @@ describe('ExcelOneDriveAdapter', () => {
         (c) => (c[1] as RequestInit)?.method === 'PATCH',
       );
       expect(patchCalls).toHaveLength(1);
-      const patchBody = JSON.parse((patchCalls[0][1] as RequestInit).body as string) as { values: string[][] };
+      const patchBody = JSON.parse((patchCalls[0][1] as RequestInit).body as string) as {
+        values: string[][];
+      };
       expect(patchBody.values[0]).toEqual(['Datum', 'Lieferant', 'Betrag']);
     });
 
@@ -191,9 +195,9 @@ describe('ExcelOneDriveAdapter', () => {
         columnCount: 3,
       });
 
-      await expect(
-        adapter.ensureHeader(ctx, CUSTOMER_ID, SHEET_ID, TAB, columns),
-      ).rejects.toThrow(HeaderConflictError);
+      await expect(adapter.ensureHeader(ctx, CUSTOMER_ID, SHEET_ID, TAB, columns)).rejects.toThrow(
+        HeaderConflictError,
+      );
     });
   });
 
@@ -205,13 +209,15 @@ describe('ExcelOneDriveAdapter', () => {
         vi.fn().mockImplementation((sql: string) => {
           if (sql.includes('customer_credentials')) {
             return Promise.resolve({
-              rows: [{
-                credential_id: 'cred-1',
-                access_token: 'tok-abc',
-                refresh_token: 'refresh-xyz',
-                tenant_id: 'tenant-001',
-                expires_at: new Date(Date.now() + 10 * 60 * 1000),
-              }],
+              rows: [
+                {
+                  credential_id: 'cred-1',
+                  access_token: 'tok-abc',
+                  refresh_token: 'refresh-xyz',
+                  tenant_id: 'tenant-001',
+                  expires_at: new Date(Date.now() + 10 * 60 * 1000),
+                },
+              ],
             });
           }
           // Cache-Hit: row_index = 5
@@ -224,14 +230,12 @@ describe('ExcelOneDriveAdapter', () => {
 
       const fetchSpy = vi.spyOn(global, 'fetch');
 
-      const result = await adapter.findRowByReceiptId(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID,
-      );
+      const result = await adapter.findRowByReceiptId(ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID);
 
       expect(result).toEqual({ row_index: 5 });
       // Kein fetch-Aufruf für MS Graph (nur ggf. für Credential-Refresh, aber nicht nötig da Cache)
-      const graphCalls = fetchSpy.mock.calls.filter(
-        (c) => (c[0] as string).includes('graph.microsoft.com'),
+      const graphCalls = fetchSpy.mock.calls.filter((c) =>
+        (c[0] as string).includes('graph.microsoft.com'),
       );
       expect(graphCalls).toHaveLength(0);
     });
@@ -244,13 +248,15 @@ describe('ExcelOneDriveAdapter', () => {
           dbCallCount++;
           if (sql.includes('customer_credentials')) {
             return Promise.resolve({
-              rows: [{
-                credential_id: 'cred-1',
-                access_token: 'tok-abc',
-                refresh_token: 'refresh-xyz',
-                tenant_id: 'tenant-001',
-                expires_at: new Date(Date.now() + 10 * 60 * 1000),
-              }],
+              rows: [
+                {
+                  credential_id: 'cred-1',
+                  access_token: 'tok-abc',
+                  refresh_token: 'refresh-xyz',
+                  tenant_id: 'tenant-001',
+                  expires_at: new Date(Date.now() + 10 * 60 * 1000),
+                },
+              ],
             });
           }
           if (sql.includes('SELECT row_index')) {
@@ -269,26 +275,74 @@ describe('ExcelOneDriveAdapter', () => {
       mockFetchAlways(true, 200, {
         values: [
           // Zeile 0: Header
-          ['Datum', 'Lieferant', null, null, null, null, null, null, null, null, null, null, null, null, 'Receipt-ID'],
+          [
+            'Datum',
+            'Lieferant',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'Receipt-ID',
+          ],
           // Zeile 1: Daten-Zeile 1 (row_index=2)
-          ['2026-01-01', 'Supplier A', null, null, null, null, null, null, null, null, null, null, null, null, 'receipt-000'],
+          [
+            '2026-01-01',
+            'Supplier A',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'receipt-000',
+          ],
           // Zeile 2: Daten-Zeile 2 (row_index=3)
-          ['2026-01-02', 'Supplier B', null, null, null, null, null, null, null, null, null, null, null, null, RECEIPT_ID],
+          [
+            '2026-01-02',
+            'Supplier B',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            RECEIPT_ID,
+          ],
         ],
         rowCount: 3,
         columnCount: 15,
       });
 
-      const result = await adapter.findRowByReceiptId(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID,
-      );
+      const result = await adapter.findRowByReceiptId(ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID);
 
       expect(result).toEqual({ row_index: 3 });
 
       // Cache-Write muss aufgerufen worden sein
       const dbMock = (ctx.db as unknown as { query: ReturnType<typeof vi.fn> }).query;
       const insertCalls = dbMock.mock.calls.filter(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('INSERT INTO spreadsheet_row_index'),
+        (c: unknown[]) =>
+          typeof c[0] === 'string' &&
+          (c[0] as string).includes('INSERT INTO spreadsheet_row_index'),
       );
       expect(insertCalls.length).toBeGreaterThanOrEqual(1);
     });
@@ -297,8 +351,40 @@ describe('ExcelOneDriveAdapter', () => {
       const ctx = makeCredCtx();
       mockFetchAlways(true, 200, {
         values: [
-          ['Datum', 'Lieferant', null, null, null, null, null, null, null, null, null, null, null, null, 'Receipt-ID'],
-          ['2026-01-01', 'Supplier A', null, null, null, null, null, null, null, null, null, null, null, null, 'other-receipt'],
+          [
+            'Datum',
+            'Lieferant',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'Receipt-ID',
+          ],
+          [
+            '2026-01-01',
+            'Supplier A',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'other-receipt',
+          ],
         ],
         rowCount: 2,
         columnCount: 15,
@@ -309,20 +395,26 @@ describe('ExcelOneDriveAdapter', () => {
       dbMock.mockImplementation((sql: string) => {
         if (sql.includes('customer_credentials')) {
           return Promise.resolve({
-            rows: [{
-              credential_id: 'cred-1',
-              access_token: 'tok-abc',
-              refresh_token: 'refresh-xyz',
-              tenant_id: 'tenant-001',
-              expires_at: new Date(Date.now() + 10 * 60 * 1000),
-            }],
+            rows: [
+              {
+                credential_id: 'cred-1',
+                access_token: 'tok-abc',
+                refresh_token: 'refresh-xyz',
+                tenant_id: 'tenant-001',
+                expires_at: new Date(Date.now() + 10 * 60 * 1000),
+              },
+            ],
           });
         }
         return Promise.resolve({ rows: [] });
       });
 
       const result = await adapter.findRowByReceiptId(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, 'receipt-not-found',
+        ctx,
+        CUSTOMER_ID,
+        SHEET_ID,
+        TAB,
+        'receipt-not-found',
       );
 
       expect(result).toBeNull();
@@ -341,11 +433,26 @@ describe('ExcelOneDriveAdapter', () => {
         { ok: true, status: 200, body: { index: 5 } },
       ]);
 
-      const row = ['2026-01-01', 'Supplier', 'Rechnung-001', 'Betriebsausgaben', '4000', '', '119.00', '100.00', '19.00', '19%', 'EUR', 'Überweisung', '', 'archived', RECEIPT_ID, '2026-01-01T12:00:00Z'];
+      const row = [
+        '2026-01-01',
+        'Supplier',
+        'Rechnung-001',
+        'Betriebsausgaben',
+        '4000',
+        '',
+        '119.00',
+        '100.00',
+        '19.00',
+        '19%',
+        'EUR',
+        'Überweisung',
+        '',
+        'archived',
+        RECEIPT_ID,
+        '2026-01-01T12:00:00Z',
+      ];
 
-      const result = await adapter.appendRow(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID, row,
-      );
+      const result = await adapter.appendRow(ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID, row);
 
       // row_index = index(5) + 2 = 7
       expect(result.row_index).toBe(7);
@@ -354,7 +461,9 @@ describe('ExcelOneDriveAdapter', () => {
       // Cache-Write prüfen
       const dbMock = (ctx.db as unknown as { query: ReturnType<typeof vi.fn> }).query;
       const insertCalls = dbMock.mock.calls.filter(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('INSERT INTO spreadsheet_row_index'),
+        (c: unknown[]) =>
+          typeof c[0] === 'string' &&
+          (c[0] as string).includes('INSERT INTO spreadsheet_row_index'),
       );
       expect(insertCalls.length).toBeGreaterThanOrEqual(1);
     });
@@ -365,15 +474,13 @@ describe('ExcelOneDriveAdapter', () => {
         // GET tables → keine Tabelle
         { ok: true, status: 200, body: { value: [] } },
         // GET usedRange → 3 Zeilen benutzt
-        { ok: true, status: 200, body: { rowCount: 3, address: `Sheet!A1:P3` } },
+        { ok: true, status: 200, body: { rowCount: 3, address: 'Sheet!A1:P3' } },
         // PATCH auf A4:P4
         { ok: true, status: 200, body: {} },
       ]);
 
       const row = ['2026-01-01', 'Supplier'];
-      const result = await adapter.appendRow(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID, row,
-      );
+      const result = await adapter.appendRow(ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID, row);
 
       // nextRow = rowCount(3) + 1 = 4
       expect(result.row_index).toBe(4);
@@ -391,7 +498,13 @@ describe('ExcelOneDriveAdapter', () => {
       const rowIndex = 5;
 
       const result = await adapter.updateRow(
-        ctx, CUSTOMER_ID, SHEET_ID, TAB, RECEIPT_ID, rowIndex, row,
+        ctx,
+        CUSTOMER_ID,
+        SHEET_ID,
+        TAB,
+        RECEIPT_ID,
+        rowIndex,
+        row,
       );
 
       expect(result.row_index).toBe(rowIndex);

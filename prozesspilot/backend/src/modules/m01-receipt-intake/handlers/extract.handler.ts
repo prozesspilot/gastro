@@ -19,26 +19,26 @@
  * neuer Audit-Eintrag).
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import { adapterFactory } from '../../../core/adapters/ocr/factory';
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
+import { receiptProcessingDuration, receiptsProcessed } from '../../../core/metrics';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
-import { receiptsProcessed, receiptProcessingDuration } from '../../../core/metrics';
 
-import { extractInputSchema } from '../schemas/extract.input';
-import { extract as extractFields } from '../services/field-extractor';
-import { validate as validateFields } from '../services/validator';
-import { combineConfidence } from '../services/confidence-scorer';
-import { downloadObject } from '../services/storage-download';
-import { writeAudit } from '../services/audit.service';
-import { emitReceiptEvent } from '../services/event-emitter';
 import * as receiptRepo from '../../_shared/receipts/receipt.repository';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
+import { extractInputSchema } from '../schemas/extract.input';
+import { writeAudit } from '../services/audit.service';
+import { combineConfidence } from '../services/confidence-scorer';
+import { emitReceiptEvent } from '../services/event-emitter';
+import { extract as extractFields } from '../services/field-extractor';
+import { downloadObject } from '../services/storage-download';
+import { validate as validateFields } from '../services/validator';
 
 export interface ExtractHandlerDeps {
   s3?: S3Client;
@@ -65,9 +65,9 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
     const { receipt_id } = req.params;
     const customerId = customer_profile.customer_id;
 
-    const db: Pool   = req.server.db;
-    const redis      = req.server.redis as Redis;
-    const s3         = deps.s3 ?? req.server.s3;
+    const db: Pool = req.server.db;
+    const redis = req.server.redis as Redis;
+    const s3 = deps.s3 ?? req.server.s3;
     const metricStart = Date.now();
     if (!s3) {
       return reply.code(500).send(apiError('INTERNAL_ERROR', 'S3-Client nicht initialisiert.'));
@@ -78,14 +78,16 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
     if (!receipt) {
       return reply.code(404).send(
         apiError('NOT_FOUND', `Kein Receipt ${receipt_id} für Customer ${customerId}.`, {
-          receipt_id, customer_id: customerId,
+          receipt_id,
+          customer_id: customerId,
         }),
       );
     }
     if (!ACCEPTED_INPUT_STATUSES.has(receipt.status)) {
       return reply.code(409).send(
         apiError('CONFLICT', `Receipt-Status '${receipt.status}' nicht akzeptiert für /extract.`, {
-          status: receipt.status, accepted: Array.from(ACCEPTED_INPUT_STATUSES),
+          status: receipt.status,
+          accepted: Array.from(ACCEPTED_INPUT_STATUSES),
         }),
       );
     }
@@ -95,7 +97,7 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
       receipt = await hookRunner.run('before_extraction', { receipt, profile: customer_profile });
 
       // 3) OCR
-      const provider  = customer_profile.integrations?.ocr?.provider ?? 'google_vision';
+      const provider = customer_profile.integrations?.ocr?.provider ?? 'google_vision';
       const ocrConfig = customer_profile.integrations?.ocr?.config ?? {};
       const ocrAdapter = adapterFactory.for(provider);
 
@@ -105,60 +107,64 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
       // 4) Field-Extraktion (Regex → Stammdaten → Claude)
       const extraction = await extractFields(db, ocr, {
         customer_id: customer_profile.customer_id,
-        routing:     customer_profile.routing,
-        custom:      customer_profile.custom,
+        routing: customer_profile.routing,
+        custom: customer_profile.custom,
       });
 
       // 5) Validator
       const validation = await validateFields(db, extraction.fields, {
         customerId,
-        receiptId:  receipt_id,
-        profile:    { routing: customer_profile.routing },
+        receiptId: receipt_id,
+        profile: { routing: customer_profile.routing },
       });
 
       // 6) Confidence + neue Status-Entscheidung
       const overallConfidence = combineConfidence(ocr.confidence, extraction.confidence);
       const threshold = customer_profile.routing?.low_confidence_threshold ?? 0.75;
       const newStatus: Receipt['status'] =
-        overallConfidence < threshold || !validation.is_valid
-          ? 'requires_review'
-          : 'extracted';
+        overallConfidence < threshold || !validation.is_valid ? 'requires_review' : 'extracted';
 
       // 7) Hook after_extraction
       const issues = [...validation.issues];
       if (overallConfidence < threshold) {
         issues.push({
-          code:    'LOW_CONFIDENCE',
-          field:   'extraction.confidence',
+          code: 'LOW_CONFIDENCE',
+          field: 'extraction.confidence',
           message: `OCR/Field confidence ${round2(overallConfidence)} unter Schwelle ${threshold}`,
         });
       }
       const audit = {
-        events: [...(receipt.audit?.events as { at: string; type: string; actor: string }[] ?? []), {
-          at:     new Date().toISOString(),
-          type:   newStatus === 'extracted' ? 'extracted' : 'requires_review',
-          actor:  'system',
-        }],
+        events: [
+          ...((receipt.audit?.events as { at: string; type: string; actor: string }[]) ?? []),
+          {
+            at: new Date().toISOString(),
+            type: newStatus === 'extracted' ? 'extracted' : 'requires_review',
+            actor: 'system',
+          },
+        ],
       };
       const patched: Receipt = {
         ...receipt,
         status: newStatus,
         extraction: {
-          engine:         ocrAdapter.id,
+          engine: ocrAdapter.id,
           engine_version: ocrAdapter.version,
-          confidence:     overallConfidence,
-          raw_text:       ocr.raw_text,
-          fields:         extraction.fields,
-          warnings:       extraction.sources.claude ? ['claude_fallback_used'] : [],
+          confidence: overallConfidence,
+          raw_text: ocr.raw_text,
+          fields: extraction.fields,
+          warnings: extraction.sources.claude ? ['claude_fallback_used'] : [],
         },
         validation: {
           is_valid: validation.is_valid && overallConfidence >= threshold,
           issues,
-          checks:   validation.checks,
+          checks: validation.checks,
         },
         audit,
       };
-      receipt = await hookRunner.run('after_extraction', { receipt: patched, profile: customer_profile });
+      receipt = await hookRunner.run('after_extraction', {
+        receipt: patched,
+        profile: customer_profile,
+      });
 
       // 8) Persistieren
       const saved = await receiptRepo.update(db, receipt);
@@ -174,14 +180,15 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
       // 9) Audit + Event
       void writeAudit(db, {
         customerId,
-        receiptId:  receipt_id,
-        eventType:  newStatus === 'extracted' ? 'pp.receipt.extracted' : 'pp.receipt.requires_review',
+        receiptId: receipt_id,
+        eventType:
+          newStatus === 'extracted' ? 'pp.receipt.extracted' : 'pp.receipt.requires_review',
         payload: {
-          confidence:    overallConfidence,
-          ocr_engine:    ocrAdapter.id,
+          confidence: overallConfidence,
+          ocr_engine: ocrAdapter.id,
           provider,
           field_sources: extraction.sources,
-          checks:        validation.checks,
+          checks: validation.checks,
         },
         traceId: trace_id,
       });
@@ -189,12 +196,12 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
         redis,
         newStatus === 'extracted' ? 'pp.receipt.extracted' : 'pp.receipt.requires_review',
         {
-          receipt_id:    saved.receipt_id,
-          customer_id:   saved.customer_id,
-          status:        saved.status,
-          confidence:    overallConfidence,
+          receipt_id: saved.receipt_id,
+          customer_id: saved.customer_id,
+          status: saved.status,
+          confidence: overallConfidence,
           supplier_name: extraction.fields.supplier_name,
-          total_gross:   extraction.fields.total_gross,
+          total_gross: extraction.fields.total_gross,
           trace_id,
         },
       );
@@ -203,15 +210,17 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
         newStatus === 'extracted' ? 'pp.receipt.extracted' : 'pp.receipt.requires_review',
       ];
 
-      return reply.send(apiOk({
-        receipt:        saved,
-        receipt_patch: {
-          status:     saved.status,
-          extraction: saved.extraction,
-          validation: saved.validation,
-        },
-        events_to_emit: eventsToEmit,
-      }));
+      return reply.send(
+        apiOk({
+          receipt: saved,
+          receipt_patch: {
+            status: saved.status,
+            extraction: saved.extraction,
+            validation: saved.validation,
+          },
+          events_to_emit: eventsToEmit,
+        }),
+      );
     } catch (err) {
       logger.error({ err, receipt_id, customerId }, 'M01 extract fehlgeschlagen');
       receiptsProcessed.inc({
@@ -220,13 +229,16 @@ export function buildExtractHandler(deps: ExtractHandlerDeps = {}) {
       });
       void writeAudit(db, {
         customerId,
-        receiptId:  receipt_id,
-        eventType:  'pp.receipt.extraction_failed',
-        payload:    { error: (err as Error).message },
-        traceId:    trace_id,
+        receiptId: receipt_id,
+        eventType: 'pp.receipt.extraction_failed',
+        payload: { error: (err as Error).message },
+        traceId: trace_id,
       });
       void emitReceiptEvent(redis, 'pp.receipt.extraction_failed', {
-        receipt_id, customer_id: customerId, status: 'error', trace_id,
+        receipt_id,
+        customer_id: customerId,
+        status: 'error',
+        trace_id,
       });
       return reply.code(502).send(
         apiError('EXTERNAL_API_FAILED', 'OCR/Extraktion fehlgeschlagen.', {

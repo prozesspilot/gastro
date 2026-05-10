@@ -39,10 +39,7 @@ function basicAuthHeader(): string {
   return `Basic ${Buffer.from(credentials).toString('base64')}`;
 }
 
-async function n8nFetch(
-  path: string,
-  options: RequestInit = {},
-): Promise<unknown> {
+async function n8nFetch(path: string, options: RequestInit = {}): Promise<unknown> {
   const url = `${config.N8N_BASE_URL}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -54,7 +51,11 @@ async function n8nFetch(
 
   if (!res.ok) {
     let body: unknown;
-    try { body = await res.json(); } catch { body = await res.text(); }
+    try {
+      body = await res.json();
+    } catch {
+      body = await res.text();
+    }
     logger.warn({ url, status: res.status, body }, 'n8n-Anfrage fehlgeschlagen');
     throw new N8nClientError(`n8n ${res.status}: ${res.statusText}`, res.status, body);
   }
@@ -80,7 +81,7 @@ export async function triggerWebhook(
   logger.debug({ webhookPath }, 'n8n-Webhook auslösen');
   return n8nFetch(`/webhook/${webhookPath}`, {
     method: 'POST',
-    body:   JSON.stringify(payload),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -90,9 +91,7 @@ export async function triggerWebhook(
  *
  * @param payload  customer_id, receipt_id, tenant_id, storage_key etc.
  */
-export async function triggerReceiptPipeline(
-  payload: Record<string, unknown>,
-): Promise<void> {
+export async function triggerReceiptPipeline(payload: Record<string, unknown>): Promise<void> {
   try {
     logger.info({ receiptId: payload.receipt_id }, 'n8n-Pipeline triggern: receipt-received');
     await triggerWebhook('receipt-received', payload);
@@ -108,7 +107,7 @@ export async function triggerReceiptPipeline(
  * Lädt alle Workflows aus der n8n-REST-API.
  */
 export async function getWorkflows(): Promise<unknown[]> {
-  const result = await n8nFetch('/api/v1/workflows') as { data: unknown[] };
+  const result = (await n8nFetch('/api/v1/workflows')) as { data: unknown[] };
   return result.data ?? [];
 }
 

@@ -4,8 +4,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildExecutionsHandler() {
   return async function executionsHandler(
@@ -18,8 +18,8 @@ export function buildExecutionsHandler() {
     const { pluginId } = req.params;
     const db: Pool = req.server.db;
     const tenantId = req.headers['x-pp-tenant-id'] as string | undefined;
-    const limit = Math.min(parseInt(req.query.limit ?? '50', 10), 200);
-    const offset = parseInt(req.query.offset ?? '0', 10);
+    const limit = Math.min(Number.parseInt(req.query.limit ?? '50', 10), 200);
+    const offset = Number.parseInt(req.query.offset ?? '0', 10);
 
     if (!tenantId) {
       return reply.code(400).send(apiError('MISSING_TENANT', 'X-Tenant-ID Header fehlt'));
@@ -28,14 +28,12 @@ export function buildExecutionsHandler() {
     try {
       // Prüfen ob Plugin dem Tenant gehört
       const { rows: existing } = await db.query(
-        `SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2`,
+        'SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2',
         [pluginId, tenantId],
       );
 
       if (existing.length === 0) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`));
       }
 
       const { rows } = await db.query(
@@ -49,7 +47,7 @@ export function buildExecutionsHandler() {
       );
 
       const { rows: countRows } = await db.query<{ count: string }>(
-        `SELECT COUNT(*)::text AS count FROM plugin_executions WHERE plugin_id = $1`,
+        'SELECT COUNT(*)::text AS count FROM plugin_executions WHERE plugin_id = $1',
         [pluginId],
       );
 
@@ -57,16 +55,16 @@ export function buildExecutionsHandler() {
         apiOk({
           executions: rows,
           count: rows.length,
-          total: parseInt(countRows[0]?.count ?? '0', 10),
+          total: Number.parseInt(countRows[0]?.count ?? '0', 10),
           limit,
           offset,
         }),
       );
     } catch (err) {
       logger.error({ err, pluginId, tenantId }, 'Plugin-Executions laden fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Ausfuehrungshistorie konnte nicht geladen werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Ausfuehrungshistorie konnte nicht geladen werden'));
     }
   };
 }

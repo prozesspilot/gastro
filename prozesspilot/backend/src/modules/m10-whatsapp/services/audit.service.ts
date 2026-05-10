@@ -19,10 +19,10 @@ import { logger } from '../../../core/logger';
 export interface AuditEntry {
   customerId: string;
   receiptId?: string;
-  eventType:  string;                       // z. B. 'received', 'media.duplicate', 'sender.rejected'
-  actor?:     { type: string; id: string }; // Default: { type:'system', id:'M10' }
-  payload?:   Record<string, unknown>;
-  traceId?:   string;
+  eventType: string; // z. B. 'received', 'media.duplicate', 'sender.rejected'
+  actor?: { type: string; id: string }; // Default: { type:'system', id:'M10' }
+  payload?: Record<string, unknown>;
+  traceId?: string;
 }
 
 /**
@@ -52,13 +52,7 @@ export async function writeAudit(db: Pool, entry: AuditEntry): Promise<void> {
     await db.query(
       `INSERT INTO audit_log (tenant_id, actor, action, resource, payload)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [
-        SENTINEL_TENANT_ID,
-        actor.id,
-        entry.eventType,
-        resource,
-        JSON.stringify(payload),
-      ],
+      [SENTINEL_TENANT_ID, actor.id, entry.eventType, resource, JSON.stringify(payload)],
     );
   } catch (err) {
     logger.warn({ err, entry }, 'Audit-Log-Insert fehlgeschlagen');

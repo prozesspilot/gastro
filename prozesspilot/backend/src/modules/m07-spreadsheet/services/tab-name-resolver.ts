@@ -19,14 +19,24 @@ import type { Receipt } from '../../_shared/receipts/receipt.repository';
 export const DEFAULT_TAB_TEMPLATE = 'Belege {year}';
 
 const MONTHS_DE = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+  'Januar',
+  'Februar',
+  'März',
+  'April',
+  'Mai',
+  'Juni',
+  'Juli',
+  'August',
+  'September',
+  'Oktober',
+  'November',
+  'Dezember',
 ];
 
 export function renderTabName(template: string, receipt: Receipt): string {
   const date = pickReferenceDate(receipt);
-  const year    = date.getUTCFullYear();
-  const month   = date.getUTCMonth() + 1;
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
   const quarter = Math.floor((month - 1) / 3) + 1;
 
   return template
@@ -46,8 +56,7 @@ function pickReferenceDate(receipt: Receipt): Date {
   }
 
   // 2) audit.events[type=received].at
-  const events = (receipt.audit as { events?: { type: string; at: string }[] } | undefined)
-    ?.events;
+  const events = (receipt.audit as { events?: { type: string; at: string }[] } | undefined)?.events;
   const received = events?.find((e) => e.type === 'received');
   if (received?.at) {
     const d = new Date(received.at);

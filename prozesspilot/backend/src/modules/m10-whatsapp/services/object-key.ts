@@ -23,10 +23,10 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export function ulid(now = Date.now()): string {
   // Timestamp 10 Zeichen
   let ts = '';
-  let t  = now;
+  let t = now;
   for (let i = 0; i < 10; i++) {
     ts = ALPHABET[t % 32] + ts;
-    t  = Math.floor(t / 32);
+    t = Math.floor(t / 32);
   }
   // 80 Bit (10 Bytes) Zufall → 16 Zeichen
   const buf = randomBytes(10);
@@ -45,13 +45,13 @@ export function ulid(now = Date.now()): string {
 }
 
 const MIME_EXT: Record<string, string> = {
-  'image/jpeg':       'jpg',
-  'image/jpg':        'jpg',
-  'image/png':        'png',
-  'image/webp':       'webp',
-  'image/heic':       'heic',
-  'image/tiff':       'tiff',
-  'application/pdf':  'pdf',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/tiff': 'tiff',
+  'application/pdf': 'pdf',
   'application/octet-stream': 'bin',
 };
 
@@ -64,13 +64,9 @@ export function extensionForMime(mime: string): string {
  *
  *   {customerId}/originals/{yyyy}/{mm}/{ULID}.{ext}
  */
-export function buildObjectKey(
-  customerId: string,
-  mime: string,
-  now = new Date(),
-): string {
+export function buildObjectKey(customerId: string, mime: string, now = new Date()): string {
   const yyyy = now.getUTCFullYear().toString();
-  const mm   = (now.getUTCMonth() + 1).toString().padStart(2, '0');
-  const ext  = extensionForMime(mime);
+  const mm = (now.getUTCMonth() + 1).toString().padStart(2, '0');
+  const ext = extensionForMime(mime);
   return `${customerId}/originals/${yyyy}/${mm}/${ulid(now.getTime())}.${ext}`;
 }

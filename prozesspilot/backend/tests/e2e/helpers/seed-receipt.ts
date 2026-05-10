@@ -30,7 +30,9 @@ export interface SeededReceipt {
 }
 
 export async function seedReceipt(pool: Pool, opts: SeedReceiptOpts): Promise<SeededReceipt> {
-  const receiptId = opts.receipt_id ?? `rcpt_e2e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const receiptId =
+    opts.receipt_id ??
+    `rcpt_e2e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const file = {
     object_key: `cust_${opts.customer_id}/originals/test/${receiptId}.jpg`,
     mime_type: 'image/jpeg',

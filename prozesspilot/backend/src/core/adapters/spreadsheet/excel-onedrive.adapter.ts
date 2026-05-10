@@ -18,18 +18,18 @@
 
 import type { Pool } from 'pg';
 
-import { logger } from '../../logger';
 import { config } from '../../config';
+import { logger } from '../../logger';
 
 import {
-  HeaderConflictError,
-  SpreadsheetNotFoundError,
   type ColumnDef,
+  HeaderConflictError,
   type RowRef,
   type RowResult,
   type RowValue,
   type SpreadsheetAdapter,
   type SpreadsheetAdapterContext,
+  SpreadsheetNotFoundError,
 } from './adapter.interface';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
@@ -59,7 +59,9 @@ interface MsGraphToken {
 
 async function loadMsGraphToken(db: Pool, customerId: string): Promise<MsGraphToken> {
   if (!config.PP_PGCRYPTO_KEY) {
-    throw new Error('PP_PGCRYPTO_KEY nicht gesetzt — MS-Graph-Credential kann nicht entschlüsselt werden.');
+    throw new Error(
+      'PP_PGCRYPTO_KEY nicht gesetzt — MS-Graph-Credential kann nicht entschlüsselt werden.',
+    );
   }
 
   const { rows } = await db.query<MsGraphCredentialRow>(
@@ -178,8 +180,7 @@ async function loadMsGraphClient(
   let token = await loadMsGraphToken(db, customerId);
 
   const needsRefresh =
-    !token.expiresAt ||
-    token.expiresAt.getTime() < Date.now() + TOKEN_REFRESH_BUFFER_MS;
+    !token.expiresAt || token.expiresAt.getTime() < Date.now() + TOKEN_REFRESH_BUFFER_MS;
 
   if (needsRefresh) {
     token = await refreshMsGraphToken(db, customerId, token);
@@ -285,11 +286,7 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
 
     let listResp: WorksheetsResponse;
     try {
-      listResp = await graphRequest<WorksheetsResponse>(
-        accessToken,
-        'GET',
-        worksheetsUrl,
-      );
+      listResp = await graphRequest<WorksheetsResponse>(accessToken, 'GET', worksheetsUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('404') || msg.includes('itemNotFound')) {
@@ -301,12 +298,7 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
     const exists = listResp.value.some((ws) => ws.name === tab);
     if (exists) return;
 
-    await graphRequest<WorksheetItem>(
-      accessToken,
-      'POST',
-      worksheetsUrl,
-      { name: tab },
-    );
+    await graphRequest<WorksheetItem>(accessToken, 'POST', worksheetsUrl, { name: tab });
     logger.info({ sheetId, tab, customerId }, 'M07 Excel ensureTabExists: Tab angelegt');
   }
 
@@ -321,27 +313,27 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
     const expected = columns.map((c) => c.header);
     const endCol = endColLetter(columns.length);
     const rangeAddr = `A1:${endCol}1`;
-    const rangeUrl =
-      `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='${rangeAddr}')`;
+    const rangeUrl = `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='${rangeAddr}')`;
 
     const rangeResp = await graphRequest<RangeResponse>(accessToken, 'GET', rangeUrl);
     const actualRow = (rangeResp.values?.[0] ?? []) as (string | null)[];
-    const isEmpty =
-      actualRow.length === 0 || actualRow.every((v) => v === null || v === '');
+    const isEmpty = actualRow.length === 0 || actualRow.every((v) => v === null || v === '');
 
     if (isEmpty) {
       await graphRequest<unknown>(accessToken, 'PATCH', rangeUrl, {
         values: [expected],
       });
-      logger.info({ sheetId, tab, columns: expected.length }, 'M07 Excel ensureHeader: Header geschrieben');
+      logger.info(
+        { sheetId, tab, columns: expected.length },
+        'M07 Excel ensureHeader: Header geschrieben',
+      );
       return;
     }
 
     // M07 §12: KEINE Auto-Korrektur bei divergentem Header.
     const actualStrings = actualRow.map((v) => (v === null ? '' : String(v)));
     const matches =
-      actualStrings.length === expected.length &&
-      expected.every((h, i) => actualStrings[i] === h);
+      actualStrings.length === expected.length && expected.every((h, i) => actualStrings[i] === h);
     if (!matches) {
       throw new HeaderConflictError(sheetId, tab, expected, actualStrings);
     }
@@ -366,8 +358,7 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
 
     // Fallback: Sheet-Scan via Graph API (Spalte O = Index 14, 0-basiert)
     const { accessToken, baseUrl } = await loadMsGraphClient(ctx.db, customerId);
-    const rangeUrl =
-      `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='A:O')`;
+    const rangeUrl = `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='A:O')`;
 
     let rangeResp: RangeResponse;
     try {
@@ -407,8 +398,7 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
     row: RowValue[],
   ): Promise<RowResult> {
     const { accessToken, baseUrl } = await loadMsGraphClient(ctx.db, customerId);
-    const worksheetBase =
-      `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}`;
+    const worksheetBase = `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}`;
 
     // Versuche zuerst über Excel-Table
     const tablesUrl = `${worksheetBase}/tables`;
@@ -425,12 +415,9 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
         // Erste Tabelle im Sheet verwenden
         const tableId = tablesResp.value[0].id;
         const addRowUrl = `${worksheetBase}/tables/${tableId}/rows/add`;
-        const addResp = await graphRequest<TableRowAddResponse>(
-          accessToken,
-          'POST',
-          addRowUrl,
-          { values: [row] },
-        );
+        const addResp = await graphRequest<TableRowAddResponse>(accessToken, 'POST', addRowUrl, {
+          values: [row],
+        });
         // addResp.index ist 0-basiert; +2 wegen Header + 1-Basierung
         rowIndex = addResp.index + 2;
       } else {
@@ -473,8 +460,7 @@ export class ExcelOneDriveAdapter implements SpreadsheetAdapter {
     const { accessToken, baseUrl } = await loadMsGraphClient(ctx.db, customerId);
     const endCol = endColLetter(row.length);
     const rangeAddr = `A${rowIndex}:${endCol}${rowIndex}`;
-    const rangeUrl =
-      `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='${rangeAddr}')`;
+    const rangeUrl = `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}/range(address='${rangeAddr}')`;
 
     await graphRequest<unknown>(accessToken, 'PATCH', rangeUrl, {
       values: [row],
@@ -502,8 +488,7 @@ async function appendViaRange(
   tab: string,
   row: RowValue[],
 ): Promise<number> {
-  const worksheetBase =
-    `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}`;
+  const worksheetBase = `${baseUrl}/drives/me/items/${sheetId}/workbook/worksheets/${encodeURIComponent(tab)}`;
 
   // Benutzten Bereich abfragen um nächste freie Zeile zu ermitteln
   const usedRangeUrl = `${worksheetBase}/usedRange(valuesOnly=true)`;

@@ -12,8 +12,8 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { m06SevdeskRoutes } from '../routes';
 import { SevDeskClient } from '../../../core/adapters/booking/sevdesk/sevdesk.client';
+import { m06SevdeskRoutes } from '../routes';
 
 // ── Mock sevDesk Client ──────────────────────────────────────────────────────
 
@@ -46,13 +46,16 @@ class MockSevDeskClient extends SevDeskClient {
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id: string;
+  id: string;
   customer_id: string;
   status: string;
-  file_object_key: string;
+  storage_key: string;
   file_sha256: string;
-  payload: Record<string, unknown>;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -82,22 +85,31 @@ const fakeDb = {
       return { rows: [] }; // No mapping → fallback 1 (19%)
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [string, string, string, string, string];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
       fakeDb.receipts[idx] = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
+        storage_key: key,
         file_sha256: sha,
-        payload: JSON.parse(payloadJson),
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
         updated_at: new Date(),
       };
       return { rows: [fakeDb.receipts[idx]] };
     }
     if (/SELECT[\s\S]*FROM\s+receipts/i.test(sql)) {
+      // findById: WHERE id = $1 AND customer_id = $2
       const [id, cid] = params as [string, string];
-      const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+      const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
       return { rows: row ? [row] : [] };
     }
     return { rows: [] };
@@ -132,21 +144,14 @@ function seedReceipt(opts: {
     tax_lines: [{ rate: 0.19, base: 100.0, amount: 19.0 }],
   };
   fakeDb.receipts.push({
-    receipt_id: 'rcpt_m06_0001',
+    id: 'rcpt_m06_0001',
     customer_id: 'cust_m06test',
     status: opts.status,
-    file_object_key: 'cust_m06test/originals/2026/04/rec.pdf',
+    storage_key: 'cust_m06test/originals/2026/04/rec.pdf',
     file_sha256: 'abc123',
-    payload: {
-      receipt_id: 'rcpt_m06_0001',
-      customer_id: 'cust_m06test',
-      status: opts.status,
-      file: {
-        object_key: 'cust_m06test/originals/2026/04/rec.pdf',
-        mime_type: 'application/pdf',
-        size_bytes: 512,
-        sha256: 'abc123',
-      },
+    mime_type: 'application/pdf',
+    file_size_bytes: 512,
+    metadata: {
       extraction: { fields },
       categorization: {
         skr_account: opts.skr_account ?? '3100',

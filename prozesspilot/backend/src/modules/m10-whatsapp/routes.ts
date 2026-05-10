@@ -17,20 +17,20 @@
  * Spec-Referenz: M10 §7, §8
  */
 
-import type { FastifyInstance } from 'fastify';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyInstance } from 'fastify';
 import { createS3Client } from '../../core/storage/storage.service';
-import { verifyHandler } from './handlers/verify.handler';
-import { resolveHandler } from './handlers/resolve.handler';
 import { buildMediaHandler } from './handlers/media.handler';
+import { resolveHandler } from './handlers/resolve.handler';
 import { buildSendTemplateHandler } from './handlers/send-template.handler';
+import { verifyHandler } from './handlers/verify.handler';
 import type { MetaGraphClient } from './services/meta-graph.client';
 
 export interface M10RoutesDeps {
   /** Optional injectable Meta-Graph-Client (Tests). */
   metaClient?: MetaGraphClient;
   /** Optional injectable S3-Client (Tests). */
-  s3?:         S3Client;
+  s3?: S3Client;
 }
 
 export async function m10WhatsAppRoutes(
@@ -43,8 +43,8 @@ export async function m10WhatsAppRoutes(
     app.decorate('s3', deps.s3 ?? createS3Client());
   }
 
-  app.post('/verify',        verifyHandler);
-  app.post('/resolve',       resolveHandler);
-  app.post('/media',         buildMediaHandler({ metaClient: deps.metaClient, s3: deps.s3 }));
+  app.post('/verify', verifyHandler);
+  app.post('/resolve', resolveHandler);
+  app.post('/media', buildMediaHandler({ metaClient: deps.metaClient, s3: deps.s3 }));
   app.post('/send-template', buildSendTemplateHandler({ metaClient: deps.metaClient }));
 }

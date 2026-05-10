@@ -12,7 +12,7 @@
 
 import { createHash } from 'node:crypto';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
-import { resolveCounterAccount, type CustomerProfileForDatev } from './counter-account-resolver';
+import { type CustomerProfileForDatev, resolveCounterAccount } from './counter-account-resolver';
 
 // UTF-8 BOM
 const BOM = '﻿';
@@ -66,7 +66,11 @@ export function renderDatevCsv(input: RenderDatevCsvInput): RenderDatevCsvResult
   const clientNo = profile.datev_client_no ?? '0';
   const accountingYear = String(period.year);
   const dateFrom = formatDateYYYYMMDD(period.year, period.month, 1);
-  const dateTo = formatDateYYYYMMDD(period.year, period.month, lastDayOfMonth(period.year, period.month));
+  const dateTo = formatDateYYYYMMDD(
+    period.year,
+    period.month,
+    lastDayOfMonth(period.year, period.month),
+  );
   const importer = profile.datev_importer ?? 'ProzessPilot';
   const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
 
@@ -78,26 +82,26 @@ export function renderDatevCsv(input: RenderDatevCsvInput): RenderDatevCsvResult
     `"${EXTF_FORMAT_NAME}"`,
     EXTF_FORMAT_VERSION2,
     timestamp,
-    '',       // Leerfeld
+    '', // Leerfeld
     `"${importer}"`,
-    '',       // Leerfeld
+    '', // Leerfeld
     consultantNo,
     clientNo,
     accountingYear,
     dateFrom,
     dateTo,
-    '',       // Leerfeld
-    '""',     // Bezeichnung
-    '',       // Leerfeld
-    '1',      // Festschreibung
-    '0',      // Kennzeichen
-    '"EUR"',  // Währung
-    '0',      // Debitor/Kreditor-BU
-    '""',     // SKR
-    '0',      // Branchenlösung
-    '',       // Leerfeld
-    '',       // Leerfeld
-    '""',     // Anwendungsinformation
+    '', // Leerfeld
+    '""', // Bezeichnung
+    '', // Leerfeld
+    '1', // Festschreibung
+    '0', // Kennzeichen
+    '"EUR"', // Währung
+    '0', // Debitor/Kreditor-BU
+    '""', // SKR
+    '0', // Branchenlösung
+    '', // Leerfeld
+    '', // Leerfeld
+    '""', // Anwendungsinformation
   ].join(';');
 
   // Zeile 2: Spalten-Header
@@ -232,7 +236,7 @@ export function renderDatevCsv(input: RenderDatevCsvInput): RenderDatevCsvResult
 
   // CSV zusammensetzen
   const lines = [headerLine, columnHeader, ...dataRows];
-  const csvText = BOM + lines.join('\r\n') + '\r\n';
+  const csvText = `${BOM + lines.join('\r\n')}\r\n`;
 
   let csvBuffer: Buffer;
 
@@ -268,9 +272,8 @@ export function toDatevRow(
   profile: CustomerProfileForDatev,
   skrType: 'skr03' | 'skr04' = 'skr03',
 ): string {
-  const fields = (
-    (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}
-  ) as {
+  const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+    ?.fields ?? {}) as {
     total_gross?: number;
     document_date?: string;
     document_number?: string;
@@ -331,7 +334,7 @@ export function toDatevRow(
   // Alle weiteren Felder leer lassen (Pflichtfelder haben leere Defaults)
   const emptyFields = Array(110).fill('').join(';');
 
-  return [
+  return `${[
     umsatz,
     soll_haben,
     wkz,
@@ -358,7 +361,7 @@ export function toDatevRow(
     '',
     // Beleglink
     beleglink,
-  ].join(';') + ';' + emptyFields;
+  ].join(';')};${emptyFields}`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

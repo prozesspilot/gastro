@@ -19,9 +19,9 @@ import type { Pool } from 'pg';
 import { config } from '../../../core/config';
 
 export interface WaCredential {
-  credentialId:    string;
-  accessToken:     string;
-  phoneNumberId?:  string;
+  credentialId: string;
+  accessToken: string;
+  phoneNumberId?: string;
   graphApiVersion: string;
 }
 
@@ -37,18 +37,17 @@ export class CredentialNotFoundError extends Error {
  * Lädt das WhatsApp-Access-Token (kind = 'wa_access_token') eines Kunden
  * und entschlüsselt es mit dem konfigurierten pgcrypto-Master-Key.
  */
-export async function loadWaCredential(
-  db: Pool,
-  customerId: string,
-): Promise<WaCredential> {
+export async function loadWaCredential(db: Pool, customerId: string): Promise<WaCredential> {
   if (!config.PP_PGCRYPTO_KEY) {
-    throw new Error('PP_PGCRYPTO_KEY ist nicht gesetzt — Credential kann nicht entschlüsselt werden.');
+    throw new Error(
+      'PP_PGCRYPTO_KEY ist nicht gesetzt — Credential kann nicht entschlüsselt werden.',
+    );
   }
 
   const { rows } = await db.query<{
-    credential_id:  string;
-    access_token:   string;
-    meta:           { phone_number_id?: string; graph_api_version?: string } | null;
+    credential_id: string;
+    access_token: string;
+    meta: { phone_number_id?: string; graph_api_version?: string } | null;
   }>(
     `SELECT credential_id,
             pgp_sym_decrypt(ciphertext, $2)::text AS access_token,
@@ -66,9 +65,9 @@ export async function loadWaCredential(
   if (!row) throw new CredentialNotFoundError(customerId);
 
   return {
-    credentialId:    row.credential_id,
-    accessToken:     row.access_token,
-    phoneNumberId:   row.meta?.phone_number_id,
+    credentialId: row.credential_id,
+    accessToken: row.access_token,
+    phoneNumberId: row.meta?.phone_number_id,
     graphApiVersion: row.meta?.graph_api_version ?? config.WHATSAPP_GRAPH_API_VERSION,
   };
 }

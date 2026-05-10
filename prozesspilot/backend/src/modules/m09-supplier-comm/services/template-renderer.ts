@@ -6,9 +6,9 @@
  * body_html = body_text in <pre> gewrappt (MVP).
  */
 
+import { CONFIRMATION_RECEIVED_DE_V1 } from '../templates/confirmation_received_de_v1';
 import { LOW_QUALITY_DE_V1 } from '../templates/low_quality_de_v1';
 import { MISSING_INVOICE_DE_V2 } from '../templates/missing_invoice_de_v2';
-import { CONFIRMATION_RECEIVED_DE_V1 } from '../templates/confirmation_received_de_v1';
 import { REMINDER_OVERDUE_DE_V1 } from '../templates/reminder_overdue_de_v1';
 
 export type TemplateKey =

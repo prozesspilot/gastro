@@ -66,9 +66,7 @@ export function buildPiiInventoryHandler() {
         inventory: PII_INVENTORY,
         total_tables: PII_INVENTORY.length,
         total_pii_fields: PII_INVENTORY.reduce((acc, t) => acc + t.fields.length, 0),
-        encrypted_fields: PII_INVENTORY.flatMap((t) =>
-          t.encrypted.map((f) => `${t.table}.${f}`)
-        ),
+        encrypted_fields: PII_INVENTORY.flatMap((t) => t.encrypted.map((f) => `${t.table}.${f}`)),
         last_reviewed: '2026-05-01',
       }),
     );

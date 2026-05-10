@@ -33,9 +33,13 @@ export function buildListHandler() {
         ORDER BY period DESC, created_at DESC`,
       [customer_id],
     );
-    return reply.send(apiOk(rows.map((r) => ({
-      ...r,
-      created_at: r.created_at.toISOString(),
-    }))));
+    return reply.send(
+      apiOk(
+        rows.map((r) => ({
+          ...r,
+          created_at: r.created_at.toISOString(),
+        })),
+      ),
+    );
   };
 }

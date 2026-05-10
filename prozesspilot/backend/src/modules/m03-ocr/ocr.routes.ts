@@ -5,8 +5,8 @@
  *   POST /api/v1/receipts/:id/ocr
  */
 
-import type { FastifyInstance } from 'fastify';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyInstance } from 'fastify';
 import { tenantContextHook } from '../../core/hooks/tenant-context';
 import { rateLimit } from '../../core/rate-limit/rate-limit.middleware';
 import { createS3Client } from '../../core/storage/storage.service';

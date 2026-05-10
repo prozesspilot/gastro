@@ -21,9 +21,8 @@ export function calculateTotals(receipts: Receipt[]): DatevTotals {
   let tax_sum = 0;
 
   for (const receipt of receipts) {
-    const fields = (
-      (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}
-    ) as {
+    const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+      ?.fields ?? {}) as {
       total_gross?: number;
       total_net?: number;
       tax_lines?: Array<{ amount: number }>;

@@ -30,7 +30,9 @@ interface FakeRow {
   };
 }
 
-function fakeDb(rows: FakeRow[]): { query: (sql: string, params: unknown[]) => Promise<{ rows: FakeRow[] }> } {
+function fakeDb(rows: FakeRow[]): {
+  query: (sql: string, params: unknown[]) => Promise<{ rows: FakeRow[] }>;
+} {
   return {
     query: async (_sql: string, params: unknown[]) => {
       const phoneNumberId = params[0] as string;
@@ -79,8 +81,8 @@ describe('resolveCustomer', () => {
       input_whatsapp: {
         phone_number_id: '123456789012345',
         allowed_senders: [
-          { name: 'Mario',  phone: '+4917612345678', role: 'owner' },
-          { name: 'Giulia', phone: '017698765432',   role: 'accountant' },
+          { name: 'Mario', phone: '+4917612345678', role: 'owner' },
+          { name: 'Giulia', phone: '017698765432', role: 'accountant' },
         ],
       },
     },
@@ -117,9 +119,9 @@ describe('resolveCustomer', () => {
 
   it('wirft CustomerNotFoundError bei unbekannter phone_number_id', async () => {
     const db = fakeDb([profileRow]) as never;
-    await expect(
-      resolveCustomer(db, '999999999999999', '4917612345678'),
-    ).rejects.toBeInstanceOf(CustomerNotFoundError);
+    await expect(resolveCustomer(db, '999999999999999', '4917612345678')).rejects.toBeInstanceOf(
+      CustomerNotFoundError,
+    );
   });
 
   it('lehnt ab, wenn allowed_senders leer ist', async () => {

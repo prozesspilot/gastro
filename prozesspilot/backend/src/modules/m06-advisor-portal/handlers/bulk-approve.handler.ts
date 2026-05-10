@@ -8,12 +8,12 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
-import { logger } from '../../../core/logger';
 import { publishEvent } from '../../../core/events/publisher';
+import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const bodySchema = z.object({
   advisor_id: z.string().min(1),
@@ -37,7 +37,7 @@ export function buildBulkApproveHandler() {
     try {
       // Prüfe Advisor-Existenz und hole tenant_id
       const advisorRow = await db.query<{ advisor_id: string; tenant_id: string }>(
-        `SELECT advisor_id, tenant_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1`,
+        'SELECT advisor_id, tenant_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1',
         [advisor_id],
       );
       if (!advisorRow.rows[0]) {
@@ -47,13 +47,15 @@ export function buildBulkApproveHandler() {
 
       // Hole zugängliche Kunden des Advisors
       const accessRows = await db.query<{ customer_id: string }>(
-        `SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1`,
+        'SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1',
         [advisor_id],
       );
       const allowedCustomerIds = new Set(accessRows.rows.map((r) => r.customer_id));
 
       if (allowedCustomerIds.size === 0) {
-        return reply.code(403).send(apiError('FORBIDDEN', 'Kein Kunden-Zugang für diesen Advisor.'));
+        return reply
+          .code(403)
+          .send(apiError('FORBIDDEN', 'Kein Kunden-Zugang für diesen Advisor.'));
       }
 
       // Belege laden und prüfen ob zugänglich + Status requires_review
@@ -132,7 +134,10 @@ export function buildBulkApproveHandler() {
         });
       }
 
-      logger.info({ advisor_id, approved_count: approvedIds.length, approvalId }, 'bulk-approve completed');
+      logger.info(
+        { advisor_id, approved_count: approvedIds.length, approvalId },
+        'bulk-approve completed',
+      );
 
       return reply.send(
         apiOk({

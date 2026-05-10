@@ -11,22 +11,21 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // ── Storage-Service mocken ────────────────────────────────────────────────────
 
 vi.mock('../../src/core/storage/storage.service', () => ({
-  createS3Client:          vi.fn(() => ({})),
-  uploadObject:            vi.fn().mockResolvedValue({
-    key:          'tenant/2024-01/test.pdf',
-    bucket:       'prozesspilot-raw',
-    size_bytes:   100,
+  createS3Client: vi.fn(() => ({})),
+  uploadObject: vi.fn().mockResolvedValue({
+    key: 'tenant/2024-01/test.pdf',
+    bucket: 'prozesspilot-raw',
+    size_bytes: 100,
     content_type: 'application/pdf',
   }),
   getPresignedDownloadUrl: vi.fn().mockResolvedValue('https://minio.local/presigned-url'),
-  deleteObject:            vi.fn().mockResolvedValue(true),
+  deleteObject: vi.fn().mockResolvedValue(true),
 }));
 
 import { buildApp } from '../../src/app';
 
 // Skip all DB integration tests when no Postgres is available (set PP_E2E=1 to run)
 const E2E = process.env.PP_E2E === '1';
-
 
 // ── Test-Setup ────────────────────────────────────────────────────────────────
 
@@ -39,12 +38,15 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(async () => { if (!E2E) return; await app.close(); });
+afterAll(async () => {
+  if (!E2E) return;
+  await app.close();
+});
 
 beforeEach(async () => {
   if (!E2E) return;
   const { rows } = await app.db.query<{ id: string }>(
-    `INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+    'INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id',
     [`test-doc-tenant-${Date.now()}`, 'Doc-Test-Mandant'],
   );
   tenantId = rows[0].id;
@@ -52,7 +54,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (!E2E) return;
-  await app.db.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+  await app.db.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
   vi.clearAllMocks();
 });
 
@@ -60,8 +62,8 @@ afterEach(async () => {
 
 function headers(contentType = 'application/pdf', filename = 'test.pdf') {
   return {
-    'content-type':       contentType,
-    'x-pp-tenant-id':     tenantId,
+    'content-type': contentType,
+    'x-pp-tenant-id': tenantId,
     'x-original-filename': filename,
   };
 }
@@ -71,8 +73,8 @@ function headers(contentType = 'application/pdf', filename = 'test.pdf') {
 describe.skipIf(!E2E)('POST /api/v1/documents/upload', () => {
   it('lädt PDF hoch und gibt 201 zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: headers(),
       payload: Buffer.from('%PDF-1.4 test'),
     });
@@ -89,8 +91,8 @@ describe.skipIf(!E2E)('POST /api/v1/documents/upload', () => {
     // text/xml ist nicht im Content-Type-Parser registriert →
     // Fastify lehnt den Request selbst mit 415 ab (kein custom error.code)
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: { ...headers('text/xml'), 'content-type': 'text/xml' },
       payload: Buffer.from('<xml/>'),
     });
@@ -100,8 +102,8 @@ describe.skipIf(!E2E)('POST /api/v1/documents/upload', () => {
 
   it('gibt 422 bei leerem Body zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: headers(),
       payload: Buffer.alloc(0),
     });
@@ -111,8 +113,8 @@ describe.skipIf(!E2E)('POST /api/v1/documents/upload', () => {
 
   it('gibt 400 bei fehlendem x-pp-tenant-id zurück', async () => {
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: { 'content-type': 'application/pdf' },
       payload: Buffer.from('%PDF'),
     });
@@ -129,8 +131,8 @@ describe.skipIf(!E2E)('GET /api/v1/documents', () => {
     // Zwei Dokumente vorab hochladen
     for (const name of ['doc-a.pdf', 'doc-b.pdf']) {
       await app.inject({
-        method:  'POST',
-        url:     '/api/v1/documents/upload',
+        method: 'POST',
+        url: '/api/v1/documents/upload',
         headers: headers('application/pdf', name),
         payload: Buffer.from('%PDF'),
       });
@@ -139,8 +141,8 @@ describe.skipIf(!E2E)('GET /api/v1/documents', () => {
 
   it('gibt paginierte Liste zurück', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/documents',
+      method: 'GET',
+      url: '/api/v1/documents',
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -156,16 +158,16 @@ describe.skipIf(!E2E)('GET /api/v1/documents', () => {
 describe.skipIf(!E2E)('GET /api/v1/documents/:id', () => {
   it('gibt Dokument zurück wenn vorhanden', async () => {
     const upload = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: headers(),
       payload: Buffer.from('%PDF'),
     });
     const id = upload.json().data.id as string;
 
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/documents/${id}`,
+      method: 'GET',
+      url: `/api/v1/documents/${id}`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -175,8 +177,8 @@ describe.skipIf(!E2E)('GET /api/v1/documents/:id', () => {
 
   it('gibt 404 zurück wenn nicht vorhanden', async () => {
     const res = await app.inject({
-      method:  'GET',
-      url:     '/api/v1/documents/00000000-0000-0000-0000-000000000000',
+      method: 'GET',
+      url: '/api/v1/documents/00000000-0000-0000-0000-000000000000',
       headers: { 'x-pp-tenant-id': tenantId },
     });
 
@@ -189,16 +191,16 @@ describe.skipIf(!E2E)('GET /api/v1/documents/:id', () => {
 describe.skipIf(!E2E)('GET /api/v1/documents/:id/download-url', () => {
   it('gibt presigned URL zurück', async () => {
     const upload = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/documents/upload',
+      method: 'POST',
+      url: '/api/v1/documents/upload',
       headers: headers(),
       payload: Buffer.from('%PDF'),
     });
     const id = upload.json().data.id as string;
 
     const res = await app.inject({
-      method:  'GET',
-      url:     `/api/v1/documents/${id}/download-url`,
+      method: 'GET',
+      url: `/api/v1/documents/${id}/download-url`,
       headers: { 'x-pp-tenant-id': tenantId },
     });
 

@@ -20,11 +20,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
+import type { Receipt } from '../../_shared/receipts/receipt.repository';
 import { renderDatevCsv } from '../services/csv-renderer';
 import { zipReceipts } from '../services/zip-builder';
-import type { Receipt } from '../../_shared/receipts/receipt.repository';
 
 const buildInputSchema = z.object({
   year: z.number().int().min(2000).max(2100),
@@ -154,15 +154,26 @@ export function buildBuildHandler() {
       // 7) renderDatevCsv()
       const profile = {
         customer_id: customerId,
-        datev_consultant_no: (profileRow.custom as Record<string, unknown> | undefined)?.datev_consultant_no as string | undefined,
-        datev_client_no: (profileRow.custom as Record<string, unknown> | undefined)?.datev_client_no as string | undefined,
-        datev_encoding: (profileRow.custom as Record<string, unknown> | undefined)?.datev_encoding as 'utf-8' | 'windows-1252' | undefined,
-        skr_type: ((profileRow.custom as Record<string, unknown> | undefined)?.skr_type as 'skr03' | 'skr04' | undefined) ?? 'skr03',
+        datev_consultant_no: (profileRow.custom as Record<string, unknown> | undefined)
+          ?.datev_consultant_no as string | undefined,
+        datev_client_no: (profileRow.custom as Record<string, unknown> | undefined)
+          ?.datev_client_no as string | undefined,
+        datev_encoding: (profileRow.custom as Record<string, unknown> | undefined)
+          ?.datev_encoding as 'utf-8' | 'windows-1252' | undefined,
+        skr_type:
+          ((profileRow.custom as Record<string, unknown> | undefined)?.skr_type as
+            | 'skr03'
+            | 'skr04'
+            | undefined) ?? 'skr03',
         datev_importer: 'ProzessPilot',
         modules_enabled: modulesEnabled,
       };
 
-      const { csv, sha256: csvSha256, rows_count } = renderDatevCsv({
+      const {
+        csv,
+        sha256: csvSha256,
+        rows_count,
+      } = renderDatevCsv({
         receipts: categorizedReceipts,
         profile,
         period: { year, month },
@@ -178,10 +189,7 @@ export function buildBuildHandler() {
           const { zips } = await zipReceipts(categorizedReceipts);
           if (zips.length > 0) {
             zipObjectKey = `datev/${customerId}/${year}-${String(month).padStart(2, '0')}/belege.zip`;
-            logger.info(
-              { customer_id: customerId, zip_count: zips.length },
-              'DATEV ZIP erstellt',
-            );
+            logger.info({ customer_id: customerId, zip_count: zips.length }, 'DATEV ZIP erstellt');
           }
         } catch (zipErr) {
           logger.warn({ err: zipErr }, 'ZIP-Erstellung fehlgeschlagen — Export ohne PDFs');
@@ -195,15 +203,7 @@ export function buildBuildHandler() {
            (customer_id, period_year, period_month, receipt_ids, csv_object_key, csv_sha256, zip_object_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING datev_export_id`,
-        [
-          customerId,
-          year,
-          month,
-          receiptIds,
-          csvObjectKey,
-          csvSha256,
-          zipObjectKey,
-        ],
+        [customerId, year, month, receiptIds, csvObjectKey, csvSha256, zipObjectKey],
       );
 
       const exportId = exportRows[0]?.datev_export_id;
@@ -292,7 +292,7 @@ async function loadCustomerProfile(
 
   // Fallback: Customer-Tabelle prüfen
   const { rows: custRows } = await db.query(
-    `SELECT id FROM customers WHERE id::text = $1 LIMIT 1`,
+    'SELECT id FROM customers WHERE id::text = $1 LIMIT 1',
     [customerId],
   );
   return custRows[0] ? { modules_enabled: [], custom: {} } : null;

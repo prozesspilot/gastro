@@ -20,8 +20,8 @@ import { getTraceContext } from './trace';
 
 // ── Pino-Konfiguration ────────────────────────────────────────────────────────
 
-const level  = process.env.LOG_LEVEL  ?? 'info';
-const isDev  = (process.env.NODE_ENV ?? 'development') === 'development';
+const level = process.env.LOG_LEVEL ?? 'info';
+const isDev = (process.env.NODE_ENV ?? 'development') === 'development';
 const lokiUrl = process.env.LOKI_URL;
 
 // Basis-Optionen (kein Transport — wird unten ggf. überschrieben)
@@ -48,7 +48,7 @@ function buildTransport(): pino.TransportMultiOptions | pino.TransportSingleOpti
 
   if (isDev) {
     targets.push({
-      target:  'pino-pretty',
+      target: 'pino-pretty',
       level,
       options: { colorize: true, translateTime: 'SYS:HH:MM:ss' },
     });
@@ -61,13 +61,13 @@ function buildTransport(): pino.TransportMultiOptions | pino.TransportSingleOpti
     // pino-loki muss separat installiert werden: npm install pino-loki
     // Aktivierung: LOKI_URL=http://localhost:3100
     targets.push({
-      target:  'pino-loki',
+      target: 'pino-loki',
       level,
       options: {
-        host:       lokiUrl,
-        labels:     { app: 'prozesspilot', env: process.env.NODE_ENV ?? 'development' },
-        batching:   true,
-        interval:   5,
+        host: lokiUrl,
+        labels: { app: 'prozesspilot', env: process.env.NODE_ENV ?? 'development' },
+        batching: true,
+        interval: 5,
       },
     });
   }
@@ -102,7 +102,7 @@ export const logger: Logger = transport
 export function getLogger(): Logger {
   const ctx = getTraceContext();
   return logger.child({
-    traceId:  ctx.traceId,
+    traceId: ctx.traceId,
     tenantId: ctx.tenantId,
   });
 }

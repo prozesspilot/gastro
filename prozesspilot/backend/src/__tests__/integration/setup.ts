@@ -1,6 +1,6 @@
-import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
+import pg from 'pg';
 
 const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://pp:pp@localhost:5432/pp_test';
 

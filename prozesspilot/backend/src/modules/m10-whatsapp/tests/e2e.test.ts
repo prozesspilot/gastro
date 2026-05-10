@@ -22,20 +22,25 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 // ── Mocks: Storage + Credentials ───────────────────────────────────────────
 
 vi.mock('../../../core/storage/storage.service', () => ({
-  uploadObject:   vi.fn(async (_c, key: string, body: Buffer, ct: string) => ({
-    key, bucket: 'prozesspilot-raw', size_bytes: body.length, content_type: ct,
+  uploadObject: vi.fn(async (_c, key: string, body: Buffer, ct: string) => ({
+    key,
+    bucket: 'prozesspilot-raw',
+    size_bytes: body.length,
+    content_type: ct,
   })),
   createS3Client: vi.fn(() => ({}) as never),
 }));
 
 vi.mock('../services/credential.service', () => ({
   loadWaCredential: vi.fn(async () => ({
-    credentialId:    'cred_test_e2e',
-    accessToken:     'EAAtest',
-    phoneNumberId:   '123456789012345',
+    credentialId: 'cred_test_e2e',
+    accessToken: 'EAAtest',
+    phoneNumberId: '123456789012345',
     graphApiVersion: 'v19.0',
   })),
-  CredentialNotFoundError: class extends Error { readonly code = 'CREDENTIAL_NOT_FOUND'; },
+  CredentialNotFoundError: class extends Error {
+    readonly code = 'CREDENTIAL_NOT_FOUND';
+  },
 }));
 
 import { createHmac } from 'node:crypto';
@@ -47,51 +52,60 @@ import type { MetaGraphClient } from '../services/meta-graph.client';
 
 const WEBHOOK_PAYLOAD = {
   object: 'whatsapp_business_account',
-  entry: [{
-    id: 'WHATSAPP_BUSINESS_ACCOUNT_ID',
-    changes: [{
-      value: {
-        messaging_product: 'whatsapp',
-        metadata: {
-          display_phone_number: '+498912345678',
-          phone_number_id:      '123456789012345',
-        },
-        contacts: [{ profile: { name: 'Mario' }, wa_id: '4917612345678' }],
-        messages: [{
-          from:       '4917612345678',
-          id:         'wamid.HBgMNDk3MTYxMjM0NTY3OBUCABIYIDQ4',
-          timestamp:  '1714378458',
-          type:       'image',
-          image: {
-            id:        '1234567890987654',
-            mime_type: 'image/jpeg',
-            sha256:    'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-            caption:   'Metro Beleg von gestern',
+  entry: [
+    {
+      id: 'WHATSAPP_BUSINESS_ACCOUNT_ID',
+      changes: [
+        {
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: {
+              display_phone_number: '+498912345678',
+              phone_number_id: '123456789012345',
+            },
+            contacts: [{ profile: { name: 'Mario' }, wa_id: '4917612345678' }],
+            messages: [
+              {
+                from: '4917612345678',
+                id: 'wamid.HBgMNDk3MTYxMjM0NTY3OBUCABIYIDQ4',
+                timestamp: '1714378458',
+                type: 'image',
+                image: {
+                  id: '1234567890987654',
+                  mime_type: 'image/jpeg',
+                  sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
+                  caption: 'Metro Beleg von gestern',
+                },
+              },
+            ],
           },
-        }],
-      },
-      field: 'messages',
-    }],
-  }],
+          field: 'messages',
+        },
+      ],
+    },
+  ],
 };
 
 const SAMPLE_BYTES = Buffer.from('JPEG_BYTES_SAMPLE');
-const SAMPLE_SHA   = sha256Hex(SAMPLE_BYTES);
+const SAMPLE_SHA = sha256Hex(SAMPLE_BYTES);
 
 // ── Mocks: DB-Pool ─────────────────────────────────────────────────────────
 
 interface ReceiptRow {
-  receipt_id:      string;
+  receipt_id: string;
   file_object_key: string;
-  file_sha256:     string;
-  payload:         { file?: { mime_type?: string; size_bytes?: number } };
+  file_sha256: string;
+  payload: { file?: { mime_type?: string; size_bytes?: number } };
 }
 
 const fakeDb = {
   receipts: [] as ReceiptRow[],
-  audits:   [] as unknown[],
+  audits: [] as unknown[],
 
-  reset() { this.receipts = []; this.audits = []; },
+  reset() {
+    this.receipts = [];
+    this.audits = [];
+  },
 
   query: vi.fn(async (sql: string, params: unknown[]) => {
     // resolve: customer_profiles JSONB-Lookup
@@ -99,17 +113,17 @@ const fakeDb = {
       const phoneNumberId = params[0] as string;
       if (phoneNumberId === '123456789012345') {
         return {
-          rows: [{
-            customer_id: 'cust_a3f4b2',
-            integrations: {
-              input_whatsapp: {
-                phone_number_id: '123456789012345',
-                allowed_senders: [
-                  { name: 'Mario', phone: '+4917612345678', role: 'owner' },
-                ],
+          rows: [
+            {
+              customer_id: 'cust_a3f4b2',
+              integrations: {
+                input_whatsapp: {
+                  phone_number_id: '123456789012345',
+                  allowed_senders: [{ name: 'Mario', phone: '+4917612345678', role: 'owner' }],
+                },
               },
             },
-          }],
+          ],
         };
       }
       return { rows: [] };
@@ -118,11 +132,9 @@ const fakeDb = {
     // media: receipts-Lookup
     if (/FROM receipts/i.test(sql)) {
       const customerId = params[0] as string;
-      const sha        = params[1] as string;
+      const sha = params[1] as string;
       return {
-        rows: fakeDb.receipts.filter(
-          (r) => r.file_sha256 === sha && customerId === 'cust_a3f4b2',
-        ),
+        rows: fakeDb.receipts.filter((r) => r.file_sha256 === sha && customerId === 'cust_a3f4b2'),
       };
     }
 
@@ -139,21 +151,21 @@ const fakeDb = {
 // ── Mock: Redis-Stub ───────────────────────────────────────────────────────
 
 const fakeRedis = {
-  xadd:        vi.fn(async () => '1-0'),
-  disconnect:  vi.fn(),
-  quit:        vi.fn(),
+  xadd: vi.fn(async () => '1-0'),
+  disconnect: vi.fn(),
+  quit: vi.fn(),
 };
 
 // ── Mock: Meta-Graph-Client ────────────────────────────────────────────────
 
 const metaClient: MetaGraphClient = {
   getMediaMeta: vi.fn(async () => ({
-    url:        'https://lookaside.fbsbx.com/test',
-    mime_type:  'image/jpeg',
-    sha256:     SAMPLE_SHA,
-    file_size:  SAMPLE_BYTES.length,
+    url: 'https://lookaside.fbsbx.com/test',
+    mime_type: 'image/jpeg',
+    sha256: SAMPLE_SHA,
+    file_size: SAMPLE_BYTES.length,
   })),
-  downloadMediaBytes:  vi.fn(async () => SAMPLE_BYTES),
+  downloadMediaBytes: vi.fn(async () => SAMPLE_BYTES),
   sendTemplateMessage: vi.fn(async () => ({ message_id: 'wamid.SENT' })),
 };
 
@@ -164,28 +176,24 @@ let app: FastifyInstance;
 beforeAll(async () => {
   // Minimaler Fastify-Server, um keinen DB/Redis-Connect zu erzwingen.
   app = Fastify({ logger: false });
-  app.decorate('db',    fakeDb as never);
+  app.decorate('db', fakeDb as never);
   app.decorate('redis', fakeRedis as never);
-  app.decorate('s3',    {} as never);
+  app.decorate('s3', {} as never);
 
   // rawBody-Parser wie in app.ts
-  app.addContentTypeParser(
-    'application/json',
-    { parseAs: 'buffer' },
-    (req, body, done) => {
-      (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
-      try {
-        done(null, JSON.parse((body as Buffer).toString('utf-8')));
-      } catch (err) {
-        done(err as Error);
-      }
-    },
-  );
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+    try {
+      done(null, JSON.parse((body as Buffer).toString('utf-8')));
+    } catch (err) {
+      done(err as Error);
+    }
+  });
 
   await app.register(m10WhatsAppRoutes, {
     prefix: '/api/v1/internal/whatsapp',
     metaClient,
-    s3:     {} as never,
+    s3: {} as never,
   });
   await app.ready();
 });
@@ -204,12 +212,12 @@ beforeEach(() => {
 describe('M10 E2E — kompletter Webhook-Flow', () => {
   it('verify → resolve → media → send-template', async () => {
     // 1) /verify
-    const rawBody   = Buffer.from(JSON.stringify(WEBHOOK_PAYLOAD));
-    const signature = 'sha256=' + createHmac('sha256', 'meta-app-secret-test').update(rawBody).digest('hex');
+    const rawBody = Buffer.from(JSON.stringify(WEBHOOK_PAYLOAD));
+    const signature = `sha256=${createHmac('sha256', 'meta-app-secret-test').update(rawBody).digest('hex')}`;
 
     const verifyRes = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/verify',
+      url: '/api/v1/internal/whatsapp/verify',
       headers: { 'content-type': 'application/json' },
       payload: { raw_body_b64: rawBody.toString('base64'), signature },
     });
@@ -217,13 +225,13 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
     expect(verifyRes.json().ok).toBe(true);
 
     // Aus dem Payload extrahieren wie n8n es täte
-    const message  = WEBHOOK_PAYLOAD.entry[0].changes[0].value.messages[0];
+    const message = WEBHOOK_PAYLOAD.entry[0].changes[0].value.messages[0];
     const metadata = WEBHOOK_PAYLOAD.entry[0].changes[0].value.metadata;
 
     // 2) /resolve
     const resolveRes = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/resolve',
+      url: '/api/v1/internal/whatsapp/resolve',
       headers: { 'content-type': 'application/json' },
       payload: { phone_number_id: metadata.phone_number_id, from: message.from },
     });
@@ -236,9 +244,9 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
     // 3) /media — erster Aufruf, neue Datei
     const mediaRes1 = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/media',
+      url: '/api/v1/internal/whatsapp/media',
       headers: { 'content-type': 'application/json' },
-      payload: { media_id: message.image!.id, customer_id: resolveBody.data.customer_id },
+      payload: { media_id: message.image?.id, customer_id: resolveBody.data.customer_id },
     });
     expect(mediaRes1.statusCode).toBe(200);
     const mediaBody1 = mediaRes1.json();
@@ -248,18 +256,18 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
 
     // Idempotenz: Receipt anlegen wie es WF-MASTER-RECEIPT täte
     fakeDb.receipts.push({
-      receipt_id:      '01HVZTESTRECEIPT',
+      receipt_id: '01HVZTESTRECEIPT',
       file_object_key: mediaBody1.data.object_key,
-      file_sha256:     mediaBody1.data.sha256,
-      payload:         { file: { mime_type: 'image/jpeg', size_bytes: SAMPLE_BYTES.length } },
+      file_sha256: mediaBody1.data.sha256,
+      payload: { file: { mime_type: 'image/jpeg', size_bytes: SAMPLE_BYTES.length } },
     });
 
     // 3b) /media — gleicher Beleg nochmal → is_duplicate:true, kein neuer Upload
     const mediaRes2 = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/media',
+      url: '/api/v1/internal/whatsapp/media',
       headers: { 'content-type': 'application/json' },
-      payload: { media_id: message.image!.id, customer_id: resolveBody.data.customer_id },
+      payload: { media_id: message.image?.id, customer_id: resolveBody.data.customer_id },
     });
     expect(mediaRes2.statusCode).toBe(200);
     expect(mediaRes2.json().data.is_duplicate).toBe(true);
@@ -268,11 +276,11 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
     // 4) /send-template — Bestätigung
     const sendRes = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/send-template',
+      url: '/api/v1/internal/whatsapp/send-template',
       headers: { 'content-type': 'application/json' },
       payload: {
-        customer_id:   resolveBody.data.customer_id,
-        to:            '+4917612345678',
+        customer_id: resolveBody.data.customer_id,
+        to: '+4917612345678',
         template_name: 'confirmation_received_de',
       },
     });
@@ -284,7 +292,7 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
   it('Sender nicht im allowed_senders → allowed:false, kein Media-Pull', async () => {
     const resolveRes = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/resolve',
+      url: '/api/v1/internal/whatsapp/resolve',
       headers: { 'content-type': 'application/json' },
       payload: { phone_number_id: '123456789012345', from: '4915155555555' },
     });
@@ -300,7 +308,7 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
   it('unbekannte phone_number_id → 404', async () => {
     const res = await app.inject({
       method: 'POST',
-      url:    '/api/v1/internal/whatsapp/resolve',
+      url: '/api/v1/internal/whatsapp/resolve',
       headers: { 'content-type': 'application/json' },
       payload: { phone_number_id: 'unknown-id', from: '4917612345678' },
     });
@@ -311,10 +319,10 @@ describe('M10 E2E — kompletter Webhook-Flow', () => {
   it('ungültige Webhook-Signatur → 401 INVALID_SIGNATURE', async () => {
     const rawBody = Buffer.from(JSON.stringify(WEBHOOK_PAYLOAD));
     const res = await app.inject({
-      method:  'POST',
-      url:     '/api/v1/internal/whatsapp/verify',
+      method: 'POST',
+      url: '/api/v1/internal/whatsapp/verify',
       headers: { 'content-type': 'application/json' },
-      payload: { raw_body_b64: rawBody.toString('base64'), signature: 'sha256=' + 'a'.repeat(64) },
+      payload: { raw_body_b64: rawBody.toString('base64'), signature: `sha256=${'a'.repeat(64)}` },
     });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('INVALID_SIGNATURE');

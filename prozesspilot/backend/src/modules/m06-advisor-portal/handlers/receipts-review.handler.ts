@@ -8,8 +8,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const querySchema = z.object({
   advisor_id: z.string().min(1, 'advisor_id ist erforderlich'),
@@ -46,7 +46,7 @@ export function buildReceiptsReviewHandler() {
     try {
       // Prüfe Advisor-Existenz
       const advisorRow = await db.query<{ advisor_id: string }>(
-        `SELECT advisor_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1`,
+        'SELECT advisor_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1',
         [advisor_id],
       );
       if (!advisorRow.rows[0]) {
@@ -54,10 +54,10 @@ export function buildReceiptsReviewHandler() {
       }
 
       // Zugängliche Kunden ermitteln
-      let accessQuery = `SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1`;
+      let accessQuery = 'SELECT customer_id FROM advisor_customer_access WHERE advisor_id = $1';
       const accessParams: unknown[] = [advisor_id];
       if (customer_id) {
-        accessQuery += ` AND customer_id = $2`;
+        accessQuery += ' AND customer_id = $2';
         accessParams.push(customer_id);
       }
       const accessRows = await db.query<{ customer_id: string }>(accessQuery, accessParams);
@@ -75,12 +75,14 @@ export function buildReceiptsReviewHandler() {
         customer_name: string;
         status: string;
         payload: {
-          extraction?: { fields?: {
-            supplier_name?: string;
-            document_date?: string;
-            total_amount?: number;
-            currency?: string;
-          }};
+          extraction?: {
+            fields?: {
+              supplier_name?: string;
+              document_date?: string;
+              total_amount?: number;
+              currency?: string;
+            };
+          };
           validation?: { issues?: Array<{ code?: string }> };
         };
         created_at: Date;

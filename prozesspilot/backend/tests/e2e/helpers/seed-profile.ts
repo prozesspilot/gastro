@@ -3,7 +3,7 @@
  */
 
 import type { Pool } from 'pg';
-import { createTestCustomer, type TestCustomerOpts } from './create-test-customer';
+import { type TestCustomerOpts, createTestCustomer } from './create-test-customer';
 
 export async function seedProfile(
   pool: Pool,

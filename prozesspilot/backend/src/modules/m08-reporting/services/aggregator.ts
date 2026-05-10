@@ -13,7 +13,7 @@ import type { Pool } from 'pg';
 
 export interface MonthlyTotals {
   customer_id: string;
-  period: string;       // 'YYYY-MM'
+  period: string; // 'YYYY-MM'
   receipts_count: number;
   gross_sum: number;
   net_sum: number;
@@ -59,7 +59,12 @@ interface AggOnePart {
   top_suppliers: Array<{ supplier: string; n: number; gross_sum: number }>;
 }
 
-async function aggregateOne(pool: Pool, customerId: string, year: number, month: number): Promise<AggOnePart> {
+async function aggregateOne(
+  pool: Pool,
+  customerId: string,
+  year: number,
+  month: number,
+): Promise<AggOnePart> {
   // Wir filtern auf created_at-Monat (M08-Spec §8 nennt document_date — aber
   // unsere _shared/receipts hält document_date nur in payload->extraction->fields).
   // Wir nutzen beides: bevorzugt fields.document_date, Fallback created_at.

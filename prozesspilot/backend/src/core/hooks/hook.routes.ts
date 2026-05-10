@@ -59,10 +59,11 @@ const createHookSchema = z.object({
   priority: z.number().int().min(0).max(10000).optional(),
 });
 
-const updateHookSchema = createHookSchema
-  .partial();
+const updateHookSchema = createHookSchema.partial();
 
-function readCustomerId(req: { headers: Record<string, string | string[] | undefined> }): string | null {
+function readCustomerId(req: { headers: Record<string, string | string[] | undefined> }):
+  | string
+  | null {
   const v = req.headers['x-customer-id'];
   if (typeof v === 'string' && v.length > 0) return v;
   return null;
@@ -108,7 +109,9 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     }
     const hook = await findHookById(app.db, customerId, req.params.hookId);
     if (!hook) {
-      return reply.code(404).send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
     }
     return reply.send(apiOk(hook));
   });
@@ -125,7 +128,9 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = await updateHook(app.db, customerId, req.params.hookId, parsed.data);
     if (!updated) {
-      return reply.code(404).send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
     }
     return reply.send(apiOk(updated));
   });
@@ -138,7 +143,9 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     }
     const ok = await deleteHook(app.db, customerId, req.params.hookId);
     if (!ok) {
-      return reply.code(404).send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
     }
     return reply.send(apiOk({ deleted: true }));
   });
@@ -151,7 +158,9 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     }
     const hook = await findHookById(app.db, customerId, req.params.hookId);
     if (!hook) {
-      return reply.code(404).send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
+      return reply
+        .code(404)
+        .send(apiError('NOT_FOUND', `Hook ${req.params.hookId} nicht gefunden.`));
     }
     const rows = await listExecutions(app.db, customerId, req.params.hookId, 50);
     return reply.send(apiOk(rows));

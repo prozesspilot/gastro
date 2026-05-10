@@ -22,7 +22,7 @@ export async function log(
   entityId: string,
   action: string,
   payload: AuditPayload = {},
-  actor: string = 'system',
+  actor = 'system',
 ): Promise<void> {
   try {
     await db.query(
@@ -41,9 +41,6 @@ export async function log(
       ],
     );
   } catch (err) {
-    logger.error(
-      { err, tenantId, entityType, entityId, action },
-      'audit.log fehlgeschlagen',
-    );
+    logger.error({ err, tenantId, entityType, entityId, action }, 'audit.log fehlgeschlagen');
   }
 }

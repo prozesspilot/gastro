@@ -90,11 +90,7 @@ export async function mapTaxKey(
   // Profil-Map zuerst.
   if (taxKeysMap) {
     // Toleriert sowohl "0.19" als auch "0.190".
-    const candidates = [
-      taxRate.toString(),
-      taxRate.toFixed(2),
-      taxRate.toFixed(3),
-    ];
+    const candidates = [taxRate.toString(), taxRate.toFixed(2), taxRate.toFixed(3)];
     for (const k of candidates) {
       if (taxKeysMap[k]) return taxKeysMap[k];
     }
@@ -102,7 +98,7 @@ export async function mapTaxKey(
 
   // Default aus categories.
   const defRes = await pool.query<{ default_tax_key: string | null }>(
-    `SELECT default_tax_key FROM categories WHERE category_id = $1 LIMIT 1`,
+    'SELECT default_tax_key FROM categories WHERE category_id = $1 LIMIT 1',
     [categoryId],
   );
   return defRes.rows[0]?.default_tax_key ?? '';
@@ -114,7 +110,7 @@ export async function getCategoryLabel(
   categoryId: string,
 ): Promise<string | undefined> {
   const { rows } = await pool.query<{ label_de: string }>(
-    `SELECT label_de FROM categories WHERE category_id = $1 LIMIT 1`,
+    'SELECT label_de FROM categories WHERE category_id = $1 LIMIT 1',
     [categoryId],
   );
   return rows[0]?.label_de;

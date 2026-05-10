@@ -14,20 +14,20 @@ import { ImapFlow } from 'imapflow';
 import { logger } from '../../core/logger';
 
 export interface ImapConfig {
-  host:     string;
-  port:     number;
-  user:     string;
+  host: string;
+  port: number;
+  user: string;
   password: string;
-  tls:      boolean;
-  folder:   string;
+  tls: boolean;
+  folder: string;
 }
 
 export interface FetchedAttachment {
-  filename:    string;
-  mimeType:    string;
-  buffer:      Buffer;
-  messageUid:  string;
-  emailFrom:   string;
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+  messageUid: string;
+  emailFrom: string;
   emailSubject: string;
 }
 
@@ -51,12 +51,10 @@ function isValidAttachment(filename: string, mimeType: string): boolean {
  * Holt alle neuen (UNSEEN) E-Mails mit gültigen Anhängen aus dem Postfach.
  * Markiert verarbeitete Nachrichten als SEEN.
  */
-export async function fetchNewAttachments(
-  cfg: ImapConfig,
-): Promise<FetchedAttachment[]> {
+export async function fetchNewAttachments(cfg: ImapConfig): Promise<FetchedAttachment[]> {
   const client = new ImapFlow({
-    host:   cfg.host,
-    port:   cfg.port,
+    host: cfg.host,
+    port: cfg.port,
     secure: cfg.tls,
     auth: {
       user: cfg.user,
@@ -79,16 +77,19 @@ export async function fetchNewAttachments(
       return [];
     }
 
-    logger.info({ folder: cfg.folder, count: uids.length }, 'IMAP: Ungelesene Nachrichten gefunden');
+    logger.info(
+      { folder: cfg.folder, count: uids.length },
+      'IMAP: Ungelesene Nachrichten gefunden',
+    );
 
     for await (const msg of client.fetch(uids, {
-      uid:      true,
+      uid: true,
       envelope: true,
       bodyParts: ['BODY[]'],
     })) {
       try {
         const envelope = msg.envelope;
-        const emailFrom    = envelope?.from?.[0]?.address ?? 'unbekannt';
+        const emailFrom = envelope?.from?.[0]?.address ?? 'unbekannt';
         const emailSubject = envelope?.subject ?? '';
         const uid = String(msg.uid);
 
@@ -124,11 +125,15 @@ async function parseAttachments(
   messageUid: string,
 ): Promise<FetchedAttachment[]> {
   // Dynamischer Import von mailparser (optional dependency)
-  let simpleParser: ((source: Buffer) => Promise<{ attachments: Array<{
-    filename?: string;
-    contentType: string;
-    content: Buffer;
-  }> }>) | null = null;
+  let simpleParser:
+    | ((source: Buffer) => Promise<{
+        attachments: Array<{
+          filename?: string;
+          contentType: string;
+          content: Buffer;
+        }>;
+      }>)
+    | null = null;
 
   try {
     // @ts-ignore — mailparser ist optional (npm install mailparser @types/mailparser)
@@ -139,14 +144,16 @@ async function parseAttachments(
     // mailparser nicht installiert — rohen Buffer zurückgeben falls PDF/Bild
     const mimeType = detectMimeFromBuffer(rawBody);
     if (mimeType && VALID_MIME.has(mimeType)) {
-      return [{
-        filename:     `anlage_${messageUid}.${mimeType.split('/')[1]}`,
-        mimeType,
-        buffer:       rawBody,
-        messageUid,
-        emailFrom,
-        emailSubject,
-      }];
+      return [
+        {
+          filename: `anlage_${messageUid}.${mimeType.split('/')[1]}`,
+          mimeType,
+          buffer: rawBody,
+          messageUid,
+          emailFrom,
+          emailSubject,
+        },
+      ];
     }
     return [];
   }
@@ -154,7 +161,11 @@ async function parseAttachments(
   if (!simpleParser) return [];
 
   // @ts-ignore
-  const parsed = await (simpleParser as (s: Buffer) => Promise<{ attachments?: Array<{ filename?: string; contentType: string; content: Buffer }> }>)(rawBody);
+  const parsed = await (
+    simpleParser as (s: Buffer) => Promise<{
+      attachments?: Array<{ filename?: string; contentType: string; content: Buffer }>;
+    }>
+  )(rawBody);
   const results: FetchedAttachment[] = [];
 
   for (const att of parsed.attachments ?? []) {
@@ -165,7 +176,7 @@ async function parseAttachments(
     results.push({
       filename,
       mimeType,
-      buffer:      att.content,
+      buffer: att.content,
       messageUid,
       emailFrom,
       emailSubject,
@@ -178,10 +189,11 @@ async function parseAttachments(
 function detectMimeFromBuffer(buf: Buffer): string | null {
   if (buf.length < 4) return null;
   // PDF: %PDF
-  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return 'application/pdf';
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46)
+    return 'application/pdf';
   // JPEG: FF D8 FF
-  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
   // PNG: 89 50 4E 47
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
   return null;
 }

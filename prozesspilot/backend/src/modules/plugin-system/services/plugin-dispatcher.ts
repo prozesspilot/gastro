@@ -65,7 +65,7 @@ export async function dispatchToPlugin(
   const start = Date.now();
 
   // SSRF-Schutz in Produktion
-  if (process.env['NODE_ENV'] === 'production' && isPrivateUrl(plugin.webhook_url)) {
+  if (process.env.NODE_ENV === 'production' && isPrivateUrl(plugin.webhook_url)) {
     const errMsg = `SSRF: Private URLs sind in Produktion nicht erlaubt: ${plugin.webhook_url}`;
     logger.warn({ plugin_id: plugin.plugin_id, webhook_url: plugin.webhook_url }, errMsg);
 

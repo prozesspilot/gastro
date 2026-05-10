@@ -7,8 +7,8 @@
  * Öffentlich (kein HMAC), damit die Webapp direkt subscriben kann.
  */
 
-import type { FastifyInstance } from 'fastify';
 import type { ServerResponse } from 'node:http';
+import type { FastifyInstance } from 'fastify';
 import { sseManager } from '../core/sse/sse.manager';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -16,7 +16,7 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 export async function sseRoutes(app: FastifyInstance): Promise<void> {
   app.get('/events', (req, reply) => {
     const rawTenant = req.headers['x-pp-tenant-id'];
-    const tenantId  = Array.isArray(rawTenant) ? rawTenant[0] : rawTenant;
+    const tenantId = Array.isArray(rawTenant) ? rawTenant[0] : rawTenant;
     if (!tenantId) {
       return reply.code(400).send({
         ok: false,
@@ -25,9 +25,9 @@ export async function sseRoutes(app: FastifyInstance): Promise<void> {
     }
 
     reply.raw.writeHead(200, {
-      'Content-Type':  'text/event-stream',
+      'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection:      'keep-alive',
+      Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
     reply.raw.write(': connected\n\n');
@@ -56,7 +56,7 @@ export async function sseRoutes(app: FastifyInstance): Promise<void> {
     };
 
     req.raw.on('close', cleanup);
-    req.raw.on('end',   cleanup);
+    req.raw.on('end', cleanup);
     reply.raw.on('error', cleanup);
 
     // Antwort bleibt offen — Fastify weiß durch reply.hijack(), dass wir selbst antworten

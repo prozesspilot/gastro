@@ -16,8 +16,8 @@ vi.mock('../../m01-receipt-intake/services/storage-download', () => ({
   downloadObject: vi.fn(async () => Buffer.from('FAKE_PDF_BYTES')),
 }));
 
-import { m05LexofficeRoutes } from '../routes';
 import { LexofficeClient } from '../../../core/adapters/booking/lexoffice/lexoffice.client';
+import { m05LexofficeRoutes } from '../routes';
 
 // ── Mock Lexoffice Client ────────────────────────────────────────────────────
 
@@ -48,7 +48,11 @@ class MockLexofficeClient extends LexofficeClient {
   }
   override async listCategories() {
     return [
-      { id: '00000000-0000-4000-8000-000000003100', name: 'Wareneingang Lebensmittel', type: 'expense' },
+      {
+        id: '00000000-0000-4000-8000-000000003100',
+        name: 'Wareneingang Lebensmittel',
+        type: 'expense',
+      },
     ];
   }
   override async findContactByVatId(vatId: string) {
@@ -64,13 +68,16 @@ class MockLexofficeClient extends LexofficeClient {
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id: string;
+  id: string;
   customer_id: string;
   status: string;
-  file_object_key: string;
+  storage_key: string;
   file_sha256: string;
-  payload: Record<string, unknown>;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -98,22 +105,31 @@ const fakeDb: FakeDb = {
       return { rows: [] };
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [string, string, string, string, string];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
       fakeDb.receipts[idx] = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
+        storage_key: key,
         file_sha256: sha,
-        payload: JSON.parse(payloadJson),
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
         updated_at: new Date(),
       };
       return { rows: [fakeDb.receipts[idx]] };
     }
     if (/SELECT[\s\S]*FROM\s+receipts/i.test(sql)) {
+      // findById: WHERE id = $1 AND customer_id = $2
       const [id, cid] = params as [string, string];
-      const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+      const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
       return { rows: row ? [row] : [] };
     }
     if (/lexoffice_category_map/i.test(sql)) {
@@ -180,7 +196,13 @@ const profile = {
   },
 };
 
-function seed(opts: { status: string; supplier_vat_id?: string; supplier_name?: string; skr_account?: string; exports?: unknown[] }) {
+function seed(opts: {
+  status: string;
+  supplier_vat_id?: string;
+  supplier_name?: string;
+  skr_account?: string;
+  exports?: unknown[];
+}) {
   const fields = {
     supplier_name: opts.supplier_name ?? 'Metro AG',
     supplier_vat_id: opts.supplier_vat_id ?? null,
@@ -189,24 +211,20 @@ function seed(opts: { status: string; supplier_vat_id?: string; supplier_name?: 
     total_gross: 142.85,
     total_net: 120.04,
     currency: 'EUR',
-    tax_lines: [{ rate: 0.07, base: 20.04, amount: 1.4 }, { rate: 0.19, base: 100, amount: 19 }],
+    tax_lines: [
+      { rate: 0.07, base: 20.04, amount: 1.4 },
+      { rate: 0.19, base: 100, amount: 19 },
+    ],
   };
   fakeDb.receipts.push({
-    receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
+    id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
     customer_id: 'cust_a3f4b2',
     status: opts.status,
-    file_object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
+    storage_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
     file_sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-    payload: {
-      receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-      customer_id: 'cust_a3f4b2',
-      status: opts.status,
-      file: {
-        object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
-        mime_type: 'application/pdf',
-        size_bytes: 1024,
-        sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-      },
+    mime_type: 'application/pdf',
+    file_size_bytes: 1024,
+    metadata: {
       extraction: { fields },
       categorization: { skr_account: opts.skr_account ?? '3100', category: 'wareneinkauf_food' },
       ...(opts.exports ? { exports: opts.exports } : {}),
@@ -285,7 +303,10 @@ describe('M05 push.handler', () => {
       payload: { customer_profile: profile },
     });
     expect(res.statusCode).toBe(200);
-    const sentVoucher = mockClient.createdVouchers[0] as { useCollectiveContact: boolean; contactId?: string };
+    const sentVoucher = mockClient.createdVouchers[0] as {
+      useCollectiveContact: boolean;
+      contactId?: string;
+    };
     expect(sentVoucher.useCollectiveContact).toBe(false);
     expect(sentVoucher.contactId).toBe('00000000-0000-4000-9000-000000000001');
   });

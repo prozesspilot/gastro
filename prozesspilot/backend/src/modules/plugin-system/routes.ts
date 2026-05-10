@@ -8,11 +8,11 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { buildRegisterHandler } from './handlers/register.handler';
-import { buildListHandler } from './handlers/list.handler';
-import { buildUpdateHandler } from './handlers/update.handler';
 import { buildDeleteHandler } from './handlers/delete.handler';
 import { buildExecutionsHandler } from './handlers/executions.handler';
+import { buildListHandler } from './handlers/list.handler';
+import { buildRegisterHandler } from './handlers/register.handler';
+import { buildUpdateHandler } from './handlers/update.handler';
 
 /** Registriert unter /plugins */
 export async function pluginSystemRoutes(app: FastifyInstance): Promise<void> {

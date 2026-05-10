@@ -5,9 +5,9 @@
  * prüft PDF-Magic + Producer-Metadata.
  */
 
-import { describe, expect, it } from 'vitest';
-import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
+import sharp from 'sharp';
+import { describe, expect, it } from 'vitest';
 import { imageToPdf, isPdf } from '../../../core/pdf/image-to-pdf';
 
 async function makeTestJpeg(): Promise<Buffer> {

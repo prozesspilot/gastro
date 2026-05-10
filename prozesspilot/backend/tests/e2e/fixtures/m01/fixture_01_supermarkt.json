@@ -5,9 +5,9 @@
     "supplier_vat_id": "DE123456789",
     "document_number": "2026-1042",
     "document_date": "2026-04-28",
-    "total_gross": 6.20,
+    "total_gross": 6.2,
     "total_net": 5.79
   },
   "expected_status": "extracted",
-  "expected_confidence_range": [0.80, 1.00]
+  "expected_confidence_range": [0.8, 1.0]
 }

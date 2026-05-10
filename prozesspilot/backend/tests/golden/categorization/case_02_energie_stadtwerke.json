@@ -7,12 +7,8 @@
     "total_gross": 714.0,
     "total_net": 600.0,
     "currency": "EUR",
-    "tax_lines": [
-      { "rate": 0.19, "base": 600.0, "amount": 114.0 }
-    ],
-    "items": [
-      { "description": "Strom Gewerbe Januar 2026", "qty": 1, "unit_price": 600.0 }
-    ]
+    "tax_lines": [{ "rate": 0.19, "base": 600.0, "amount": 114.0 }],
+    "items": [{ "description": "Strom Gewerbe Januar 2026", "qty": 1, "unit_price": 600.0 }]
   },
   "profile": {
     "routing": {

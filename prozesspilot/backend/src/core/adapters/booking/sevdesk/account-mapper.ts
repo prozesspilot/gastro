@@ -4,8 +4,8 @@
  */
 
 import type { Pool } from 'pg';
-import type { SevDeskClient } from './sevdesk.client';
 import { logger } from '../../../logger';
+import type { SevDeskClient } from './sevdesk.client';
 
 const FALLBACK_ACCOUNTING_TYPE_ID = 0; // Sonstiges
 
@@ -40,7 +40,10 @@ export async function mapSkrToSevDeskAccountId(
 
   if (defaultRows[0]) return defaultRows[0].sevdesk_account_id;
 
-  logger.warn({ customerId, skrKonto }, 'sevDesk: kein AccountingType-Mapping gefunden, nutze Fallback 0');
+  logger.warn(
+    { customerId, skrKonto },
+    'sevDesk: kein AccountingType-Mapping gefunden, nutze Fallback 0',
+  );
   return FALLBACK_ACCOUNTING_TYPE_ID;
 }
 

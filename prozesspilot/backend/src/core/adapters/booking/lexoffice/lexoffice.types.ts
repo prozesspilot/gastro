@@ -8,18 +8,18 @@
 export type LexofficeUuid = string;
 
 export interface LexofficeVoucherItem {
-  amount: number;             // Brutto-Betrag dieser Position
-  taxAmount: number;          // Steuerbetrag
-  taxRatePercent: number;     // 19, 7, 0
-  categoryId: LexofficeUuid;  // Lexoffice-categoryId
+  amount: number; // Brutto-Betrag dieser Position
+  taxAmount: number; // Steuerbetrag
+  taxRatePercent: number; // 19, 7, 0
+  categoryId: LexofficeUuid; // Lexoffice-categoryId
 }
 
 export interface LexofficeVoucher {
-  type: 'expense';            // M05 immer 'expense' (eingehende Rechnung)
+  type: 'expense'; // M05 immer 'expense' (eingehende Rechnung)
   voucherNumber: string;
-  voucherDate: string;        // YYYY-MM-DD
-  shippingDate?: string;      // optional
-  dueDate?: string;           // optional
+  voucherDate: string; // YYYY-MM-DD
+  shippingDate?: string; // optional
+  dueDate?: string; // optional
   totalGrossAmount: number;
   totalTaxAmount: number;
   taxType: 'gross';

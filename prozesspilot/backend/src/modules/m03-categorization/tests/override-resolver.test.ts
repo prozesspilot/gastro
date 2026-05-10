@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveOverride, levenshtein } from '../services/override-resolver';
+import { levenshtein, resolveOverride } from '../services/override-resolver';
 
 describe('M03 override-resolver', () => {
   const customWithMetro = {

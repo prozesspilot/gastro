@@ -15,21 +15,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   create,
-  findById,
   findByHash,
+  findById,
   update,
 } from '../modules/_shared/receipts/receipt.repository';
-import type { Receipt } from '../modules/_shared/receipts/receipt.repository';
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
 type FakeRow = {
-  receipt_id: string;
+  id: string;
   customer_id: string;
   status: string;
-  file_object_key: string;
+  storage_key: string;
   file_sha256: string;
-  payload: Receipt;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 };
@@ -39,17 +40,27 @@ const store: FakeRow[] = [];
 function makeFakePool() {
   return {
     query: vi.fn(async (sql: string, params: unknown[]) => {
-      // INSERT
+      // INSERT: (id, customer_id, status, storage_key, file_sha256, mime_type, file_size_bytes, metadata)
       if (/INSERT INTO receipts/i.test(sql)) {
-        const [id, cid, status, key, sha, payloadJson] = params as string[];
-        const payload = JSON.parse(payloadJson) as Receipt;
+        const [id, cid, status, key, sha, mime, size, metaJson] = params as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+        ];
         const row: FakeRow = {
-          receipt_id: id,
+          id,
           customer_id: cid,
           status,
-          file_object_key: key,
+          storage_key: key,
           file_sha256: sha,
-          payload,
+          mime_type: mime,
+          file_size_bytes: size,
+          metadata: JSON.parse(metaJson) as Record<string, unknown>,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -57,9 +68,9 @@ function makeFakePool() {
         return { rows: [row] };
       }
       // SELECT by id + customer_id
-      if (/WHERE\s+receipt_id = \$1 AND customer_id = \$2/i.test(sql)) {
+      if (/WHERE\s+id = \$1 AND customer_id = \$2/i.test(sql)) {
         const [id, cid] = params as string[];
-        const row = store.find((r) => r.receipt_id === id && r.customer_id === cid);
+        const row = store.find((r) => r.id === id && r.customer_id === cid);
         return { rows: row ? [row] : [] };
       }
       // SELECT by customer_id + sha256
@@ -68,18 +79,18 @@ function makeFakePool() {
         const row = store.find((r) => r.customer_id === cid && r.file_sha256 === sha);
         return { rows: row ? [row] : [] };
       }
-      // UPDATE
+      // UPDATE: (id, status, storage_key, file_sha256, metadataPatch)
       if (/UPDATE\s+receipts/i.test(sql)) {
-        const [id, status, key, sha, payloadJson] = params as string[];
-        const idx = store.findIndex((r) => r.receipt_id === id);
+        const [id, status, key, sha, metaPatchJson] = params as string[];
+        const idx = store.findIndex((r) => r.id === id);
         if (idx >= 0) {
-          const payload = JSON.parse(payloadJson) as Receipt;
+          const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
           store[idx] = {
             ...store[idx],
             status,
-            file_object_key: key,
+            storage_key: key,
             file_sha256: sha,
-            payload,
+            metadata: { ...store[idx].metadata, ...patch },
             updated_at: new Date(),
           };
           return { rows: [store[idx]] };
@@ -170,7 +181,15 @@ describe('Receipt Repository', () => {
     const updated = await update(db as never, {
       ...original,
       status: 'exported',
-      exports: [{ target: 'lexoffice', status: 'pushed', external_id: 'lex-001', external_url: 'http://lex', pushed_at: new Date().toISOString() }],
+      exports: [
+        {
+          target: 'lexoffice',
+          status: 'pushed',
+          external_id: 'lex-001',
+          external_url: 'http://lex',
+          pushed_at: new Date().toISOString(),
+        },
+      ],
     });
 
     expect(updated.status).toBe('exported');

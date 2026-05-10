@@ -28,13 +28,13 @@ vi.mock('../../m01-receipt-intake/services/storage-download', () => ({
   downloadObject: vi.fn(async () => Buffer.from('FAKE_ORIGINAL_BYTES')),
 }));
 
-import { m02ArchiveRoutes } from '../routes';
 import type {
   ArchiveStorageAdapter,
   ArchiveStorageAdapterFactory,
   UploadInput,
   UploadResult,
 } from '../../../core/adapters/archive-storage/factory';
+import { m02ArchiveRoutes } from '../routes';
 
 // ── Mock Adapter ─────────────────────────────────────────────────────────────
 
@@ -65,13 +65,16 @@ function makeMockAdapter(state: MockAdapterState): ArchiveStorageAdapter {
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id: string;
+  id: string;
   customer_id: string;
   status: string;
-  file_object_key: string;
+  storage_key: string;
   file_sha256: string;
-  payload: Record<string, unknown>;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -99,28 +102,31 @@ const fakeDb: FakeDb = {
       return { rows: [] };
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
         string,
         string,
         string,
         string,
         string,
       ];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
       fakeDb.receipts[idx] = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
+        storage_key: key,
         file_sha256: sha,
-        payload: JSON.parse(payloadJson),
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
         updated_at: new Date(),
       };
       return { rows: [fakeDb.receipts[idx]] };
     }
     if (/FROM\s+receipts/i.test(sql)) {
+      // findById: WHERE id = $1 AND customer_id = $2
       const [id, cid] = params as [string, string];
-      const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+      const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
       return { rows: row ? [row] : [] };
     }
     return { rows: [] };
@@ -200,41 +206,31 @@ const profileWithDrive = {
   },
 };
 
-function seedReceipt(
-  overrides: Partial<FakeReceiptRow['payload']> = {},
-  mime = 'image/jpeg',
-): void {
-  const payload = {
-    receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-    customer_id: 'cust_a3f4b2',
-    status: 'extracted',
-    file: {
-      object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
-      mime_type: mime,
-      size_bytes: 1024,
-      sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-    },
-    extraction: {
-      fields: {
-        supplier_name: 'Pizzeria Bella Italia',
-        document_number: 'RE-2026-1042',
-        document_date: '2026-04-28',
-        total_gross: 142.85,
-      },
-    },
-    categorization: {
-      category: 'wareneinkauf_food',
-      category_label: 'Wareneinkauf',
-    },
-    ...overrides,
-  } as Record<string, unknown>;
+function seedReceipt(overrides: Record<string, unknown> = {}, mime = 'image/jpeg'): void {
+  const status = (overrides.status as string) ?? 'extracted';
   fakeDb.receipts.push({
-    receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
+    id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
     customer_id: 'cust_a3f4b2',
-    status: (payload.status as string) ?? 'extracted',
-    file_object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
+    status,
+    storage_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
     file_sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-    payload,
+    mime_type: mime,
+    file_size_bytes: 1024,
+    metadata: {
+      extraction: {
+        fields: {
+          supplier_name: 'Pizzeria Bella Italia',
+          document_number: 'RE-2026-1042',
+          document_date: '2026-04-28',
+          total_gross: 142.85,
+        },
+      },
+      categorization: {
+        category: 'wareneinkauf_food',
+        category_label: 'Wareneinkauf',
+      },
+      ...overrides,
+    },
     created_at: new Date(),
     updated_at: new Date(),
   });

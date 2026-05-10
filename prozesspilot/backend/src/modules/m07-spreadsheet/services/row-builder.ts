@@ -20,42 +20,42 @@ import { readPath, toCellValue } from './jsonpath';
 // Untertypen für deutlich bessere Lesbarkeit; absichtlich nur dort, wo
 // wir Felder anfassen — Receipt selbst ist im _shared/repository definiert.
 interface TaxLine {
-  rate?:   number;
-  base?:   number;
+  rate?: number;
+  base?: number;
   amount?: number;
 }
 
 interface ExtractionFields {
-  supplier_name?:   string;
+  supplier_name?: string;
   document_number?: string;
-  document_date?:   string;
-  total_gross?:     number;
-  total_net?:       number;
-  currency?:        string;
-  payment_method?:  string;
-  tax_lines?:       TaxLine[];
+  document_date?: string;
+  total_gross?: number;
+  total_net?: number;
+  currency?: string;
+  payment_method?: string;
+  tax_lines?: TaxLine[];
 }
 
 interface CategorizationFields {
   category_label?: string;
-  skr_account?:    string;
-  cost_center?:    string;
+  skr_account?: string;
+  cost_center?: string;
 }
 
 interface ArchiveFields {
-  path?:         string;
-  external_id?:  string;
+  path?: string;
+  external_id?: string;
   external_url?: string;
 }
 
 interface AuditEvent {
-  at:    string;
-  type:  string;
+  at: string;
+  type: string;
   actor?: string;
 }
 
 export interface ExtraColumnDef {
-  header:   string;
+  header: string;
   jsonpath: string;
 }
 
@@ -70,13 +70,17 @@ export interface BuildRowOptions {
  */
 export function buildRow(receipt: Receipt, options: BuildRowOptions = {}): RowValue[] {
   const fields = (receipt.extraction as { fields?: ExtractionFields } | undefined)?.fields ?? {};
-  const cat    = (receipt.categorization as CategorizationFields | undefined) ?? {};
+  const cat = (receipt.categorization as CategorizationFields | undefined) ?? {};
   const archive = (receipt.archive as ArchiveFields | undefined) ?? {};
-  const events: AuditEvent[] = (receipt.audit as { events?: AuditEvent[] } | undefined)?.events ?? [];
+  const events: AuditEvent[] =
+    (receipt.audit as { events?: AuditEvent[] } | undefined)?.events ?? [];
 
   // Spalte I — MwSt-Betrag = Summe aller tax_lines.amount
   const taxLines = fields.tax_lines ?? [];
-  const taxSum = taxLines.reduce((acc, line) => acc + (typeof line.amount === 'number' ? line.amount : 0), 0);
+  const taxSum = taxLines.reduce(
+    (acc, line) => acc + (typeof line.amount === 'number' ? line.amount : 0),
+    0,
+  );
 
   // Spalte J — dominanter MwSt-Satz × 100. Bei mehreren Lines: derjenige
   // mit höchstem amount; bei Gleichstand: erster Eintrag.
@@ -86,7 +90,7 @@ export function buildRow(receipt: Receipt, options: BuildRowOptions = {}): RowVa
     const amt = typeof line.amount === 'number' ? line.amount : 0;
     if (amt > dominantAmount && typeof line.rate === 'number') {
       dominantAmount = amt;
-      dominantRate   = line.rate;
+      dominantRate = line.rate;
     }
   }
   const taxRatePct = round2(dominantRate * 100);
@@ -108,7 +112,7 @@ export function buildRow(receipt: Receipt, options: BuildRowOptions = {}): RowVa
     /* E */ cat.skr_account ?? '',
     /* F */ cat.cost_center ?? '',
     /* G */ typeof fields.total_gross === 'number' ? fields.total_gross : '',
-    /* H */ typeof fields.total_net   === 'number' ? fields.total_net   : '',
+    /* H */ typeof fields.total_net === 'number' ? fields.total_net : '',
     /* I */ taxLines.length ? round2(taxSum) : '',
     /* J */ taxLines.length ? taxRatePct : '',
     /* K */ fields.currency ?? '',
@@ -155,7 +159,7 @@ function round2(n: number): number {
  * im Label/URL werden verdoppelt (Sheets-Konvention).
  */
 export function buildHyperlinkFormula(url: string, label: string): string {
-  const safeUrl   = url.replace(/"/g, '""');
+  const safeUrl = url.replace(/"/g, '""');
   const safeLabel = (label || url).replace(/"/g, '""');
   return `=HYPERLINK("${safeUrl}","${safeLabel}")`;
 }

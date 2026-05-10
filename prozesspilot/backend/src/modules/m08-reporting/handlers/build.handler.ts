@@ -15,24 +15,27 @@
  *   9) Audit + Event
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type { S3Client } from '@aws-sdk/client-s3';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 import { z } from 'zod';
 
+import { publishEvent } from '../../../core/events/publisher';
 import { hookRunner } from '../../../core/hooks/hook-runner';
 import { logger } from '../../../core/logger';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { uploadObject } from '../../../core/storage/storage.service';
-import { publishEvent } from '../../../core/events/publisher';
 
-import { buildMonthlyAggregation, type MonthlyTotals } from '../services/aggregator';
-import { renderMonthlyReport } from '../services/pdf-renderer';
+import { type MonthlyTotals, buildMonthlyAggregation } from '../services/aggregator';
 import { writeReportAudit } from '../services/audit.service';
+import { renderMonthlyReport } from '../services/pdf-renderer';
 
 const buildBodySchema = z.object({
-  period: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  period: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
   customer_name: z.string().optional(),
   trace_id: z.string().optional(),
 });
@@ -78,21 +81,25 @@ export function buildBuildHandler() {
     if (existing.rows[0]) {
       const r = existing.rows[0];
       if (r.status === 'done') {
-        return reply.send(apiOk({
-          report_id: r.report_id,
-          period: r.period,
-          status: r.status,
-          pdf_object_key: r.pdf_object_key,
-          totals: r.totals,
-        }));
+        return reply.send(
+          apiOk({
+            report_id: r.report_id,
+            period: r.period,
+            status: r.status,
+            pdf_object_key: r.pdf_object_key,
+            totals: r.totals,
+          }),
+        );
       }
       if (r.status === 'building') {
-        return reply.code(202).send(apiOk({
-          report_id: r.report_id,
-          period: r.period,
-          status: r.status,
-          building: true,
-        }));
+        return reply.code(202).send(
+          apiOk({
+            report_id: r.report_id,
+            period: r.period,
+            status: r.status,
+            building: true,
+          }),
+        );
       }
       // failed → erneut versuchen (UPDATE später)
     }
@@ -100,12 +107,14 @@ export function buildBuildHandler() {
     // 3) INSERT building
     const report = existing.rows[0]
       ? existing.rows[0]
-      : (await db.query<ReportRow>(
-          `INSERT INTO monthly_reports (customer_id, period, status)
+      : (
+          await db.query<ReportRow>(
+            `INSERT INTO monthly_reports (customer_id, period, status)
            VALUES ($1, $2, 'building')
            RETURNING report_id, customer_id, period, status, pdf_object_key, totals, created_at`,
-          [customer_id, period],
-        )).rows[0];
+            [customer_id, period],
+          )
+        ).rows[0];
 
     if (existing.rows[0]) {
       await db.query(
@@ -166,13 +175,15 @@ export function buildBuildHandler() {
         }),
       });
 
-      return reply.send(apiOk({
-        report_id: updated.rows[0].report_id,
-        period,
-        status: 'done',
-        pdf_object_key: objectKey,
-        totals,
-      }));
+      return reply.send(
+        apiOk({
+          report_id: updated.rows[0].report_id,
+          period,
+          status: 'done',
+          pdf_object_key: objectKey,
+          totals,
+        }),
+      );
     } catch (err) {
       logger.error({ err, customer_id, period }, 'M08 build fehlgeschlagen');
       await db.query(
@@ -180,9 +191,11 @@ export function buildBuildHandler() {
           WHERE customer_id=$1 AND period=$2`,
         [customer_id, period],
       );
-      return reply.code(500).send(apiError('INTERNAL_ERROR', 'Report-Build fehlgeschlagen.', {
-        message: (err as Error).message,
-      }));
+      return reply.code(500).send(
+        apiError('INTERNAL_ERROR', 'Report-Build fehlgeschlagen.', {
+          message: (err as Error).message,
+        }),
+      );
     }
 
     // Type sat:

@@ -52,9 +52,9 @@ export function levenshtein(a: string, b: string): number {
     for (let j = 1; j <= b.length; j += 1) {
       const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
       curr[j] = Math.min(
-        curr[j - 1] + 1,         // insert
-        prev[j] + 1,             // delete
-        prev[j - 1] + cost,      // replace
+        curr[j - 1] + 1, // insert
+        prev[j] + 1, // delete
+        prev[j - 1] + cost, // replace
       );
     }
     for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j];
@@ -62,12 +62,11 @@ export function levenshtein(a: string, b: string): number {
   return prev[b.length];
 }
 
-export function resolveOverride(
-  input: OverrideResolverInput,
-): CategorizationResult | null {
+export function resolveOverride(input: OverrideResolverInput): CategorizationResult | null {
   const overrides =
-    (input.profileCustom?.supplier_overrides as Record<string, SupplierOverrideEntry> | undefined) ??
-    undefined;
+    (input.profileCustom?.supplier_overrides as
+      | Record<string, SupplierOverrideEntry>
+      | undefined) ?? undefined;
   if (!overrides || !input.supplierName) return null;
 
   const normalizedTarget = normalize(input.supplierName);
@@ -104,9 +103,7 @@ function buildResult(
   const category = entry.category ?? 'sonstige_aufwand';
   const skrAccount = entry.skr_account ?? entry.skr ?? '';
   const label =
-    entry.category_label ??
-    (labelLookup ? labelLookup(category) : undefined) ??
-    category;
+    entry.category_label ?? (labelLookup ? labelLookup(category) : undefined) ?? category;
   return {
     engine: 'override',
     confidence: 1.0,

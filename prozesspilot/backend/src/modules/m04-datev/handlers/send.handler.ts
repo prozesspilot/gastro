@@ -6,12 +6,12 @@
  * SMTP_ENABLED=false → Mail überspringen (Dev-Mode)
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
-import { logger } from '../../../core/logger';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { Pool } from 'pg';
+import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildSendHandler() {
   return async function sendHandler(
@@ -44,9 +44,11 @@ export function buildSendHandler() {
 
       const exportRow = exportRows[0];
       if (!exportRow) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Export ${exportId} für Kunde ${customerId} nicht gefunden.`),
-        );
+        return reply
+          .code(404)
+          .send(
+            apiError('NOT_FOUND', `Export ${exportId} für Kunde ${customerId} nicht gefunden.`),
+          );
       }
 
       // Bereits geliefert?
@@ -63,10 +65,7 @@ export function buildSendHandler() {
       // CustomerProfile laden für datev_tax_advisor_email
       const { rows: profileRows } = await db.query<{
         custom: Record<string, unknown>;
-      }>(
-        `SELECT custom FROM customer_profiles WHERE customer_id = $1 LIMIT 1`,
-        [customerId],
-      );
+      }>('SELECT custom FROM customer_profiles WHERE customer_id = $1 LIMIT 1', [customerId]);
 
       const taxAdvisorEmail =
         (profileRows[0]?.custom?.datev_tax_advisor_email as string | undefined) ?? '';
@@ -91,13 +90,15 @@ export function buildSendHandler() {
       }
 
       if (!taxAdvisorEmail) {
-        return reply.code(412).send(
-          apiError(
-            'NO_TAX_ADVISOR_EMAIL',
-            'Keine Steuerberater-E-Mail konfiguriert (datev_tax_advisor_email).',
-            { customer_id: customerId },
-          ),
-        );
+        return reply
+          .code(412)
+          .send(
+            apiError(
+              'NO_TAX_ADVISOR_EMAIL',
+              'Keine Steuerberater-E-Mail konfiguriert (datev_tax_advisor_email).',
+              { customer_id: customerId },
+            ),
+          );
       }
 
       // Mail-Template laden
@@ -126,18 +127,17 @@ export function buildSendHandler() {
         const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST ?? 'localhost',
           port: Number(process.env.SMTP_PORT ?? '587'),
-          auth:
-            process.env.SMTP_USER
-              ? {
-                  user: process.env.SMTP_USER,
-                  pass: process.env.SMTP_PASS ?? '',
-                }
-              : undefined,
+          auth: process.env.SMTP_USER
+            ? {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS ?? '',
+              }
+            : undefined,
           secure: process.env.SMTP_SECURE === 'true',
         });
 
         const info = await transporter.sendMail({
-          from: process.env.SMTP_FROM ?? `ProzessPilot <noreply@prozesspilot.de>`,
+          from: process.env.SMTP_FROM ?? 'ProzessPilot <noreply@prozesspilot.de>',
           to: taxAdvisorEmail,
           subject: `DATEV-Export ${period} — ${exportRow.receipt_ids.length} Belege`,
           text: mailBody,
@@ -187,11 +187,7 @@ export function buildSendHandler() {
   };
 }
 
-async function markDelivered(
-  db: Pool,
-  exportId: string,
-  messageId: string | null,
-): Promise<void> {
+async function markDelivered(db: Pool, exportId: string, messageId: string | null): Promise<void> {
   await db.query(
     `UPDATE datev_exports
         SET delivered_at = now(),

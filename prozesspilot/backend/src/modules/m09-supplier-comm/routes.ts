@@ -11,9 +11,9 @@
 
 import type { FastifyInstance } from 'fastify';
 import { buildBuildHandler } from './handlers/build.handler';
-import { buildSendHandler } from './handlers/send.handler';
 import { buildInboundHandler } from './handlers/inbound.handler';
 import { buildListHandler } from './handlers/list.handler';
+import { buildSendHandler } from './handlers/send.handler';
 
 /** Registriert unter /communications (innerhalb /api/v1, mit HMAC-Auth) */
 export async function m09CommunicationRoutes(app: FastifyInstance): Promise<void> {

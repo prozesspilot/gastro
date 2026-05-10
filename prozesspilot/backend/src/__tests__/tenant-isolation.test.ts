@@ -43,7 +43,11 @@ const store: FakeReceipt[] = [
     status: 'requires_review',
     file_object_key: `${tenantACustomer}/originals/2026/04/a2.pdf`,
     file_sha256: 'sha_a_002_abc456',
-    payload: { receipt_id: 'rcpt_iso_a_002', customer_id: tenantACustomer, status: 'requires_review' },
+    payload: {
+      receipt_id: 'rcpt_iso_a_002',
+      customer_id: tenantACustomer,
+      status: 'requires_review',
+    },
     created_at: new Date(),
     updated_at: new Date(),
   },
@@ -132,14 +136,22 @@ describe('Tenant-Isolation', () => {
     // SELECT ... FROM receipts WHERE receipt_id = $1 AND customer_id = $2
     const fakeDbQuery = vi.fn((sql: string, params: unknown[]) => {
       const [id, cid] = params as [string, string];
-      return store.filter(
-        (r) => r.receipt_id === id && r.customer_id === cid,
-      );
+      return store.filter((r) => r.receipt_id === id && r.customer_id === cid);
     });
 
     // Tenant A Zugriff auf eigenes Receipt → 1 Row
-    expect(fakeDbQuery('SELECT ... WHERE receipt_id = $1 AND customer_id = $2', ['rcpt_iso_a_001', tenantACustomer])).toHaveLength(1);
+    expect(
+      fakeDbQuery('SELECT ... WHERE receipt_id = $1 AND customer_id = $2', [
+        'rcpt_iso_a_001',
+        tenantACustomer,
+      ]),
+    ).toHaveLength(1);
     // Tenant B versucht Tenant-A-Receipt zu lesen → 0 Rows
-    expect(fakeDbQuery('SELECT ... WHERE receipt_id = $1 AND customer_id = $2', ['rcpt_iso_a_001', tenantBCustomer])).toHaveLength(0);
+    expect(
+      fakeDbQuery('SELECT ... WHERE receipt_id = $1 AND customer_id = $2', [
+        'rcpt_iso_a_001',
+        tenantBCustomer,
+      ]),
+    ).toHaveLength(0);
   });
 });

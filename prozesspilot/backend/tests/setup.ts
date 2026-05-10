@@ -25,11 +25,11 @@ try {
 }
 
 // Test-Overrides (überschreiben .env immer — deterministisch für alle Tests)
-process.env.NODE_ENV             = 'test';
-process.env.PP_AUTH_DISABLED     = '1';
-process.env.LOG_LEVEL            = 'silent';
+process.env.NODE_ENV = 'test';
+process.env.PP_AUTH_DISABLED = '1';
+process.env.LOG_LEVEL = 'silent';
 
 // M10: feste Test-Werte, unabhängig von .env (Test berechnet Signatur mit diesen Werten)
-process.env.WHATSAPP_APP_SECRET        = 'meta-app-secret-test';
-process.env.WHATSAPP_VERIFY_TOKEN      = 'verify-token-test';
+process.env.WHATSAPP_APP_SECRET = 'meta-app-secret-test';
+process.env.WHATSAPP_VERIFY_TOKEN = 'verify-token-test';
 process.env.WHATSAPP_GRAPH_API_VERSION = 'v19.0';

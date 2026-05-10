@@ -11,11 +11,11 @@ export const ocrParamsSchema = z.object({
 export type OcrParams = z.infer<typeof ocrParamsSchema>;
 
 export const ocrResultSchema = z.object({
-  receipt_id:     uuidSchema,
-  status:         z.string(),
-  ocr_text:       z.string(),
+  receipt_id: uuidSchema,
+  status: z.string(),
+  ocr_text: z.string(),
   ocr_confidence: z.number(),
-  ocr_at:         z.string(),
-  mock:           z.boolean().default(false),
+  ocr_at: z.string(),
+  mock: z.boolean().default(false),
 });
 export type OcrResult = z.infer<typeof ocrResultSchema>;

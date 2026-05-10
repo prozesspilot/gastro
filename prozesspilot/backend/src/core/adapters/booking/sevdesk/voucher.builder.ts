@@ -6,10 +6,7 @@
  */
 
 import type { Receipt } from '../../../../modules/_shared/receipts/receipt.repository';
-import type {
-  SevDeskVoucherFactory,
-  SevDeskVoucherPos,
-} from './types';
+import type { SevDeskVoucherFactory, SevDeskVoucherPos } from './types';
 
 export interface BuildSevDeskVoucherInput {
   receipt: Receipt;
@@ -19,14 +16,11 @@ export interface BuildSevDeskVoucherInput {
   taxRuleId: number;
 }
 
-export function buildSevDeskVoucher(
-  input: BuildSevDeskVoucherInput,
-): SevDeskVoucherFactory {
+export function buildSevDeskVoucher(input: BuildSevDeskVoucherInput): SevDeskVoucherFactory {
   const { receipt, accountingTypeId, taxRuleId } = input;
 
-  const fields = (
-    (receipt.extraction as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}
-  ) as {
+  const fields = ((receipt.extraction as { fields?: Record<string, unknown> } | undefined)
+    ?.fields ?? {}) as {
     document_date?: string;
     document_number?: string;
     vendor_name?: string;
@@ -67,7 +61,7 @@ export function buildSevDeskVoucher(
     supplierName: supplierName || 'Unbekannter Lieferant',
     status: 50, // offen
     description,
-    creditDebit: 'C',   // Eingangsrechnung
+    creditDebit: 'C', // Eingangsrechnung
     voucherType: 'VOU',
     sumGross: totalGross,
     sumNet: totalNet,
@@ -89,9 +83,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function dominantTaxRatePct(
-  taxLines: Array<{ rate: number; amount: number }>,
-): number {
+function dominantTaxRatePct(taxLines: Array<{ rate: number; amount: number }>): number {
   if (!taxLines.length) return 19; // Default
   const sorted = [...taxLines].sort((a, b) => b.amount - a.amount);
   // rate kann als Dezimalzahl (0.19) oder Prozent (19) angegeben sein

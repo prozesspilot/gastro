@@ -6,14 +6,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { renderTabName } from '../services/tab-name-resolver';
 import type { Receipt } from '../../_shared/receipts/receipt.repository';
+import { renderTabName } from '../services/tab-name-resolver';
 
 function receiptWithDate(date: string): Receipt {
   return {
-    receipt_id:  'r1',
+    receipt_id: 'r1',
     customer_id: 'c1',
-    status:      'archived',
+    status: 'archived',
     file: { object_key: 'k', mime_type: 'image/jpeg', size_bytes: 1, sha256: 'x' },
     extraction: { fields: { document_date: date } },
   };
@@ -47,7 +47,9 @@ describe('M07 tab-name-resolver — renderTabName()', () => {
 
   it('Fallback auf audit.received, wenn document_date fehlt', () => {
     const r: Receipt = {
-      receipt_id: 'r1', customer_id: 'c1', status: 'archived',
+      receipt_id: 'r1',
+      customer_id: 'c1',
+      status: 'archived',
       file: { object_key: 'k', mime_type: 'image/jpeg', size_bytes: 1, sha256: 'x' },
       audit: { events: [{ at: '2025-09-12T10:00:00Z', type: 'received', actor: 'system' }] },
     };

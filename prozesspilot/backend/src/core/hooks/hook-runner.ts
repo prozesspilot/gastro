@@ -23,18 +23,13 @@ import { createHash, createHmac } from 'node:crypto';
 import * as vm from 'node:vm';
 import type { Pool } from 'pg';
 
-import { logger } from '../logger';
 import type { Receipt } from '../../modules/_shared/receipts/receipt.repository';
-import type {
-  CustomerHook,
-  HookPoint,
-  HttpWebhookConfig,
-  JsInlineConfig,
-} from './hook.types';
+import { logger } from '../logger';
 import {
   getActiveHooks as repoGetActiveHooks,
   logExecution as repoLogExecution,
 } from './hook.repository';
+import type { CustomerHook, HookPoint, HttpWebhookConfig, JsInlineConfig } from './hook.types';
 
 export type { HookPoint } from './hook.types';
 
@@ -47,10 +42,7 @@ export interface HookContext<T = Record<string, unknown>> {
 }
 
 export interface HookRunner {
-  run<T = Record<string, unknown>>(
-    point: HookPoint,
-    ctx: HookContext<T>,
-  ): Promise<Receipt>;
+  run<T = Record<string, unknown>>(point: HookPoint, ctx: HookContext<T>): Promise<Receipt>;
 }
 
 // ── Module-Scoped Deps (verdrahtet in app.ts via setHookRunnerDeps) ──────────
@@ -86,8 +78,7 @@ export const hookRunner: HookRunner = {
       // den Runner nicht aktiv testen wollen).
       return ctx.receipt;
     }
-    const customerId =
-      typeof ctx.profile.customer_id === 'string' ? ctx.profile.customer_id : null;
+    const customerId = typeof ctx.profile.customer_id === 'string' ? ctx.profile.customer_id : null;
     if (!customerId) {
       return ctx.receipt;
     }
@@ -117,7 +108,13 @@ export const hookRunner: HookRunner = {
         const duration = Date.now() - start;
         payload = result.payload;
         logger.debug(
-          { hook_id: hook.hook_id, point, customerId, duration_ms: duration, status: result.status },
+          {
+            hook_id: hook.hook_id,
+            point,
+            customerId,
+            duration_ms: duration,
+            status: result.status,
+          },
           'Hook executed',
         );
         // Execution-Log (best-effort, blockiert Pipeline nicht)
@@ -149,7 +146,9 @@ export const hookRunner: HookRunner = {
           duration_ms: duration,
           error_message: (err as Error).message,
           trace_id: traceId,
-        }).catch(() => {/* best-effort */});
+        }).catch(() => {
+          /* best-effort */
+        });
 
         const cfg = hook.config as { on_failure?: 'ignore' | 'abort' } | undefined;
         if (cfg?.on_failure === 'abort') {
@@ -292,13 +291,29 @@ async function runHttpWebhook(
 
   if (response.status >= 400 && response.status < 500) {
     const txt = await response.text().catch(() => '');
-    logger.warn({ hook_id: hook.hook_id, status: response.status }, 'http_webhook 4xx — Hook ignoriert');
-    return { payload, status: 'failure', responseStatus: response.status, responseBody: txt.slice(0, 4000) };
+    logger.warn(
+      { hook_id: hook.hook_id, status: response.status },
+      'http_webhook 4xx — Hook ignoriert',
+    );
+    return {
+      payload,
+      status: 'failure',
+      responseStatus: response.status,
+      responseBody: txt.slice(0, 4000),
+    };
   }
   if (!response.ok) {
     const txt = await response.text().catch(() => '');
-    logger.warn({ hook_id: hook.hook_id, status: response.status }, 'http_webhook 5xx nach Retry — Hook ignoriert');
-    return { payload, status: 'failure', responseStatus: response.status, responseBody: txt.slice(0, 4000) };
+    logger.warn(
+      { hook_id: hook.hook_id, status: response.status },
+      'http_webhook 5xx nach Retry — Hook ignoriert',
+    );
+    return {
+      payload,
+      status: 'failure',
+      responseStatus: response.status,
+      responseBody: txt.slice(0, 4000),
+    };
   }
 
   // 2xx — Body als JSON parsen; bei nicht-JSON oder leerem Body → Payload unverändert
@@ -311,7 +326,12 @@ async function runHttpWebhook(
     parsed = JSON.parse(text);
   } catch {
     logger.warn({ hook_id: hook.hook_id }, 'http_webhook Response kein JSON — ignoriert');
-    return { payload, status: 'success', responseStatus: response.status, responseBody: text.slice(0, 4000) };
+    return {
+      payload,
+      status: 'success',
+      responseStatus: response.status,
+      responseBody: text.slice(0, 4000),
+    };
   }
 
   return {
@@ -337,14 +357,18 @@ async function runJsInline(hook: CustomerHook, payload: HookPayload): Promise<Ru
   const ctx: vm.Context = vm.createContext({
     payload: structuredClone(payload),
     console: {
-      log: (...args: unknown[]) => logger.debug({ hook_id: hook.hook_id, args }, 'js_inline:console.log'),
+      log: (...args: unknown[]) =>
+        logger.debug({ hook_id: hook.hook_id, args }, 'js_inline:console.log'),
     },
   });
 
   const wrapped = `(function(){ ${cfg.code}\n; return payload; })()`;
   let result: unknown;
   try {
-    result = vm.runInContext(wrapped, ctx, { timeout: timeoutMs, filename: `hook_${hook.hook_id}.js` });
+    result = vm.runInContext(wrapped, ctx, {
+      timeout: timeoutMs,
+      filename: `hook_${hook.hook_id}.js`,
+    });
   } catch (err) {
     const isTimeout = (err as Error).message.includes('Script execution timed out');
     logger.warn({ err, hook_id: hook.hook_id }, 'js_inline Eval-Fehler');
@@ -376,7 +400,10 @@ function mergePatch(payload: HookPayload, patch: Record<string, unknown>): HookP
   // Patch darf receipt, profile, extra ersetzen / mergen.
   const next: HookPayload = { ...payload };
   if (patch.receipt && typeof patch.receipt === 'object') {
-    next.receipt = deepMerge(payload.receipt as unknown as Record<string, unknown>, patch.receipt as Record<string, unknown>) as unknown as Receipt;
+    next.receipt = deepMerge(
+      payload.receipt as unknown as Record<string, unknown>,
+      patch.receipt as Record<string, unknown>,
+    ) as unknown as Receipt;
   }
   if (patch.profile && typeof patch.profile === 'object') {
     next.profile = deepMerge(payload.profile, patch.profile as Record<string, unknown>);

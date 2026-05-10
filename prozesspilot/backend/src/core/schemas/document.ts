@@ -11,12 +11,7 @@ import { nonEmptyStringSchema, paginationQuerySchema, uuidSchema } from './commo
 
 // ── Status ─────────────────────────────────────────────────────────────────
 
-export const documentStatusSchema = z.enum([
-  'pending',
-  'processing',
-  'done',
-  'error',
-]);
+export const documentStatusSchema = z.enum(['pending', 'processing', 'done', 'error']);
 
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
@@ -40,15 +35,19 @@ export const contentTypeSchema = z.enum(allowedContentTypes, {
 
 export const createDocumentSchema = z.object({
   /** MinIO-Object-Key des hochgeladenen Dokuments */
-  storage_key:   nonEmptyStringSchema.max(500),
+  storage_key: nonEmptyStringSchema.max(500),
   /** Originaler Dateiname */
   original_name: nonEmptyStringSchema.max(255),
   /** MIME-Type */
-  content_type:  contentTypeSchema,
+  content_type: contentTypeSchema,
   /** Dateigröße in Bytes */
-  size_bytes:    z.number().int().min(1).max(100 * 1024 * 1024), // max. 100 MB
+  size_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(100 * 1024 * 1024), // max. 100 MB
   /** Optional: bereits bekannter Kunden-Bezug */
-  customer_id:   uuidSchema.optional(),
+  customer_id: uuidSchema.optional(),
 });
 
 export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
@@ -57,27 +56,26 @@ export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
 
 export const updateDocumentSchema = z
   .object({
-    status:        documentStatusSchema.optional(),
+    status: documentStatusSchema.optional(),
     error_message: z.string().max(1000).optional(),
-    routing_tag:   z.string().max(100).optional(),
-    customer_id:   uuidSchema.optional(),
-    processed_at:  z.string().datetime().optional(),
+    routing_tag: z.string().max(100).optional(),
+    customer_id: uuidSchema.optional(),
+    processed_at: z.string().datetime().optional(),
   })
-  .refine(
-    (data) => Object.values(data).some((v) => v !== undefined),
-    { message: 'Mindestens ein Feld muss angegeben werden.' },
-  );
+  .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    message: 'Mindestens ein Feld muss angegeben werden.',
+  });
 
 export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
 
 // ── Query-Parameter für Listenendpoint ────────────────────────────────────
 
 export const listDocumentsQuerySchema = paginationQuerySchema.extend({
-  status:      documentStatusSchema.optional(),
+  status: documentStatusSchema.optional(),
   customer_id: uuidSchema.optional(),
   routing_tag: z.string().max(100).optional(),
-  sort_by:     z.enum(['received_at', 'processed_at', 'size_bytes']).default('received_at'),
-  sort_order:  z.enum(['asc', 'desc']).default('desc'),
+  sort_by: z.enum(['received_at', 'processed_at', 'size_bytes']).default('received_at'),
+  sort_order: z.enum(['asc', 'desc']).default('desc'),
 });
 
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
@@ -85,20 +83,20 @@ export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 // ── Response ───────────────────────────────────────────────────────────────
 
 export const documentResponseSchema = z.object({
-  id:            uuidSchema,
-  tenant_id:     uuidSchema,
-  customer_id:   uuidSchema.nullable(),
-  storage_key:   z.string(),
+  id: uuidSchema,
+  tenant_id: uuidSchema,
+  customer_id: uuidSchema.nullable(),
+  storage_key: z.string(),
   original_name: z.string(),
-  content_type:  z.string(),
-  size_bytes:    z.number(),
-  status:        documentStatusSchema,
+  content_type: z.string(),
+  size_bytes: z.number(),
+  status: documentStatusSchema,
   error_message: z.string().nullable(),
-  routing_tag:   z.string().nullable(),
-  received_at:   z.string(),
-  processed_at:  z.string().nullable(),
-  created_at:    z.string(),
-  updated_at:    z.string(),
+  routing_tag: z.string().nullable(),
+  received_at: z.string(),
+  processed_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
 });
 
 export type DocumentResponse = z.infer<typeof documentResponseSchema>;

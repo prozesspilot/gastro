@@ -69,19 +69,14 @@ export function buildStatsHandler() {
     const from = req.query.from ?? fromDefault.toISOString().slice(0, 10);
     const to = req.query.to ?? now.toISOString().slice(0, 10);
 
-    const [
-      receiptsByMonth,
-      byCategory,
-      topSuppliers,
-      exportRate,
-      processingTimes,
-    ] = await Promise.all([
-      queryReceiptsByMonth(db, customerId, from, to),
-      queryByCategory(db, customerId, from, to),
-      queryTopSuppliers(db, customerId, from, to),
-      queryExportRate(db, customerId),
-      queryProcessingTimes(db, customerId),
-    ]);
+    const [receiptsByMonth, byCategory, topSuppliers, exportRate, processingTimes] =
+      await Promise.all([
+        queryReceiptsByMonth(db, customerId, from, to),
+        queryByCategory(db, customerId, from, to),
+        queryTopSuppliers(db, customerId, from, to),
+        queryExportRate(db, customerId),
+        queryProcessingTimes(db, customerId),
+      ]);
 
     const stats: CustomerStats = {
       customer_id: customerId,

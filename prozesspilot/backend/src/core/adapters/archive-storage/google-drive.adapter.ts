@@ -19,25 +19,25 @@
 
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import type { Pool } from 'pg';
-import type Redis from 'ioredis';
-import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
+import { google } from 'googleapis';
 import type { drive_v3 } from 'googleapis';
+import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 import { config } from '../../config';
 import { logger } from '../../logger';
-import {
-  loadDriveCredential,
-  saveDriveCredential,
-  type DriveCredential,
-} from './drive-credentials';
 import type {
   ArchiveProviderId,
   ArchiveStorageAdapter,
   UploadInput,
   UploadResult,
 } from './adapter.interface';
+import {
+  type DriveCredential,
+  loadDriveCredential,
+  saveDriveCredential,
+} from './drive-credentials';
 
 const DEFAULT_FOLDER_TTL_SEC = 3_600;
 const RESUMABLE_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -45,7 +45,7 @@ const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 const DRIVE_FOLDER_TTL_SEC = (() => {
   const raw = process.env.DRIVE_FOLDER_CACHE_TTL_SEC;
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_FOLDER_TTL_SEC;
 })();
 

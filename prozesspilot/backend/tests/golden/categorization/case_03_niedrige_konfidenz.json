@@ -7,12 +7,8 @@
     "total_gross": 250.0,
     "total_net": 210.08,
     "currency": "EUR",
-    "tax_lines": [
-      { "rate": 0.19, "base": 210.08, "amount": 39.92 }
-    ],
-    "items": [
-      { "description": "Diverse Artikel", "qty": 1, "unit_price": 210.08 }
-    ]
+    "tax_lines": [{ "rate": 0.19, "base": 210.08, "amount": 39.92 }],
+    "items": [{ "description": "Diverse Artikel", "qty": 1, "unit_price": 210.08 }]
   },
   "profile": {
     "routing": {

@@ -24,39 +24,39 @@ import type {
 // ── Row-Mapping ────────────────────────────────────────────────────────────
 
 interface ProfileRow {
-  customer_id:     string;
+  customer_id: string;
   profile_version: number;
   modules_enabled: unknown;
-  integrations:    unknown;
-  routing:         unknown;
-  custom:          unknown;
-  updated_at:      Date;
-  updated_by:      string | null;
+  integrations: unknown;
+  routing: unknown;
+  custom: unknown;
+  updated_at: Date;
+  updated_by: string | null;
 }
 
 function rowToResponse(row: ProfileRow): ProfileResponse {
   return {
-    customer_id:     row.customer_id,
+    customer_id: row.customer_id,
     profile_version: row.profile_version,
     modules_enabled: (row.modules_enabled as string[]) ?? [],
-    integrations:    (row.integrations as Record<string, unknown>) ?? {},
-    routing:         (row.routing as Record<string, unknown>) ?? {},
-    custom:          (row.custom as Record<string, unknown>) ?? {},
-    updated_at:      row.updated_at.toISOString(),
-    updated_by:      row.updated_by,
+    integrations: (row.integrations as Record<string, unknown>) ?? {},
+    routing: (row.routing as Record<string, unknown>) ?? {},
+    custom: (row.custom as Record<string, unknown>) ?? {},
+    updated_at: row.updated_at.toISOString(),
+    updated_by: row.updated_by,
   };
 }
 
 function defaultResponse(customerId: string): ProfileResponse {
   return {
-    customer_id:     customerId,
+    customer_id: customerId,
     profile_version: 1,
     modules_enabled: [],
-    integrations:    {},
-    routing:         {},
-    custom:          {},
-    updated_at:      new Date(0).toISOString(),
-    updated_by:      null,
+    integrations: {},
+    routing: {},
+    custom: {},
+    updated_at: new Date(0).toISOString(),
+    updated_by: null,
   };
 }
 
@@ -66,10 +66,7 @@ function defaultResponse(customerId: string): ProfileResponse {
  * Liefert das Profil. Wenn kein Eintrag existiert, wird ein Default-Objekt
  * (profile_version=1, leere Sammlungen) zurückgegeben — niemals null.
  */
-export async function getProfile(
-  pool: Pool,
-  customerId: string,
-): Promise<ProfileResponse> {
+export async function getProfile(pool: Pool, customerId: string): Promise<ProfileResponse> {
   const { rows } = await pool.query<ProfileRow>(
     `SELECT customer_id, profile_version, modules_enabled, integrations,
             routing, custom, updated_at, updated_by
@@ -83,12 +80,12 @@ export async function getProfile(
 // ── History ────────────────────────────────────────────────────────────────
 
 export interface ProfileHistoryEntry {
-  history_id:      string;
+  history_id: string;
   profile_version: number;
-  snapshot:        Record<string, unknown>;
-  changed_by:      string | null;
-  changed_at:      string;
-  change_summary:  string | null;
+  snapshot: Record<string, unknown>;
+  changed_by: string | null;
+  changed_at: string;
+  change_summary: string | null;
 }
 
 /**
@@ -124,12 +121,12 @@ export async function listProfileHistory(
     [customerId, limit],
   );
   return rows.map((r) => ({
-    history_id:      String(r.history_id),
+    history_id: String(r.history_id),
     profile_version: r.profile_version,
-    snapshot:        r.snapshot,
-    changed_by:      r.changed_by ?? 'system',
-    changed_at:      r.changed_at.toISOString(),
-    change_summary:  r.change_summary,
+    snapshot: r.snapshot,
+    changed_by: r.changed_by ?? 'system',
+    changed_at: r.changed_at.toISOString(),
+    change_summary: r.change_summary,
   }));
 }
 
@@ -150,11 +147,11 @@ export async function upsertProfile(
     await client.query('BEGIN');
     const result = await upsertWithinTx(client, customerId, {
       modules_enabled: input.modules_enabled ?? [],
-      integrations:    input.integrations    ?? {},
-      routing:         input.routing         ?? {},
-      custom:          input.custom          ?? {},
-      updated_by:      input.updated_by      ?? null,
-      change_summary:  input.change_summary  ?? null,
+      integrations: input.integrations ?? {},
+      routing: input.routing ?? {},
+      custom: input.custom ?? {},
+      updated_by: input.updated_by ?? null,
+      change_summary: input.change_summary ?? null,
     });
     await client.query('COMMIT');
     return result;
@@ -183,11 +180,11 @@ export async function mergeProfile(
 
     const merged = {
       modules_enabled: patch.modules_enabled ?? current.modules_enabled,
-      integrations:    { ...current.integrations, ...(patch.integrations ?? {}) },
-      routing:         { ...current.routing,      ...(patch.routing      ?? {}) },
-      custom:          { ...current.custom,       ...(patch.custom       ?? {}) },
-      updated_by:      patch.updated_by     ?? null,
-      change_summary:  patch.change_summary ?? null,
+      integrations: { ...current.integrations, ...(patch.integrations ?? {}) },
+      routing: { ...current.routing, ...(patch.routing ?? {}) },
+      custom: { ...current.custom, ...(patch.custom ?? {}) },
+      updated_by: patch.updated_by ?? null,
+      change_summary: patch.change_summary ?? null,
     };
 
     const result = await upsertWithinTx(client, customerId, merged);
@@ -205,11 +202,11 @@ export async function mergeProfile(
 
 interface NormalizedProfileInput {
   modules_enabled: string[];
-  integrations:    Record<string, unknown>;
-  routing:         Record<string, unknown>;
-  custom:          Record<string, unknown>;
-  updated_by:      string | null;
-  change_summary:  string | null;
+  integrations: Record<string, unknown>;
+  routing: Record<string, unknown>;
+  custom: Record<string, unknown>;
+  updated_by: string | null;
+  change_summary: string | null;
 }
 
 /** Lädt das aktuelle Profil mit Row-Lock — oder liefert einen Default. */

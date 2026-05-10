@@ -16,28 +16,26 @@
  * Spec-Referenz: M10 §7.3, §8.1
  */
 
+import type { S3Client } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import type { S3Client } from '@aws-sdk/client-s3';
-import { logger } from '../../../core/logger';
 import { publishEvent } from '../../../core/events/publisher';
 import { STREAMS } from '../../../core/events/types';
+import { logger } from '../../../core/logger';
 import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { mediaInputSchema } from '../schemas/media.input';
-import {
-  CredentialNotFoundError,
-} from '../services/credential.service';
-import {
-  defaultMetaGraphClient,
-  MetaGraphError,
-  type MetaGraphClient,
-} from '../services/meta-graph.client';
-import { downloadMedia } from '../services/media-downloader';
 import { writeAudit } from '../services/audit.service';
+import { CredentialNotFoundError } from '../services/credential.service';
+import { downloadMedia } from '../services/media-downloader';
+import {
+  type MetaGraphClient,
+  MetaGraphError,
+  defaultMetaGraphClient,
+} from '../services/meta-graph.client';
 
 export interface MediaHandlerDeps {
   metaClient?: MetaGraphClient;
-  s3?:         S3Client;
+  s3?: S3Client;
 }
 
 declare module 'fastify' {
@@ -47,10 +45,7 @@ declare module 'fastify' {
 }
 
 export function buildMediaHandler(deps: MediaHandlerDeps = {}) {
-  return async function mediaHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function mediaHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const parsed = mediaInputSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(422).send(zodToApiError(parsed.error));
@@ -66,22 +61,18 @@ export function buildMediaHandler(deps: MediaHandlerDeps = {}) {
     const metaClient = deps.metaClient ?? defaultMetaGraphClient;
 
     try {
-      const result = await downloadMedia(
-        { db, s3, metaClient },
-        customer_id,
-        media_id,
-      );
+      const result = await downloadMedia({ db, s3, metaClient }, customer_id, media_id);
 
       // Audit-Log: 'received' wenn neu, 'duplicate' wenn idempotent
       void writeAudit(db, {
         customerId: customer_id,
-        eventType:  result.is_duplicate ? 'whatsapp.media.duplicate' : 'whatsapp.media.received',
+        eventType: result.is_duplicate ? 'whatsapp.media.duplicate' : 'whatsapp.media.received',
         payload: {
           media_id,
-          object_key:   result.object_key,
-          sha256:       result.sha256,
-          mime_type:    result.mime_type,
-          size_bytes:   result.size_bytes,
+          object_key: result.object_key,
+          sha256: result.sha256,
+          mime_type: result.mime_type,
+          size_bytes: result.size_bytes,
           is_duplicate: result.is_duplicate,
         },
         traceId: trace_id,
@@ -92,13 +83,13 @@ export function buildMediaHandler(deps: MediaHandlerDeps = {}) {
       // sobald das Receipt tatsächlich angelegt ist. Hier emittieren wir ein
       // Sub-Event 'pp.receipt.media_persisted' (Audit-/Tracing-Zweck).
       void publishEvent(req.server.redis, STREAMS.documents, {
-        type:        'pp.receipt.media_persisted',
+        type: 'pp.receipt.media_persisted',
         customer_id,
-        timestamp:   new Date().toISOString(),
+        timestamp: new Date().toISOString(),
         payload: JSON.stringify({
           media_id,
-          object_key:   result.object_key,
-          sha256:       result.sha256,
+          object_key: result.object_key,
+          sha256: result.sha256,
           is_duplicate: result.is_duplicate,
           trace_id,
         }),
@@ -108,9 +99,9 @@ export function buildMediaHandler(deps: MediaHandlerDeps = {}) {
     } catch (err) {
       if (err instanceof CredentialNotFoundError) {
         logger.warn({ customer_id }, 'wa_access_token fehlt');
-        return reply.code(404).send(
-          apiError('CREDENTIAL_NOT_FOUND', 'Kein WhatsApp-Access-Token für diesen Kunden.'),
-        );
+        return reply
+          .code(404)
+          .send(apiError('CREDENTIAL_NOT_FOUND', 'Kein WhatsApp-Access-Token für diesen Kunden.'));
       }
       if (err instanceof MetaGraphError) {
         const code = err.status >= 500 ? 'EXTERNAL_API_FAILED' : 'EXTERNAL_API_4XX';

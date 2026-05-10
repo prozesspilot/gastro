@@ -3,22 +3,16 @@ import type { FastifyInstance } from 'fastify';
 const CHECK_TIMEOUT_MS = 2_000;
 
 interface HealthOutcome<T> {
-  ok:     boolean;
-  data?:  T;
+  ok: boolean;
+  data?: T;
   error?: string;
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  label: string,
-): Promise<HealthOutcome<T>> {
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<HealthOutcome<T>> {
   return Promise.race([
     promise.then((v) => ({ ok: true, data: v }) as HealthOutcome<T>),
     new Promise<HealthOutcome<T>>((resolve) =>
-      setTimeout(
-        () => resolve({ ok: false, error: `${label}:timeout` }),
-        CHECK_TIMEOUT_MS,
-      ),
+      setTimeout(() => resolve({ ok: false, error: `${label}:timeout` }), CHECK_TIMEOUT_MS),
     ),
   ]).catch((err: Error) => ({ ok: false, error: err.message }));
 }
@@ -34,10 +28,10 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
 
     const status = dbOk ? 200 : 503;
     return reply.status(status).send({
-      ok:        dbOk,
-      version:   process.env.APP_VERSION ?? process.env.npm_package_version ?? 'dev',
+      ok: dbOk,
+      version: process.env.APP_VERSION ?? process.env.npm_package_version ?? 'dev',
       timestamp: new Date().toISOString(),
-      uptime:    Math.floor(process.uptime()),
+      uptime: Math.floor(process.uptime()),
       checks: {
         database: dbOk ? 'ok' : 'error',
       },
@@ -63,34 +57,36 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
       ),
     ]);
 
-    const dbConnected    = dbCheck.ok;
+    const dbConnected = dbCheck.ok;
     const redisConnected = redisCheck.ok;
-    const migrationsOk   = migrationsCheck.ok;
+    const migrationsOk = migrationsCheck.ok;
 
     const poolSize = (app.db as unknown as { totalCount?: number }).totalCount ?? null;
 
     const dbInfo = {
       connected: dbConnected,
       pool_size: poolSize,
-      active_connections: dbCheck.ok && dbCheck.data?.rows?.[0]
-        ? parseInt(dbCheck.data.rows[0].count, 10)
-        : null,
+      active_connections:
+        dbCheck.ok && dbCheck.data?.rows?.[0]
+          ? Number.parseInt(dbCheck.data.rows[0].count, 10)
+          : null,
     };
 
     const redisInfo = { connected: redisConnected };
 
-    const migrationsInfo = migrationsOk && migrationsCheck.data?.rows?.[0]
-      ? {
-          last_applied: migrationsCheck.data.rows[0].version ?? null,
-          total:        parseInt(migrationsCheck.data.rows[0].total ?? '0', 10),
-        }
-      : { last_applied: null, total: 0 };
+    const migrationsInfo =
+      migrationsOk && migrationsCheck.data?.rows?.[0]
+        ? {
+            last_applied: migrationsCheck.data.rows[0].version ?? null,
+            total: Number.parseInt(migrationsCheck.data.rows[0].total ?? '0', 10),
+          }
+        : { last_applied: null, total: 0 };
 
     const allOk = dbConnected && redisConnected && migrationsOk;
     const body = {
-      ok:         allOk,
-      db:         dbInfo,
-      redis:      redisInfo,
+      ok: allOk,
+      db: dbInfo,
+      redis: redisInfo,
       migrations: migrationsInfo,
     };
 

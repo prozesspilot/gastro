@@ -19,16 +19,16 @@ import type { Pool } from 'pg';
 // ── Typen ──────────────────────────────────────────────────────────────────
 
 export interface AllowedSender {
-  name?:  string;
-  phone:  string;
-  role?:  string;
+  name?: string;
+  phone: string;
+  role?: string;
 }
 
 export interface ResolveResult {
   customerId: string;
-  allowed:    boolean;
-  reason?:    'sender_not_whitelisted';
-  sender?:    AllowedSender;
+  allowed: boolean;
+  reason?: 'sender_not_whitelisted';
+  sender?: AllowedSender;
 }
 
 export class CustomerNotFoundError extends Error {
@@ -65,7 +65,7 @@ export function normalizePhone(raw: string, defaultCountry = '49'): string {
   let n = raw.replace(/\(0\)/g, '');
   // 2) Whitespace, andere Klammern, Bindestriche, Schrägstriche entfernen.
   n = n.replace(/[\s()/\-]/g, '');
-  if (n.startsWith('+'))  n = n.slice(1);
+  if (n.startsWith('+')) n = n.slice(1);
   if (n.startsWith('00')) n = n.slice(2);
   // 3) Führende einzelne "0" → Ländervorwahl.
   if (n.startsWith('0') && !n.startsWith('00')) {
@@ -77,13 +77,13 @@ export function normalizePhone(raw: string, defaultCountry = '49'): string {
 // ── Repository-Lookup (Postgres) ──────────────────────────────────────────
 
 interface ProfileRow {
-  customer_id:  string;
+  customer_id: string;
   integrations: {
     input_whatsapp?: {
-      enabled?:          boolean;
-      phone_number_id?:  string;
-      allowed_senders?:  AllowedSender[];
-      credentials_ref?:  string;
+      enabled?: boolean;
+      phone_number_id?: string;
+      allowed_senders?: AllowedSender[];
+      credentials_ref?: string;
     };
   };
 }
@@ -127,14 +127,14 @@ export async function resolveCustomer(
   if (!sender) {
     return {
       customerId: profile.customer_id,
-      allowed:    false,
-      reason:     'sender_not_whitelisted',
+      allowed: false,
+      reason: 'sender_not_whitelisted',
     };
   }
 
   return {
     customerId: profile.customer_id,
-    allowed:    true,
+    allowed: true,
     sender,
   };
 }

@@ -15,10 +15,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
-import { renderTemplate, pickTemplate, REASON_DE } from '../services/template-renderer';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { buildReferenceId } from '../services/reference-resolver';
+import { REASON_DE, pickTemplate, renderTemplate } from '../services/template-renderer';
 
 const bodySchema = z.object({
   trigger: z.enum(['requires_review', 'confirmation', 'missing_receipt', 'overdue']),
@@ -47,10 +47,7 @@ export interface CommDraft {
 }
 
 export function buildBuildHandler() {
-  return async function buildHandler(
-    req: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+  return async function buildHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
     const parsed = bodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(422).send(zodToApiError(parsed.error));
@@ -74,14 +71,17 @@ export function buildBuildHandler() {
       );
 
       if (!profileRow.rows[0]) {
-        return reply.code(404).send(apiError('NOT_FOUND', `Kunde ${input.customer_id} nicht gefunden.`));
+        return reply
+          .code(404)
+          .send(apiError('NOT_FOUND', `Kunde ${input.customer_id} nicht gefunden.`));
       }
 
       const profile = profileRow.rows[0];
 
       // Prüfe ob supplier_communication aktiviert ist
       const integrations = profile.integrations ?? {};
-      const supplierComm = (integrations as Record<string, Record<string, unknown>>).supplier_communication;
+      const supplierComm = (integrations as Record<string, Record<string, unknown>>)
+        .supplier_communication;
       if (!supplierComm?.enabled) {
         return reply.send(apiOk({ skip: true, reason: 'MODULE_DISABLED' }));
       }
@@ -99,20 +99,24 @@ export function buildBuildHandler() {
         const receiptRow = await db.query<{
           receipt_id: string;
           payload: {
-            extraction?: { fields?: {
-              supplier_name?: string;
-              document_number?: string;
-              document_date?: string;
-            }};
+            extraction?: {
+              fields?: {
+                supplier_name?: string;
+                document_number?: string;
+                document_date?: string;
+              };
+            };
           };
           created_at: Date;
         }>(
-          `SELECT receipt_id, payload, created_at FROM receipts WHERE receipt_id = $1 AND customer_id = $2 LIMIT 1`,
+          'SELECT receipt_id, payload, created_at FROM receipts WHERE receipt_id = $1 AND customer_id = $2 LIMIT 1',
           [input.receipt_id, input.customer_id],
         );
 
         if (!receiptRow.rows[0]) {
-          return reply.code(404).send(apiError('NOT_FOUND', `Receipt ${input.receipt_id} nicht gefunden.`));
+          return reply
+            .code(404)
+            .send(apiError('NOT_FOUND', `Receipt ${input.receipt_id} nicht gefunden.`));
         }
 
         const receipt = receiptRow.rows[0];
@@ -146,7 +150,10 @@ export function buildBuildHandler() {
       const contact = contactRow.rows[0];
       if (!contact?.contact_email) {
         // Kein Kontakt bekannt → Operator-Task (log-only für MVP)
-        logger.info({ supplierName, customer_id: input.customer_id }, 'M09: kein Lieferanten-Kontakt — Operator-Task nötig');
+        logger.info(
+          { supplierName, customer_id: input.customer_id },
+          'M09: kein Lieferanten-Kontakt — Operator-Task nötig',
+        );
         return reply.send(apiOk({ skip: true, reason: 'NO_SUPPLIER_CONTACT' }));
       }
 
@@ -162,7 +169,10 @@ export function buildBuildHandler() {
       );
 
       if (recentComms.length > 0) {
-        logger.info({ customer_id: input.customer_id, email: contact.contact_email }, 'M09: Anti-Spam — Mail erst morgen wieder');
+        logger.info(
+          { customer_id: input.customer_id, email: contact.contact_email },
+          'M09: Anti-Spam — Mail erst morgen wieder',
+        );
         return reply.send(apiOk({ skip: true, reason: 'ANTI_SPAM' }));
       }
 

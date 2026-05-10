@@ -37,11 +37,7 @@ export async function getApiToken(pool: Pool, customerId: string): Promise<strin
 /**
  * Speichert einen API-Token für einen Kunden (Test-Helper).
  */
-export async function storeApiToken(
-  pool: Pool,
-  customerId: string,
-  token: string,
-): Promise<void> {
+export async function storeApiToken(pool: Pool, customerId: string, token: string): Promise<void> {
   await pool.query(
     `INSERT INTO customer_credentials (customer_id, kind, encrypted_value)
      VALUES ($1, $2, $3::bytea)

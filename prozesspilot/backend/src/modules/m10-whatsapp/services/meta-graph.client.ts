@@ -22,10 +22,10 @@ import { logger } from '../../../core/logger';
 // ── Typen ──────────────────────────────────────────────────────────────────
 
 export interface MediaMeta {
-  url:        string;
-  mime_type:  string;
-  sha256:     string;
-  file_size:  number;
+  url: string;
+  mime_type: string;
+  sha256: string;
+  file_size: number;
 }
 
 export interface SendTemplateResult {
@@ -48,15 +48,11 @@ export interface MetaGraphClient {
 
 const GRAPH_BASE = 'https://graph.facebook.com';
 const MAX_RETRIES = 3;
-const BACKOFF_MS  = [250, 1000, 4000];
+const BACKOFF_MS = [250, 1000, 4000];
 
 // ── Hilfsfunktion: fetch mit Retry für 5xx ─────────────────────────────────
 
-async function fetchWithRetry(
-  input: string,
-  init: RequestInit,
-  what: string,
-): Promise<Response> {
+async function fetchWithRetry(input: string, init: RequestInit, what: string): Promise<Response> {
   let lastErr: unknown;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -70,7 +66,11 @@ async function fetchWithRetry(
       if (res.status >= 400 && res.status < 500) {
         const body = await res.text().catch(() => '');
         logger.warn({ status: res.status, what, body: body.slice(0, 500) }, 'Meta Graph 4xx');
-        throw new MetaGraphError(`Meta Graph ${what} fehlgeschlagen (${res.status})`, res.status, body);
+        throw new MetaGraphError(
+          `Meta Graph ${what} fehlgeschlagen (${res.status})`,
+          res.status,
+          body,
+        );
       }
 
       // 5xx — retryen, sofern noch Versuche übrig
@@ -80,7 +80,11 @@ async function fetchWithRetry(
         continue;
       }
       const body = await res.text().catch(() => '');
-      throw new MetaGraphError(`Meta Graph ${what} 5xx nach ${MAX_RETRIES + 1} Versuchen`, res.status, body);
+      throw new MetaGraphError(
+        `Meta Graph ${what} 5xx nach ${MAX_RETRIES + 1} Versuchen`,
+        res.status,
+        body,
+      );
     } catch (err) {
       // Netzwerkfehler — wie 5xx behandeln
       lastErr = err;
@@ -121,17 +125,17 @@ export const defaultMetaGraphClient: MetaGraphClient = {
     const res = await fetchWithRetry(
       url,
       {
-        method:  'GET',
+        method: 'GET',
         headers: { authorization: `Bearer ${accessToken}` },
       },
       'getMediaMeta',
     );
 
     const json = (await res.json()) as {
-      url?:        string;
-      mime_type?:  string;
-      sha256?:     string;
-      file_size?:  number;
+      url?: string;
+      mime_type?: string;
+      sha256?: string;
+      file_size?: number;
     };
 
     if (!json.url || !json.mime_type) {
@@ -143,10 +147,10 @@ export const defaultMetaGraphClient: MetaGraphClient = {
     }
 
     return {
-      url:        json.url,
-      mime_type:  json.mime_type,
-      sha256:     json.sha256 ?? '',
-      file_size:  Number(json.file_size ?? 0),
+      url: json.url,
+      mime_type: json.mime_type,
+      sha256: json.sha256 ?? '',
+      file_size: Number(json.file_size ?? 0),
     };
   },
 
@@ -157,7 +161,7 @@ export const defaultMetaGraphClient: MetaGraphClient = {
     const res = await fetchWithRetry(
       url,
       {
-        method:  'GET',
+        method: 'GET',
         headers: { authorization: `Bearer ${accessToken}` },
       },
       'downloadMediaBytes',
@@ -175,11 +179,11 @@ export const defaultMetaGraphClient: MetaGraphClient = {
 
     const body = {
       messaging_product: 'whatsapp',
-      recipient_type:    'individual',
+      recipient_type: 'individual',
       to,
       type: 'template',
       template: {
-        name:     templateName,
+        name: templateName,
         language: { code: language },
       },
     };
@@ -189,7 +193,7 @@ export const defaultMetaGraphClient: MetaGraphClient = {
       {
         method: 'POST',
         headers: {
-          authorization:  `Bearer ${accessToken}`,
+          authorization: `Bearer ${accessToken}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),

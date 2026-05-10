@@ -11,7 +11,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { buildAppendHandler, type AppendHandlerDeps } from './handlers/append.handler';
+import { type AppendHandlerDeps, buildAppendHandler } from './handlers/append.handler';
 
 export async function m07SpreadsheetRoutes(
   app: FastifyInstance,

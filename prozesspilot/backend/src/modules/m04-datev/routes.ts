@@ -9,9 +9,9 @@
 
 import type { FastifyInstance } from 'fastify';
 import { buildBuildHandler } from './handlers/build.handler';
-import { buildSendHandler } from './handlers/send.handler';
-import { buildListHandler } from './handlers/list.handler';
 import { buildDownloadCsvHandler, buildDownloadZipHandler } from './handlers/download.handler';
+import { buildListHandler } from './handlers/list.handler';
+import { buildSendHandler } from './handlers/send.handler';
 
 /** Registriert unter /customers */
 export async function m04DatevRoutes(app: FastifyInstance): Promise<void> {

@@ -5,8 +5,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildExportsListHandler() {
   return async function exportsListHandler(
@@ -29,7 +29,9 @@ export function buildExportsListHandler() {
       return reply.send(apiOk({ exports: rows, count: rows.length }));
     } catch (err) {
       logger.error({ err, customerId }, 'M06 exports-list fehlgeschlagen');
-      return reply.code(500).send(apiError('INTERNAL_ERROR', 'Export-Liste konnte nicht geladen werden.'));
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Export-Liste konnte nicht geladen werden.'));
     }
   };
 }

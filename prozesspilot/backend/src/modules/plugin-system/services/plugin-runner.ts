@@ -9,7 +9,7 @@
 
 import type { Pool } from 'pg';
 import { logger } from '../../../core/logger';
-import { dispatchToPlugin, type PluginRegistryRow } from './plugin-dispatcher';
+import { type PluginRegistryRow, dispatchToPlugin } from './plugin-dispatcher';
 
 /**
  * Fuehrt alle aktivierten Plugins fuer ein bestimmtes Hook-Event aus.

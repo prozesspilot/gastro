@@ -26,44 +26,44 @@ import { extractWithClaude } from './claude-extractor';
 // ── Public Types ──────────────────────────────────────────────────────────────
 
 export interface TaxLine {
-  rate:   number;       // 0.19, 0.07, 0.00
-  base:   number;       // Netto-Betrag der Steuerzeile
-  amount: number;       // Steuer-Betrag
+  rate: number; // 0.19, 0.07, 0.00
+  base: number; // Netto-Betrag der Steuerzeile
+  amount: number; // Steuer-Betrag
 }
 
 export interface LineItem {
   description: string;
-  qty?:        number;
+  qty?: number;
   unit_price?: number;
-  total?:      number;
-  tax_rate?:   number;
+  total?: number;
+  tax_rate?: number;
 }
 
 export interface ExtractedFields {
-  supplier_name?:    string;
+  supplier_name?: string;
   supplier_address?: string;
-  supplier_vat_id?:  string;
-  document_number?:  string;
-  document_date?:    string;       // ISO YYYY-MM-DD
-  document_type?:    'invoice' | 'receipt' | 'credit_note' | 'other';
-  currency?:         string;       // EUR
-  total_gross?:      number;
-  total_net?:        number;
-  tax_lines?:        TaxLine[];
-  line_items?:       LineItem[];
-  payment_method?:   string;
+  supplier_vat_id?: string;
+  document_number?: string;
+  document_date?: string; // ISO YYYY-MM-DD
+  document_type?: 'invoice' | 'receipt' | 'credit_note' | 'other';
+  currency?: string; // EUR
+  total_gross?: number;
+  total_net?: number;
+  tax_lines?: TaxLine[];
+  line_items?: LineItem[];
+  payment_method?: string;
 }
 
 export interface FieldExtractionResult {
-  fields:     ExtractedFields;
+  fields: ExtractedFields;
   /** Anteil sicher gesetzter Pflichtfelder (0..1). */
   confidence: number;
   /** Welche Pfade die Felder geliefert haben — fürs Audit. */
-  sources:    {
-    regex:   boolean;
+  sources: {
+    regex: boolean;
     profile: boolean;
-    global:  boolean;
-    claude:  boolean;
+    global: boolean;
+    claude: boolean;
   };
 }
 
@@ -75,10 +75,10 @@ export interface FieldExtractorDeps {
 // ── Customer-Profile-Slice ────────────────────────────────────────────────────
 
 interface SupplierOverride {
-  category?:    string;
-  skr?:         string;
+  category?: string;
+  skr?: string;
   cost_center?: string;
-  vat_id?:      string;
+  vat_id?: string;
 }
 
 interface CustomerProfileSlice {
@@ -120,7 +120,11 @@ export async function extract(
 
   // 2b) Lieferant aus suppliers_global (vat_id ODER aliases)
   if (!fields.supplier_name && (fields.supplier_vat_id || regex.candidateAliases.length > 0)) {
-    const fromGlobal = await matchGlobalSupplier(db, fields.supplier_vat_id, regex.candidateAliases);
+    const fromGlobal = await matchGlobalSupplier(
+      db,
+      fields.supplier_vat_id,
+      regex.candidateAliases,
+    );
     if (fromGlobal) {
       fields.supplier_name = fromGlobal.display_name;
       if (!fields.supplier_vat_id && fromGlobal.vat_id) {
@@ -166,18 +170,21 @@ export async function extract(
 // ── Regex-Extraktion ──────────────────────────────────────────────────────────
 
 interface RegexResult {
-  fields:           ExtractedFields;
-  gotAnything:      boolean;
+  fields: ExtractedFields;
+  gotAnything: boolean;
   candidateAliases: string[]; // Top-3 Zeilen-Tokens für suppliers_global-Lookup
 }
 
 function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexResult {
   const fields: ExtractedFields = {};
-  const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = rawText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   // Datum — DE-Format, ISO, Intl
-  const dateDe   = rawText.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/);
-  const dateIso  = rawText.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  const dateDe = rawText.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/);
+  const dateIso = rawText.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   const dateIntl = rawText.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
   if (dateIso) {
     fields.document_date = `${dateIso[1]}-${dateIso[2]}-${dateIso[3]}`;
@@ -194,14 +201,15 @@ function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexRe
   // MwSt-Sätze (19, 7, 0 %)
   const taxRates = new Set<number>();
   for (const m of rawText.matchAll(/\b(0|7|19)[ ,.]?(\d?)\s*%/g)) {
-    const intPart = parseInt(m[1], 10);
-    const frac    = m[2] ? parseInt(m[2], 10) : 0;
-    const rate    = intPart === 0 && frac === 0 ? 0 : (intPart + frac / 10) / 100;
+    const intPart = Number.parseInt(m[1], 10);
+    const frac = m[2] ? Number.parseInt(m[2], 10) : 0;
+    const rate = intPart === 0 && frac === 0 ? 0 : (intPart + frac / 10) / 100;
     taxRates.add(round2(rate));
   }
 
   // Beträge: "Total / Summe / Brutto / Gesamt" als linker Anker.
-  const amountRe = /(?:total|summe|brutto|gesamt|netto|zwischensumme)\s*[:\-]?\s*(?:€\s*)?(\d{1,3}(?:[.,  ]\d{3})*[.,]\d{2})\s*(?:€|eur)?/gi;
+  const amountRe =
+    /(?:total|summe|brutto|gesamt|netto|zwischensumme)\s*[:\-]?\s*(?:€\s*)?(\d{1,3}(?:[.,  ]\d{3})*[.,]\d{2})\s*(?:€|eur)?/gi;
   let m: RegExpExecArray | null;
   while ((m = amountRe.exec(rawText)) !== null) {
     const label = m[0].toLowerCase();
@@ -220,7 +228,9 @@ function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexRe
   }
 
   // Belegnummer
-  const docNum = rawText.match(/\b(?:RE|RG|RECHNUNG|INVOICE|NR|BELEG)[\s\-]*([A-Z0-9][A-Z0-9\-\/]{2,})/i);
+  const docNum = rawText.match(
+    /\b(?:RE|RG|RECHNUNG|INVOICE|NR|BELEG)[\s\-]*([A-Z0-9][A-Z0-9\-\/]{2,})/i,
+  );
   if (docNum) fields.document_number = docNum[1].toUpperCase();
 
   // Currency: erstmal Default aus Profil bzw. EUR, falls € im Text
@@ -229,15 +239,19 @@ function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexRe
 
   // Tax-Lines aus erkannten Sätzen + Brutto/Netto rekonstruieren (best-effort).
   if (fields.total_gross !== undefined && fields.total_net !== undefined && taxRates.size > 0) {
-    const rates = Array.from(taxRates).filter((r) => r > 0).sort((a, b) => b - a);
+    const rates = Array.from(taxRates)
+      .filter((r) => r > 0)
+      .sort((a, b) => b - a);
     if (rates.length === 1) {
       const rate = rates[0];
       const taxAmt = round2(fields.total_gross - fields.total_net);
-      fields.tax_lines = [{
-        rate,
-        base:   fields.total_net,
-        amount: taxAmt,
-      }];
+      fields.tax_lines = [
+        {
+          rate,
+          base: fields.total_net,
+          amount: taxAmt,
+        },
+      ];
     } else if (rates.length >= 2) {
       // Bei mehreren Sätzen können wir ohne Zeilendaten nicht zuverlässig
       // splitten — Claude-Fallback übernimmt.
@@ -261,7 +275,7 @@ function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexRe
 // ── Lieferant via customer_profile.custom.supplier_overrides ──────────────────
 
 interface SupplierMatch {
-  name:    string;
+  name: string;
   vat_id?: string;
 }
 
@@ -281,7 +295,11 @@ function matchProfileSupplier(
   }
 
   // 2) Fuzzy: Levenshtein ≤ 2 zwischen Name und einer der ersten 5 Zeilen
-  const lines = rawText.split('\n').slice(0, 5).map((l) => l.trim()).filter(Boolean);
+  const lines = rawText
+    .split('\n')
+    .slice(0, 5)
+    .map((l) => l.trim())
+    .filter(Boolean);
   for (const name of Object.keys(overrides)) {
     for (const line of lines) {
       if (Math.abs(line.length - name.length) > 4) continue;
@@ -296,10 +314,10 @@ function matchProfileSupplier(
 // ── Lieferant via suppliers_global ────────────────────────────────────────────
 
 interface GlobalSupplierRow {
-  supplier_id:  string;
-  vat_id:       string | null;
+  supplier_id: string;
+  vat_id: string | null;
   display_name: string;
-  aliases:      string[];
+  aliases: string[];
 }
 
 async function matchGlobalSupplier(
@@ -323,16 +341,16 @@ async function matchGlobalSupplier(
 // ── Helfer ────────────────────────────────────────────────────────────────────
 
 function toIsoDate(d: string, m: string, y: string): string | undefined {
-  const day   = d.padStart(2, '0');
+  const day = d.padStart(2, '0');
   const month = m.padStart(2, '0');
   let year = y;
   if (year.length === 2) {
-    const yy = parseInt(year, 10);
+    const yy = Number.parseInt(year, 10);
     year = (yy >= 70 ? 1900 + yy : 2000 + yy).toString();
   }
   // Plausibilitäts-Sanity (Validator macht den belegspezifischen Check)
-  const dn = parseInt(day, 10);
-  const mn = parseInt(month, 10);
+  const dn = Number.parseInt(day, 10);
+  const mn = Number.parseInt(month, 10);
   if (dn < 1 || dn > 31 || mn < 1 || mn > 12) return undefined;
   return `${year}-${month}-${day}`;
 }
@@ -342,7 +360,7 @@ function parseAmount(raw: string): number | null {
   // DE-Format: "1.234,56", Intl: "1,234.56", Italienisch: "1.234,56".
   const cleaned = raw.replace(/[  \s]/g, '');
   // Wenn beide Trenner vorkommen, ist der letzte das Dezimaltrennzeichen.
-  const lastDot   = cleaned.lastIndexOf('.');
+  const lastDot = cleaned.lastIndexOf('.');
   const lastComma = cleaned.lastIndexOf(',');
   let normalized: string;
   if (lastDot >= 0 && lastComma >= 0) {
@@ -385,11 +403,9 @@ function levenshtein(a: string, b: string): number {
 
 /** Anteil sicher gesetzter Pflichtfelder. */
 function computeConfidence(fields: ExtractedFields): number {
-  const required: Array<keyof ExtractedFields> = [
-    'supplier_name',
-    'document_date',
-    'total_gross',
-  ];
-  const present = required.filter((k) => fields[k] !== undefined && fields[k] !== null && fields[k] !== '').length;
+  const required: Array<keyof ExtractedFields> = ['supplier_name', 'document_date', 'total_gross'];
+  const present = required.filter(
+    (k) => fields[k] !== undefined && fields[k] !== null && fields[k] !== '',
+  ).length;
   return present / required.length;
 }

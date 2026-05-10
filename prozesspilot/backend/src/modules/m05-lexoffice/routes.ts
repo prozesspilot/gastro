@@ -7,9 +7,12 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { buildPushHandler, type PushHandlerDeps } from './handlers/push.handler';
 import { buildExportsListHandler } from './handlers/exports.handler';
-import { buildIntegrationTestHandler, buildSyncCategoriesHandler } from './handlers/integration.handler';
+import {
+  buildIntegrationTestHandler,
+  buildSyncCategoriesHandler,
+} from './handlers/integration.handler';
+import { type PushHandlerDeps, buildPushHandler } from './handlers/push.handler';
 
 /** Registriert unter /receipts */
 export async function m05LexofficeRoutes(

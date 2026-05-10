@@ -15,9 +15,9 @@
  * Confidence: Durchschnitt aller Words. Falls Words fehlen → fallback Page.confidence.
  */
 
-import type { OcrAdapter, OcrBlock, OcrResult, OcrWord } from './adapter.interface';
 import { config } from '../../config';
 import { logger } from '../../logger';
+import type { OcrAdapter, OcrBlock, OcrResult, OcrWord } from './adapter.interface';
 
 // Lazy-Import: Vision SDK nur laden, wenn der Adapter wirklich benutzt wird.
 // So kann das Modul auch in Tests/CI ohne installiertes SDK importiert werden.
@@ -36,16 +36,17 @@ async function getVisionClient(): Promise<InstanceType<VisionClientCtor>> {
   const mod = await import('@google-cloud/vision');
   const ImageAnnotatorClient = (mod as { ImageAnnotatorClient: VisionClientCtor })
     .ImageAnnotatorClient;
-  const opts = config.GOOGLE_VISION_KEY_FILE
-    ? { keyFilename: config.GOOGLE_VISION_KEY_FILE }
-    : {};
+  const opts = config.GOOGLE_VISION_KEY_FILE ? { keyFilename: config.GOOGLE_VISION_KEY_FILE } : {};
   cachedClient = new ImageAnnotatorClient(opts);
   return cachedClient;
 }
 
 // ── Vertex/BBox-Helfer ────────────────────────────────────────────────────────
 
-interface Vertex { x?: number | null; y?: number | null }
+interface Vertex {
+  x?: number | null;
+  y?: number | null;
+}
 
 function bboxFromVertices(verts: Vertex[] | undefined | null): [number, number, number, number] {
   if (!verts || verts.length === 0) return [0, 0, 0, 0];
@@ -67,7 +68,13 @@ function avg(nums: number[]): number {
 
 function isPdf(bytes: Buffer): boolean {
   // %PDF-
-  return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46
+  );
 }
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
@@ -108,9 +115,9 @@ export class GoogleVisionAdapter implements OcrAdapter {
     logger.debug({ size: bytes.length, languageHints, feature }, 'Vision: documentTextDetection');
 
     const [response] = await client.documentTextDetection({
-      image:        { content: bytes },
+      image: { content: bytes },
       imageContext: { languageHints },
-      features:     [{ type: feature }],
+      features: [{ type: feature }],
     });
 
     return parseFullTextAnnotation(response, /* page_count */ 1);
@@ -126,20 +133,22 @@ export class GoogleVisionAdapter implements OcrAdapter {
 
     // Phase 1: nur 1-seitige PDFs synchron via batchAnnotateFiles.
     const [resp] = await client.batchAnnotateFiles({
-      requests: [{
-        inputConfig: { content: bytes, mimeType: 'application/pdf' },
-        features:    [{ type: feature }],
-        imageContext: { languageHints },
-        // pages:    [1] — Default ist erste Seite, explizit hier zur Klarheit
-        pages:       [1],
-      }],
+      requests: [
+        {
+          inputConfig: { content: bytes, mimeType: 'application/pdf' },
+          features: [{ type: feature }],
+          imageContext: { languageHints },
+          // pages:    [1] — Default ist erste Seite, explizit hier zur Klarheit
+          pages: [1],
+        },
+      ],
     });
 
     type FileResp = {
       responses?: Array<{
         fullTextAnnotation?: unknown;
-        textAnnotations?:    unknown[];
-        error?:              { message?: string };
+        textAnnotations?: unknown[];
+        error?: { message?: string };
       }>;
       totalPages?: number;
     };
@@ -165,7 +174,7 @@ interface FullTextAnnotation {
         words?: Array<{
           confidence?: number;
           boundingBox?: { vertices?: Vertex[] };
-          symbols?:    Array<{ text?: string }>;
+          symbols?: Array<{ text?: string }>;
         }>;
       }>;
     }>;
@@ -174,7 +183,7 @@ interface FullTextAnnotation {
 
 interface VisionResponse {
   fullTextAnnotation?: FullTextAnnotation;
-  textAnnotations?:    Array<{ description?: string }>;
+  textAnnotations?: Array<{ description?: string }>;
 }
 
 function parseFullTextAnnotation(resp: unknown, pageCount: number): OcrResult {
@@ -183,7 +192,7 @@ function parseFullTextAnnotation(resp: unknown, pageCount: number): OcrResult {
   const rawText = ann.text ?? r.textAnnotations?.[0]?.description ?? '';
 
   const blocks: OcrBlock[] = [];
-  const words:  OcrWord[]  = [];
+  const words: OcrWord[] = [];
   const wordConfs: number[] = [];
   const pageConfs: number[] = [];
 
@@ -214,11 +223,8 @@ function parseFullTextAnnotation(resp: unknown, pageCount: number): OcrResult {
     }
   }
 
-  const confidence = wordConfs.length > 0
-    ? avg(wordConfs)
-    : pageConfs.length > 0
-      ? avg(pageConfs)
-      : 0;
+  const confidence =
+    wordConfs.length > 0 ? avg(wordConfs) : pageConfs.length > 0 ? avg(pageConfs) : 0;
 
   return {
     raw_text: rawText,

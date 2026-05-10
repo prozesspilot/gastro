@@ -24,28 +24,28 @@ export type ValidationCheck =
   | 'currency_supported';
 
 export interface ValidationIssue {
-  code:    string;
-  field?:  string;
+  code: string;
+  field?: string;
   message: string;
 }
 
 export interface ValidationResult {
   is_valid: boolean;
-  issues:   ValidationIssue[];
-  checks:   Record<ValidationCheck, boolean>;
+  issues: ValidationIssue[];
+  checks: Record<ValidationCheck, boolean>;
 }
 
 interface ValidatorProfileSlice {
   routing?: {
     supported_currencies?: string[];
-    default_currency?:     string;
+    default_currency?: string;
   };
 }
 
 interface ValidatorContext {
   customerId: string;
-  receiptId:  string;       // damit das Receipt sich nicht selbst als Duplikat sieht
-  profile:    ValidatorProfileSlice;
+  receiptId: string; // damit das Receipt sich nicht selbst als Duplikat sieht
+  profile: ValidatorProfileSlice;
 }
 
 const TOLERANCE = 0.02;
@@ -53,22 +53,22 @@ const TOLERANCE = 0.02;
 export async function validate(
   db: Pool,
   fields: ExtractedFields,
-  ctx:    ValidatorContext,
+  ctx: ValidatorContext,
 ): Promise<ValidationResult> {
   const issues: ValidationIssue[] = [];
   const checks: Record<ValidationCheck, boolean> = {
-    totals_match:           true,
-    tax_lines_consistent:   true,
-    supplier_known:         true,
-    document_date_plausible:true,
-    duplicate:              false,
-    currency_supported:     true,
+    totals_match: true,
+    tax_lines_consistent: true,
+    supplier_known: true,
+    document_date_plausible: true,
+    duplicate: false,
+    currency_supported: true,
   };
 
   // ── totals_match ─────────────────────────────────────────────────────────
   if (
     fields.total_gross !== undefined &&
-    fields.total_net   !== undefined &&
+    fields.total_net !== undefined &&
     Array.isArray(fields.tax_lines)
   ) {
     const taxSum = fields.tax_lines.reduce((s, t) => s + (t.amount ?? 0), 0);
@@ -76,8 +76,8 @@ export async function validate(
     if (diff > TOLERANCE) {
       checks.totals_match = false;
       issues.push({
-        code:    'TOTALS_MISMATCH',
-        field:   'total_gross',
+        code: 'TOTALS_MISMATCH',
+        field: 'total_gross',
         message: `Brutto ${fields.total_gross} ≠ Netto ${fields.total_net} + Steuer ${round2(taxSum)} (Δ ${round2(diff)})`,
       });
     }
@@ -90,8 +90,8 @@ export async function validate(
       if (Math.abs((t.amount ?? 0) - expected) > TOLERANCE) {
         checks.tax_lines_consistent = false;
         issues.push({
-          code:    'TAX_LINE_INCONSISTENT',
-          field:   `tax_lines[${i}]`,
+          code: 'TAX_LINE_INCONSISTENT',
+          field: `tax_lines[${i}]`,
           message: `Zeile ${i}: amount ${t.amount} ≠ base ${t.base} × rate ${t.rate} (=${round2(expected)})`,
         });
       }
@@ -102,20 +102,20 @@ export async function validate(
   if (!fields.supplier_name && !fields.supplier_vat_id) {
     checks.supplier_known = false;
     issues.push({
-      code:    'SUPPLIER_UNKNOWN',
-      field:   'supplier_name',
+      code: 'SUPPLIER_UNKNOWN',
+      field: 'supplier_name',
       message: 'Weder supplier_name noch supplier_vat_id gesetzt.',
     });
   }
 
   // ── document_date_plausible ──────────────────────────────────────────────
   if (fields.document_date) {
-    const date = new Date(fields.document_date + 'T00:00:00Z');
+    const date = new Date(`${fields.document_date}T00:00:00Z`);
     if (Number.isNaN(date.getTime())) {
       checks.document_date_plausible = false;
       issues.push({
-        code:    'DOCUMENT_DATE_INVALID',
-        field:   'document_date',
+        code: 'DOCUMENT_DATE_INVALID',
+        field: 'document_date',
         message: `Ungültiges Datum: ${fields.document_date}`,
       });
     } else {
@@ -125,8 +125,8 @@ export async function validate(
       if (date.getTime() < minMs || date.getTime() > maxMs) {
         checks.document_date_plausible = false;
         issues.push({
-          code:    'DOCUMENT_DATE_OUT_OF_RANGE',
-          field:   'document_date',
+          code: 'DOCUMENT_DATE_OUT_OF_RANGE',
+          field: 'document_date',
           message: `Datum ${fields.document_date} außerhalb [heute-5J, heute+1T].`,
         });
       }
@@ -144,12 +144,12 @@ export async function validate(
           AND receipt_id <> $4`,
       [ctx.customerId, fields.supplier_vat_id, fields.document_number, ctx.receiptId],
     );
-    const count = parseInt(rows[0]?.count ?? '0', 10);
+    const count = Number.parseInt(rows[0]?.count ?? '0', 10);
     if (count > 0) {
       checks.duplicate = true;
       issues.push({
-        code:    'DUPLICATE_RECEIPT',
-        field:   'document_number',
+        code: 'DUPLICATE_RECEIPT',
+        field: 'document_number',
         message: `Es existiert bereits ein Beleg ${fields.supplier_vat_id} / ${fields.document_number}.`,
       });
     }
@@ -160,8 +160,8 @@ export async function validate(
   if (fields.currency && !supported.includes(fields.currency)) {
     checks.currency_supported = false;
     issues.push({
-      code:    'CURRENCY_NOT_SUPPORTED',
-      field:   'currency',
+      code: 'CURRENCY_NOT_SUPPORTED',
+      field: 'currency',
       message: `Währung ${fields.currency} nicht in supported_currencies (${supported.join(', ')}).`,
     });
   }

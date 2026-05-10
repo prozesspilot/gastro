@@ -12,61 +12,61 @@
 
 import type { Pool } from 'pg';
 import { withTenant } from '../../core/db/tenant';
-import { buildPaginationMeta, type PaginationMeta } from '../../core/schemas/common';
+import { type PaginationMeta, buildPaginationMeta } from '../../core/schemas/common';
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
 export interface CreateDocumentInput {
-  customer_id?:   string | null;
-  storage_key:    string;
-  original_name:  string;
-  content_type:   string;
-  size_bytes:     number;
+  customer_id?: string | null;
+  storage_key: string;
+  original_name: string;
+  content_type: string;
+  size_bytes: number;
 }
 
 export type DocumentStatus = 'pending' | 'processing' | 'done' | 'error';
 
 export interface DocumentResponse {
-  id:            string;
-  tenant_id:     string;
-  customer_id:   string | null;
-  storage_key:   string;
+  id: string;
+  tenant_id: string;
+  customer_id: string | null;
+  storage_key: string;
   original_name: string;
-  content_type:  string;
-  size_bytes:    number;
-  status:        DocumentStatus;
+  content_type: string;
+  size_bytes: number;
+  status: DocumentStatus;
   error_message: string | null;
-  routing_tag:   string | null;
-  received_at:   string;
-  processed_at:  string | null;
-  created_at:    string;
-  updated_at:    string;
+  routing_tag: string | null;
+  received_at: string;
+  processed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ListDocumentsQuery {
-  page:     number;
-  limit:    number;
-  status?:  DocumentStatus;
+  page: number;
+  limit: number;
+  status?: DocumentStatus;
 }
 
 // ── Hilfsfunktion: Row → Response ─────────────────────────────────────────────
 
 function rowToResponse(row: Record<string, unknown>): DocumentResponse {
   return {
-    id:            row.id as string,
-    tenant_id:     row.tenant_id as string,
-    customer_id:   (row.customer_id as string | null) ?? null,
-    storage_key:   row.storage_key as string,
+    id: row.id as string,
+    tenant_id: row.tenant_id as string,
+    customer_id: (row.customer_id as string | null) ?? null,
+    storage_key: row.storage_key as string,
     original_name: row.original_name as string,
-    content_type:  row.content_type as string,
-    size_bytes:    Number(row.size_bytes),
-    status:        row.status as DocumentStatus,
+    content_type: row.content_type as string,
+    size_bytes: Number(row.size_bytes),
+    status: row.status as DocumentStatus,
     error_message: (row.error_message as string | null) ?? null,
-    routing_tag:   (row.routing_tag as string | null) ?? null,
-    received_at:   (row.received_at as Date).toISOString(),
-    processed_at:  row.processed_at ? (row.processed_at as Date).toISOString() : null,
-    created_at:    (row.created_at as Date).toISOString(),
-    updated_at:    (row.updated_at as Date).toISOString(),
+    routing_tag: (row.routing_tag as string | null) ?? null,
+    received_at: (row.received_at as Date).toISOString(),
+    processed_at: row.processed_at ? (row.processed_at as Date).toISOString() : null,
+    created_at: (row.created_at as Date).toISOString(),
+    updated_at: (row.updated_at as Date).toISOString(),
   };
 }
 
@@ -107,7 +107,7 @@ export async function findDocumentById(
 ): Promise<DocumentResponse | null> {
   return withTenant(pool, tenantId, async (client) => {
     const { rows } = await client.query<Record<string, unknown>>(
-      `SELECT * FROM document_inbox WHERE id = $1`,
+      'SELECT * FROM document_inbox WHERE id = $1',
       [id],
     );
     return rows[0] ? rowToResponse(rows[0]) : null;
@@ -137,10 +137,10 @@ export async function listDocuments(
       `SELECT COUNT(*) AS count FROM document_inbox ${where}`,
       conditionParams,
     );
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = Number.parseInt(countResult.rows[0].count, 10);
 
     const dataParams = [...conditionParams, query.limit, offset];
-    const limitIdx  = dataParams.length - 1;
+    const limitIdx = dataParams.length - 1;
     const offsetIdx = dataParams.length;
 
     const shiftedWhere = where; // keine key-Verschiebung nötig (kein Crypto)
@@ -156,7 +156,7 @@ export async function listDocuments(
     );
 
     return {
-      data:       rows.map(rowToResponse),
+      data: rows.map(rowToResponse),
       pagination: buildPaginationMeta(query.page, query.limit, total),
     };
   });
@@ -171,7 +171,7 @@ export async function updateDocumentStatus(
   errorMessage?: string | null,
 ): Promise<DocumentResponse | null> {
   return withTenant(pool, tenantId, async (client) => {
-    const sets: string[]   = ['status = $2', 'updated_at = now()'];
+    const sets: string[] = ['status = $2', 'updated_at = now()'];
     const params: unknown[] = [id, status];
 
     if (status === 'done' || status === 'error') {

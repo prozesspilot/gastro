@@ -22,13 +22,13 @@ export type ReceiptEventType =
   | 'pp.receipt.extraction_failed';
 
 export interface ReceiptEventData {
-  receipt_id:    string;
-  customer_id:   string;
-  status:        string;
-  confidence?:   number;
+  receipt_id: string;
+  customer_id: string;
+  status: string;
+  confidence?: number;
   supplier_name?: string;
-  total_gross?:  number;
-  trace_id?:     string;
+  total_gross?: number;
+  trace_id?: string;
 }
 
 export async function emitReceiptEvent(
@@ -39,7 +39,7 @@ export async function emitReceiptEvent(
   await publishEvent(redis, RECEIPT_STREAM, {
     type,
     customer_id: data.customer_id,
-    timestamp:   new Date().toISOString(),
-    payload:     JSON.stringify(data),
+    timestamp: new Date().toISOString(),
+    payload: JSON.stringify(data),
   });
 }

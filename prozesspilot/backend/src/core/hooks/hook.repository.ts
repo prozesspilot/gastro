@@ -10,15 +10,10 @@
  * stellt CRUD bereit, das hook.routes.ts exposed.
  */
 
-import type { Pool, PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
 
-import type {
-  CustomerHook,
-  HookConfig,
-  HookImplementation,
-  HookPoint,
-} from './hook.types';
+import type { CustomerHook, HookConfig, HookImplementation, HookPoint } from './hook.types';
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
@@ -166,11 +161,26 @@ export async function updateHook(
   const sets: string[] = [];
   const params: unknown[] = [customerId, hookId];
   let p = 3;
-  if (patch.hook_point !== undefined) { sets.push(`hook_point = $${p++}`); params.push(patch.hook_point); }
-  if (patch.implementation !== undefined) { sets.push(`implementation = $${p++}`); params.push(patch.implementation); }
-  if (patch.config !== undefined) { sets.push(`config = $${p++}::jsonb`); params.push(JSON.stringify(patch.config)); }
-  if (patch.enabled !== undefined) { sets.push(`enabled = $${p++}`); params.push(patch.enabled); }
-  if (patch.priority !== undefined) { sets.push(`priority = $${p++}`); params.push(patch.priority); }
+  if (patch.hook_point !== undefined) {
+    sets.push(`hook_point = $${p++}`);
+    params.push(patch.hook_point);
+  }
+  if (patch.implementation !== undefined) {
+    sets.push(`implementation = $${p++}`);
+    params.push(patch.implementation);
+  }
+  if (patch.config !== undefined) {
+    sets.push(`config = $${p++}::jsonb`);
+    params.push(JSON.stringify(patch.config));
+  }
+  if (patch.enabled !== undefined) {
+    sets.push(`enabled = $${p++}`);
+    params.push(patch.enabled);
+  }
+  if (patch.priority !== undefined) {
+    sets.push(`priority = $${p++}`);
+    params.push(patch.priority);
+  }
   if (sets.length === 0) {
     return findHookById(pool, customerId, hookId);
   }
@@ -182,13 +192,9 @@ export async function updateHook(
   return rows[0] ? rowToHook(rows[0]) : null;
 }
 
-export async function deleteHook(
-  pool: Pool,
-  customerId: string,
-  hookId: string,
-): Promise<boolean> {
+export async function deleteHook(pool: Pool, customerId: string, hookId: string): Promise<boolean> {
   const { rowCount } = await pool.query(
-    `DELETE FROM customer_hooks WHERE customer_id = $1 AND hook_id = $2`,
+    'DELETE FROM customer_hooks WHERE customer_id = $1 AND hook_id = $2',
     [customerId, hookId],
   );
   return (rowCount ?? 0) > 0;

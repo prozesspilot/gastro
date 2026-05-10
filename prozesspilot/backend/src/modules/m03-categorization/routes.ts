@@ -6,7 +6,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { buildCategorizeHandler, type CategorizeHandlerDeps } from './handlers/categorize.handler';
+import { type CategorizeHandlerDeps, buildCategorizeHandler } from './handlers/categorize.handler';
 
 export async function m03CategorizationRoutes(
   app: FastifyInstance,

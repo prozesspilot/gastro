@@ -6,11 +6,7 @@
  */
 
 import { z } from 'zod';
-import {
-  nonEmptyStringSchema,
-  optionalStringSchema,
-  uuidSchema,
-} from '../../core/schemas/common';
+import { nonEmptyStringSchema, optionalStringSchema, uuidSchema } from '../../core/schemas/common';
 
 // ── Einzelne Felder ────────────────────────────────────────────────────────
 
@@ -58,15 +54,18 @@ const receiptIdSchema = uuidSchema;
 
 export const createReceiptSchema = z.object({
   /** ID des Customers, zu dem dieser Receipt gehört */
-  customer_id:  customerIdSchema,
+  customer_id: customerIdSchema,
   /** Originaldateiname (optional) */
   original_name: originalNameSchema,
   /** MIME-Type der Datei (optional) */
-  mime_type:    mimeTypeSchema,
+  mime_type: mimeTypeSchema,
   /** Quelle des Belegs (optional, default: 'manual') */
-  source:       sourceSchema.optional(),
+  source: sourceSchema.optional(),
   /** SHA-256 Hash des Dateiinhalts (optional) — Dedup-Schlüssel */
-  file_sha256:  z.string().regex(/^[a-f0-9]{64}$/i, 'Muss 64-stelliger Hex-SHA256 sein').optional(),
+  file_sha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/i, 'Muss 64-stelliger Hex-SHA256 sein')
+    .optional(),
 });
 
 export type CreateReceiptInput = z.infer<typeof createReceiptSchema>;
@@ -75,7 +74,7 @@ export type CreateReceiptInput = z.infer<typeof createReceiptSchema>;
 
 export const updateReceiptStatusSchema = z.object({
   /** Neuer Status */
-  status:        statusSchema,
+  status: statusSchema,
   /** Fehlermeldung (optional, relevant bei status='error') */
   error_message: errorMessageSchema,
 });
@@ -97,13 +96,13 @@ export const listReceiptsQuerySchema = z.object({
   /** Filtern nach Customer-ID (optional) */
   customer_id: uuidSchema.optional(),
   /** Filtern nach Status (optional) */
-  status:      statusSchema.optional(),
+  status: statusSchema.optional(),
   /** Volltextsuche (optional) — sucht in original_name, vendor, category, ocr_text */
-  search:      z.string().trim().min(1).optional(),
+  search: z.string().trim().min(1).optional(),
   /** Pagination: Limit (default 20, max 100) */
-  limit:       z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
   /** Pagination: Offset (default 0) */
-  offset:      z.coerce.number().int().min(0).default(0),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 export type ListReceiptsQuery = z.infer<typeof listReceiptsQuerySchema>;
@@ -114,20 +113,20 @@ export type ListReceiptsQuery = z.infer<typeof listReceiptsQuerySchema>;
  * Receipt-Daten wie sie die API nach außen gibt.
  */
 export const receiptResponseSchema = z.object({
-  id:              uuidSchema,
-  tenant_id:       uuidSchema,
-  customer_id:     uuidSchema,
-  status:          statusSchema,
-  original_name:   z.string().nullable(),
-  mime_type:       z.string().nullable(),
-  storage_key:     z.string().nullable(),
+  id: uuidSchema,
+  tenant_id: uuidSchema,
+  customer_id: uuidSchema,
+  status: statusSchema,
+  original_name: z.string().nullable(),
+  mime_type: z.string().nullable(),
+  storage_key: z.string().nullable(),
   file_size_bytes: z.number().int().nullable(),
-  file_sha256:     z.string().nullable(),
-  source:          sourceSchema,
-  metadata:        z.record(z.unknown()).default({}),
-  error_message:   z.string().nullable(),
-  created_at:      z.string(),
-  updated_at:      z.string(),
+  file_sha256: z.string().nullable(),
+  source: sourceSchema,
+  metadata: z.record(z.unknown()).default({}),
+  error_message: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
 });
 
 export type ReceiptResponse = z.infer<typeof receiptResponseSchema>;
@@ -139,27 +138,27 @@ export type ReceiptResponse = z.infer<typeof receiptResponseSchema>;
  * Wird nur intern verwendet.
  */
 export interface ReceiptRow {
-  id:              string;
-  tenant_id:       string;
-  customer_id:     string;
-  status:          string;
-  original_name:   string | null;
-  mime_type:       string | null;
-  storage_key:     string | null;
+  id: string;
+  tenant_id: string;
+  customer_id: string;
+  status: string;
+  original_name: string | null;
+  mime_type: string | null;
+  storage_key: string | null;
   file_size_bytes: number | null;
-  file_sha256:     string | null;
-  source:          string;
-  metadata:        Record<string, unknown>;
-  error_message:   string | null;
-  created_at:      Date;
-  updated_at:      Date;
+  file_sha256: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  error_message: string | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 // ── Upload URL Response ────────────────────────────────────────────────────
 
 export const uploadUrlResponseSchema = z.object({
   uploadUrl: z.string().url(),
-  key:       z.string(),
+  key: z.string(),
 });
 
 export type UploadUrlResponse = z.infer<typeof uploadUrlResponseSchema>;
@@ -167,7 +166,7 @@ export type UploadUrlResponse = z.infer<typeof uploadUrlResponseSchema>;
 // ── Bulk-Status ────────────────────────────────────────────────────────────
 
 export const bulkStatusSchema = z.object({
-  ids:    z.array(uuidSchema).min(1).max(50),
+  ids: z.array(uuidSchema).min(1).max(50),
   status: statusSchema,
 });
 

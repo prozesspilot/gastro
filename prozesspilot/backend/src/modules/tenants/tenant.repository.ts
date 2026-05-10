@@ -12,17 +12,21 @@
  */
 
 import type { Pool } from 'pg';
-import type { CreateTenantInput, TenantResponse, UpdateTenantInput } from '../../core/schemas/tenant';
-import { buildPaginationMeta, type PaginationMeta } from '../../core/schemas/common';
+import { type PaginationMeta, buildPaginationMeta } from '../../core/schemas/common';
+import type {
+  CreateTenantInput,
+  TenantResponse,
+  UpdateTenantInput,
+} from '../../core/schemas/tenant';
 
 // ── Hilfsfunktion ─────────────────────────────────────────────────────────────
 
 function rowToResponse(row: Record<string, unknown>): TenantResponse {
   return {
-    id:         row.id as string,
-    slug:       row.slug as string,
-    name:       row.name as string,
-    active:     row.active as boolean,
+    id: row.id as string,
+    slug: row.slug as string,
+    name: row.name as string,
+    active: row.active as boolean,
     created_at: (row.created_at as Date).toISOString(),
     updated_at: (row.updated_at as Date).toISOString(),
   };
@@ -31,10 +35,7 @@ function rowToResponse(row: Record<string, unknown>): TenantResponse {
 // ── Repository-Funktionen ─────────────────────────────────────────────────────
 
 /** Neuen Mandanten anlegen. */
-export async function createTenant(
-  pool: Pool,
-  input: CreateTenantInput,
-): Promise<TenantResponse> {
+export async function createTenant(pool: Pool, input: CreateTenantInput): Promise<TenantResponse> {
   const { rows } = await pool.query<Record<string, unknown>>(
     `INSERT INTO tenants (slug, name)
      VALUES ($1, $2)
@@ -50,21 +51,21 @@ export async function listTenants(
   query: { page: number; limit: number; active?: boolean },
 ): Promise<{ data: TenantResponse[]; pagination: PaginationMeta }> {
   const conditions: string[] = [];
-  const params: unknown[]   = [];
+  const params: unknown[] = [];
 
   if (query.active !== undefined) {
     params.push(query.active);
     conditions.push(`active = $${params.length}`);
   }
 
-  const where  = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (query.page - 1) * query.limit;
 
   const countResult = await pool.query<{ count: string }>(
     `SELECT COUNT(*) AS count FROM tenants ${where}`,
     params,
   );
-  const total = parseInt(countResult.rows[0].count, 10);
+  const total = Number.parseInt(countResult.rows[0].count, 10);
 
   const dataParams = [...params, query.limit, offset];
   const { rows } = await pool.query<Record<string, unknown>>(
@@ -77,16 +78,13 @@ export async function listTenants(
   );
 
   return {
-    data:       rows.map(rowToResponse),
+    data: rows.map(rowToResponse),
     pagination: buildPaginationMeta(query.page, query.limit, total),
   };
 }
 
 /** Einzelnen Mandanten per ID laden. */
-export async function findTenantById(
-  pool: Pool,
-  id: string,
-): Promise<TenantResponse | null> {
+export async function findTenantById(pool: Pool, id: string): Promise<TenantResponse | null> {
   const { rows } = await pool.query<Record<string, unknown>>(
     `SELECT id, slug, name, active, created_at, updated_at
      FROM tenants WHERE id = $1`,
@@ -101,7 +99,7 @@ export async function updateTenant(
   id: string,
   input: UpdateTenantInput,
 ): Promise<TenantResponse | null> {
-  const sets:   string[]  = ['updated_at = now()'];
+  const sets: string[] = ['updated_at = now()'];
   const params: unknown[] = [id]; // $1 = id
 
   if (input.name !== undefined) {

@@ -31,10 +31,7 @@ export async function withTenant<T>(
   try {
     await client.query('BEGIN');
     // SET LOCAL gilt nur für die aktuelle Transaktion — kein Kontext-Leak
-    await client.query('SELECT set_config($1, $2, true)', [
-      'app.current_tenant_id',
-      tenantId,
-    ]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant_id', tenantId]);
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -63,10 +60,7 @@ export async function queryAsTenant(
   try {
     // SET LOCAL braucht eine offene Transaktion
     await client.query('BEGIN');
-    await client.query('SELECT set_config($1, $2, true)', [
-      'app.current_tenant_id',
-      tenantId,
-    ]);
+    await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant_id', tenantId]);
     const result = await client.query(text, values);
     await client.query('COMMIT');
     return result;

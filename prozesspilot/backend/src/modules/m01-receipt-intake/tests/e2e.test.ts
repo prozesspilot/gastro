@@ -24,7 +24,7 @@ vi.mock('../../../core/adapters/ocr/factory', () => {
   return {
     adapterFactory: {
       for: () => ({
-        id:      'google_vision',
+        id: 'google_vision',
         version: 'v1',
         extract: vi.fn(async () => ({
           raw_text: [
@@ -38,8 +38,8 @@ vi.mock('../../../core/adapters/ocr/factory', () => {
             'Gesamt                                      142.85 EUR',
           ].join('\n'),
           confidence: 0.96,
-          blocks:     [],
-          words:      [],
+          blocks: [],
+          words: [],
           page_count: 1,
         })),
       }),
@@ -51,49 +51,63 @@ import { m01ReceiptIntakeRoutes } from '../routes';
 
 // ── Fake DB ───────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id:      string;
-  customer_id:     string;
-  status:          string;
-  file_object_key: string;
-  file_sha256:     string;
-  payload:         Record<string, unknown>;
-  created_at:      Date;
-  updated_at:      Date;
+  id: string;
+  customer_id: string;
+  status: string;
+  storage_key: string;
+  file_sha256: string;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
 }
 
 interface FakeDb {
   receipts: FakeReceiptRow[];
-  audits:   { action: string; payload: unknown }[];
+  audits: { action: string; payload: unknown }[];
   reset(): void;
   query: ReturnType<typeof vi.fn>;
 }
 
 const fakeDb: FakeDb = {
   receipts: [],
-  audits:   [],
+  audits: [],
 
-  reset() { this.receipts = []; this.audits = []; },
+  reset() {
+    this.receipts = [];
+    this.audits = [];
+  },
 
   query: vi.fn(async (sql: string, params: unknown[] = []) => {
     if (/INSERT INTO audit_log/i.test(sql)) {
       fakeDb.audits.push({
-        action:  String(params[2]),
+        action: String(params[2]),
         payload: JSON.parse(String(params[4])),
       });
       return { rows: [] };
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [string, string, string, string, string];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
-      const updated = {
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
+      const updated: FakeReceiptRow = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
-        file_sha256:     sha,
-        payload:         JSON.parse(payloadJson),
-        updated_at:      new Date(),
+        storage_key: key,
+        file_sha256: sha,
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
+        updated_at: new Date(),
       };
       fakeDb.receipts[idx] = updated;
       return { rows: [updated] };
@@ -103,12 +117,12 @@ const fakeDb: FakeDb = {
       return { rows: [{ count: '0' }] };
     }
     if (/FROM\s+receipts/i.test(sql)) {
-      // findById: $1=receipt_id, $2=customer_id
-      // findByHash: $1=customer_id, $2=sha256
-      const isFindById = /receipt_id\s*=\s*\$1/i.test(sql);
+      // findById: WHERE id = $1 AND customer_id = $2
+      // findByHash: WHERE customer_id = $1 AND file_sha256 = $2
+      const isFindById = /WHERE\s+id\s*=\s*\$1/i.test(sql);
       if (isFindById) {
         const [id, cid] = params as [string, string];
-        const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+        const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
         return { rows: row ? [row] : [] };
       }
       const [cid, sha] = params as [string, string];
@@ -137,23 +151,22 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   app = Fastify({ logger: false });
-  app.decorate('db',    fakeDb as never);
+  app.decorate('db', fakeDb as never);
   app.decorate('redis', fakeRedis as never);
-  app.decorate('s3',    {} as never);
+  app.decorate('s3', {} as never);
 
-  app.addContentTypeParser(
-    'application/json',
-    { parseAs: 'buffer' },
-    (req, body, done) => {
-      (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
-      try { done(null, JSON.parse((body as Buffer).toString('utf-8'))); }
-      catch (err) { done(err as Error); }
-    },
-  );
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+    try {
+      done(null, JSON.parse((body as Buffer).toString('utf-8')));
+    } catch (err) {
+      done(err as Error);
+    }
+  });
 
   await app.register(m01ReceiptIntakeRoutes, {
     prefix: '/api/v1/receipts',
-    s3:     {} as never,
+    s3: {} as never,
   });
   await app.ready();
 });
@@ -166,24 +179,16 @@ beforeEach(() => {
   fakeDb.reset();
   vi.clearAllMocks();
 
-  // Test-Receipt im 'received'-Zustand
+  // Test-Receipt im 'received'-Zustand — neue ReceiptRow-Shape
   fakeDb.receipts.push({
-    receipt_id:      '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-    customer_id:     'cust_a3f4b2',
-    status:          'received',
-    file_object_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
-    file_sha256:     'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-    payload: {
-      receipt_id:  '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-      customer_id: 'cust_a3f4b2',
-      status:      'received',
-      file: {
-        object_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
-        mime_type:  'image/jpeg',
-        size_bytes: 1024,
-        sha256:     'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-      },
-    },
+    id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
+    customer_id: 'cust_a3f4b2',
+    status: 'received',
+    storage_key: 'cust_a3f4b2/originals/2026/04/01HVZ8X4M3R9K7N2P6T1Q5Y8B4.jpg',
+    file_sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
+    mime_type: 'image/jpeg',
+    file_size_bytes: 1024,
+    metadata: {},
     created_at: new Date(),
     updated_at: new Date(),
   });
@@ -195,16 +200,16 @@ describe('M01 E2E — POST /receipts/:id/extract', () => {
   it('Happy-Path: Beleg wird auf status=extracted gesetzt, Audit + Event geschrieben', async () => {
     const res = await app.inject({
       method: 'POST',
-      url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/extract',
+      url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/extract',
       headers: { 'content-type': 'application/json' },
       payload: {
         customer_profile: {
           customer_id: 'cust_a3f4b2',
-          package:     'standard',
+          package: 'standard',
           modules_enabled: ['M01'],
           integrations: { ocr: { provider: 'google_vision' } },
-          routing:     { default_currency: 'EUR', supported_currencies: ['EUR'] },
-          custom:      { supplier_overrides: { 'Metro AG': { skr: '3100' } } },
+          routing: { default_currency: 'EUR', supported_currencies: ['EUR'] },
+          custom: { supplier_overrides: { 'Metro AG': { skr: '3100' } } },
         },
         trace_id: 'trc_e2e_test',
       },
@@ -225,11 +230,13 @@ describe('M01 E2E — POST /receipts/:id/extract', () => {
     expect(extraction.fields.total_gross).toBe(142.85);
     expect(extraction.confidence).toBeGreaterThan(0.7);
 
-    // DB enthält das Update
+    // DB enthält das Update — neue Schema: extraction liegt unter metadata.extraction
     const stored = fakeDb.receipts[0];
     expect(stored.status).toMatch(/^(extracted|requires_review)$/);
-    expect((stored.payload as { extraction?: { fields?: { supplier_vat_id?: string } } }).extraction?.fields?.supplier_vat_id)
-      .toBe('DE123456789');
+    expect(
+      (stored.metadata.extraction as { fields?: { supplier_vat_id?: string } } | undefined)?.fields
+        ?.supplier_vat_id,
+    ).toBe('DE123456789');
 
     // audit_log enthält pp.receipt.extracted oder requires_review
     expect(fakeDb.audits.some((a) => a.action.startsWith('pp.receipt.'))).toBe(true);
@@ -243,7 +250,7 @@ describe('M01 E2E — POST /receipts/:id/extract', () => {
   it('lehnt unbekannten receipt_id mit 404 NOT_FOUND ab', async () => {
     const res = await app.inject({
       method: 'POST',
-      url:    '/api/v1/receipts/UNKNOWN/extract',
+      url: '/api/v1/receipts/UNKNOWN/extract',
       headers: { 'content-type': 'application/json' },
       payload: {
         customer_profile: { customer_id: 'cust_a3f4b2' },
@@ -257,7 +264,7 @@ describe('M01 E2E — POST /receipts/:id/extract', () => {
     fakeDb.receipts[0].status = 'archived';
     const res = await app.inject({
       method: 'POST',
-      url:    '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/extract',
+      url: '/api/v1/receipts/01HVZ8X4M3R9K7N2P6T1Q5Y8B4/extract',
       headers: { 'content-type': 'application/json' },
       payload: {
         customer_profile: { customer_id: 'cust_a3f4b2' },

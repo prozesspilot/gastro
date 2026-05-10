@@ -1,52 +1,60 @@
-import Fastify, { type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import Fastify, { type FastifyInstance } from 'fastify';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 import { hmacMiddleware } from './core/auth/hmac.middleware';
 import { config } from './core/config';
+import { setHookRunnerDeps } from './core/hooks/hook-runner';
+import { hookRoutes } from './core/hooks/hook.routes';
+import { requestLoggingPlugin } from './core/hooks/request-logging';
 import { logger } from './core/logger';
+import { httpRequestDuration, httpRequestsTotal, registry } from './core/metrics';
+import { captureException } from './core/sentry';
 import { startWorker as startWebhookWorker } from './core/webhooks/webhook.queue';
+import { internalCustomersRoutes } from './modules/_shared/customers/internal.routes';
+import { operatorNotificationsRoutes } from './modules/_shared/customers/notifications.routes';
+import { errorRoutes } from './modules/_shared/errors/error.routes';
+import { receiptsCompleteRoutes } from './modules/_shared/receipts/complete.routes';
+import { customerRoutes } from './modules/customers/customer.routes';
+import { documentRoutes } from './modules/documents/document.routes';
+import { dsgvoRoutes } from './modules/dsgvo/routes';
+import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
+import { m02ArchiveRoutes } from './modules/m02-archive/routes';
+import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
+import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
+import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
+import { m04DatevRoutes } from './modules/m04-datev/routes';
+import {
+  m05CustomerLexofficeRoutes,
+  m05IntegrationRoutes,
+  m05LexofficeRoutes,
+} from './modules/m05-lexoffice/routes';
+import { m06AdvisorPortalRoutes } from './modules/m06-advisor-portal/routes';
+import {
+  m06CustomerSevdeskRoutes,
+  m06IntegrationRoutes,
+  m06SevdeskRoutes,
+} from './modules/m06-sevdesk/routes';
+import { m07SpreadsheetRoutes } from './modules/m07-spreadsheet/routes';
+import { m08ReportingRoutes } from './modules/m08-reporting/routes';
+import {
+  m09CommunicationRoutes,
+  m09InboundWebhookRoutes,
+} from './modules/m09-supplier-comm/routes';
+import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
+import { m11ImapRoutes } from './modules/m11-imap/routes';
+import { pluginSystemRoutes } from './modules/plugin-system/routes';
+import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
+import { receiptRoutes } from './modules/receipts/receipt.routes';
+import { reportRoutes } from './modules/reports/report.routes';
+import { routingPlanRoutes } from './modules/routing/plan.routes';
+import { routingRoutes } from './modules/routing/routing.routes';
+import { statsRoutes } from './modules/stats/routes';
+import { tenantRoutes } from './modules/tenants/tenant.routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
 import { sseRoutes } from './routes/sse';
 import { webhookRoutes } from './routes/webhooks';
-import { customerRoutes } from './modules/customers/customer.routes';
-import { documentRoutes } from './modules/documents/document.routes';
-import {
-  internalProfileRoutes,
-  profileRoutes,
-} from './modules/profiles/profile.routes';
-import { routingRoutes } from './modules/routing/routing.routes';
-import { tenantRoutes } from './modules/tenants/tenant.routes';
-import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
-import { m11ImapRoutes }      from './modules/m11-imap/routes';
-import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
-import { m02ArchiveRoutes } from './modules/m02-archive/routes';
-import { m07SpreadsheetRoutes } from './modules/m07-spreadsheet/routes';
-import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
-import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
-import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
-import { m05LexofficeRoutes, m05CustomerLexofficeRoutes, m05IntegrationRoutes } from './modules/m05-lexoffice/routes';
-import { m06SevdeskRoutes, m06CustomerSevdeskRoutes, m06IntegrationRoutes } from './modules/m06-sevdesk/routes';
-import { m04DatevRoutes } from './modules/m04-datev/routes';
-import { m08ReportingRoutes } from './modules/m08-reporting/routes';
-import { routingPlanRoutes } from './modules/routing/plan.routes';
-import { receiptsCompleteRoutes } from './modules/_shared/receipts/complete.routes';
-import { internalCustomersRoutes } from './modules/_shared/customers/internal.routes';
-import { operatorNotificationsRoutes } from './modules/_shared/customers/notifications.routes';
-import { receiptRoutes } from './modules/receipts/receipt.routes';
-import { reportRoutes } from './modules/reports/report.routes';
-import { requestLoggingPlugin } from './core/hooks/request-logging';
-import { setHookRunnerDeps } from './core/hooks/hook-runner';
-import { hookRoutes } from './core/hooks/hook.routes';
-import { errorRoutes } from './modules/_shared/errors/error.routes';
-import { captureException } from './core/sentry';
-import { registry, httpRequestDuration, httpRequestsTotal } from './core/metrics';
-import { statsRoutes } from './modules/stats/routes';
-import { m06AdvisorPortalRoutes } from './modules/m06-advisor-portal/routes';
-import { pluginSystemRoutes } from './modules/plugin-system/routes';
-import { dsgvoRoutes } from './modules/dsgvo/routes';
-import { m09CommunicationRoutes, m09InboundWebhookRoutes } from './modules/m09-supplier-comm/routes';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -146,8 +154,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       global: true,
       max: 100,
       timeWindow: '1 minute',
-      keyGenerator: (req) =>
-        (req.headers['x-pp-tenant-id'] as string) || req.ip,
+      keyGenerator: (req) => (req.headers['x-pp-tenant-id'] as string) || req.ip,
       errorResponseBuilder: (_req, _ctx) => ({
         ok: false,
         error: {
@@ -176,72 +183,69 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   await app.register(
     async (apiApp) => {
       apiApp.addHook('preHandler', hmacMiddleware);
-      await apiApp.register(tenantRoutes,       { prefix: '/tenants' });
-      await apiApp.register(customerRoutes,    { prefix: '/customers' });
-      await apiApp.register(profileRoutes,         { prefix: '/customers' });
+      await apiApp.register(tenantRoutes, { prefix: '/tenants' });
+      await apiApp.register(customerRoutes, { prefix: '/customers' });
+      await apiApp.register(profileRoutes, { prefix: '/customers' });
       await apiApp.register(internalProfileRoutes, { prefix: '/internal' });
-      await apiApp.register(documentRoutes,    { prefix: '/documents' });
-      await apiApp.register(routingRoutes,     { prefix: '/routing' });
+      await apiApp.register(documentRoutes, { prefix: '/documents' });
+      await apiApp.register(routingRoutes, { prefix: '/routing' });
       await apiApp.register(m10WhatsAppRoutes, { prefix: '/internal/whatsapp' });
-      await apiApp.register(m11ImapRoutes,      { prefix: '/internal/imap' });
-      await apiApp.register(receiptRoutes,          { prefix: '/receipts' });
+      await apiApp.register(m11ImapRoutes, { prefix: '/internal/imap' });
+      await apiApp.register(receiptRoutes, { prefix: '/receipts' });
       await apiApp.register(m01ReceiptIntakeRoutes, { prefix: '/receipts' });
-      await apiApp.register(m02ArchiveRoutes,        { prefix: '/receipts' });
-      await apiApp.register(m03OcrRoutes,            { prefix: '/receipts' });
+      await apiApp.register(m02ArchiveRoutes, { prefix: '/receipts' });
+      await apiApp.register(m03OcrRoutes, { prefix: '/receipts' });
       // M03 Kategorisierung — Endpoint POST /receipts/:id/categorize
       await apiApp.register(m03CategorizationRoutes, { prefix: '/receipts' });
       // M03 Kategorien-Liste (GET /categories)
       await apiApp.register(categoriesRoutes, { prefix: '/categories' });
       // M05 Lexoffice-Push (POST /receipts/:id/exports/lexoffice)
-      await apiApp.register(m05LexofficeRoutes,             { prefix: '/receipts' });
+      await apiApp.register(m05LexofficeRoutes, { prefix: '/receipts' });
       // M05 Customer-Exports (GET /customers/:id/exports/lexoffice)
-      await apiApp.register(m05CustomerLexofficeRoutes,     { prefix: '/customers' });
+      await apiApp.register(m05CustomerLexofficeRoutes, { prefix: '/customers' });
       // M05 Integration-Test + Sync (POST /integrations/lexoffice/test|sync-categories)
-      await apiApp.register(m05IntegrationRoutes,           { prefix: '/integrations/lexoffice' });
+      await apiApp.register(m05IntegrationRoutes, { prefix: '/integrations/lexoffice' });
       // M06 sevDesk Push (POST /receipts/:id/exports/sevdesk)
-      await apiApp.register(m06SevdeskRoutes,               { prefix: '/receipts' });
+      await apiApp.register(m06SevdeskRoutes, { prefix: '/receipts' });
       // M06 Customer-Exports (GET /customers/:id/exports/sevdesk)
-      await apiApp.register(m06CustomerSevdeskRoutes,       { prefix: '/customers' });
+      await apiApp.register(m06CustomerSevdeskRoutes, { prefix: '/customers' });
       // M06 Integration-Test + Sync (POST /integrations/sevdesk/test|sync-accounts)
-      await apiApp.register(m06IntegrationRoutes,           { prefix: '/integrations/sevdesk' });
+      await apiApp.register(m06IntegrationRoutes, { prefix: '/integrations/sevdesk' });
       // M04 DATEV Export (POST/GET /customers/:id/datev/...)
-      await apiApp.register(m04DatevRoutes,                 { prefix: '/customers' });
+      await apiApp.register(m04DatevRoutes, { prefix: '/customers' });
       // /receipts/:id/complete (Master-Workflow Final-Status)
-      await apiApp.register(receiptsCompleteRoutes,  { prefix: '/receipts' });
-      await apiApp.register(m07SpreadsheetRoutes,    { prefix: '/receipts' });
-      await apiApp.register(reportRoutes,            { prefix: '/reports' });
+      await apiApp.register(receiptsCompleteRoutes, { prefix: '/receipts' });
+      await apiApp.register(m07SpreadsheetRoutes, { prefix: '/receipts' });
+      await apiApp.register(reportRoutes, { prefix: '/reports' });
       // M08 Monatsreporting (customer-scoped: /customers/:id/reports/...)
-      await apiApp.register(m08ReportingRoutes,      { prefix: '/customers' });
+      await apiApp.register(m08ReportingRoutes, { prefix: '/customers' });
       // Konzept-konformer Routing-Plan (parallel zu D9 routingRoutes /jobs)
-      await apiApp.register(routingPlanRoutes,       { prefix: '/routing' });
+      await apiApp.register(routingPlanRoutes, { prefix: '/routing' });
       // Internal-Endpoints für n8n (kein Tenant-Hook):
       // GET /api/v1/internal/customers, POST /api/v1/internal/notifications/operator
-      await apiApp.register(internalCustomersRoutes,    { prefix: '/internal' });
+      await apiApp.register(internalCustomersRoutes, { prefix: '/internal' });
       await apiApp.register(operatorNotificationsRoutes, { prefix: '/internal' });
       // Pro-Hook-CRUD
-      await apiApp.register(hookRoutes,                  { prefix: '/hooks' });
+      await apiApp.register(hookRoutes, { prefix: '/hooks' });
       // Error-Log (Pipeline-Fehler-Tracking)
-      await apiApp.register(errorRoutes,                 { prefix: '/errors' });
+      await apiApp.register(errorRoutes, { prefix: '/errors' });
       // Stats-Aggregationen (GET /customers/:customerId/stats)
-      await apiApp.register(statsRoutes,                 { prefix: '/customers' });
+      await apiApp.register(statsRoutes, { prefix: '/customers' });
       // M06 Steuerberater-Portal (GET/POST /advisor/...)
-      await apiApp.register(m06AdvisorPortalRoutes,      { prefix: '/advisor' });
+      await apiApp.register(m06AdvisorPortalRoutes, { prefix: '/advisor' });
       // Plugin-System (POST/GET/PUT/DELETE /plugins/...)
-      await apiApp.register(pluginSystemRoutes,           { prefix: '/plugins' });
+      await apiApp.register(pluginSystemRoutes, { prefix: '/plugins' });
       // DSGVO-Compliance (POST/GET /dsgvo/...)
-      await apiApp.register(dsgvoRoutes,                  { prefix: '/dsgvo' });
+      await apiApp.register(dsgvoRoutes, { prefix: '/dsgvo' });
       // M09 Lieferanten-Kommunikation (POST/GET /communications/...)
-      await apiApp.register(m09CommunicationRoutes,       { prefix: '/communications' });
+      await apiApp.register(m09CommunicationRoutes, { prefix: '/communications' });
     },
     { prefix: '/api/v1' },
   );
 
   // Webhook-Retry-Worker — nicht im Test, um zufällige DB-Zugriffe nach
   // Test-Cleanup zu vermeiden.
-  const stopWorker =
-    config.NODE_ENV === 'test'
-      ? (): void => undefined
-      : startWebhookWorker(db);
+  const stopWorker = config.NODE_ENV === 'test' ? (): void => undefined : startWebhookWorker(db);
 
   app.addHook('onClose', async () => {
     stopWorker();

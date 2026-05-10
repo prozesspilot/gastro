@@ -7,8 +7,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
-import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk, zodToApiError } from '../../../core/schemas/common';
 
 const bodySchema = z.object({
   advisor_id: z.string().min(1),
@@ -40,7 +40,7 @@ export function buildCommentsHandler() {
     try {
       // Advisor prüfen + tenant_id holen
       const advisorRow = await db.query<{ advisor_id: string; tenant_id: string }>(
-        `SELECT advisor_id, tenant_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1`,
+        'SELECT advisor_id, tenant_id FROM tax_advisor_users WHERE advisor_id = $1 LIMIT 1',
         [advisor_id],
       );
       if (!advisorRow.rows[0]) {
@@ -50,7 +50,7 @@ export function buildCommentsHandler() {
 
       // Receipt laden
       const receiptRow = await db.query<{ receipt_id: string; customer_id: string }>(
-        `SELECT receipt_id, customer_id FROM receipts WHERE receipt_id = $1 LIMIT 1`,
+        'SELECT receipt_id, customer_id FROM receipts WHERE receipt_id = $1 LIMIT 1',
         [receiptId],
       );
       if (!receiptRow.rows[0]) {
@@ -65,9 +65,7 @@ export function buildCommentsHandler() {
         [advisor_id, customerId],
       );
       if (!accessRow.rows[0]) {
-        return reply
-          .code(403)
-          .send(apiError('FORBIDDEN', 'Kein Zugang zu diesem Kunden.'));
+        return reply.code(403).send(apiError('FORBIDDEN', 'Kein Zugang zu diesem Kunden.'));
       }
 
       // Kommentar speichern

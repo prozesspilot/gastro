@@ -19,13 +19,16 @@ import type { AnthropicLikeClient, AnthropicMessageResponse } from '../services/
 
 // ── Fake DB ──────────────────────────────────────────────────────────────────
 
+// New DB row shape matching receipt.repository.ts ReceiptRow
 interface FakeReceiptRow {
-  receipt_id: string;
+  id: string;
   customer_id: string;
   status: string;
-  file_object_key: string;
+  storage_key: string;
   file_sha256: string;
-  payload: Record<string, unknown>;
+  mime_type: string;
+  file_size_bytes: number;
+  metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -64,8 +67,20 @@ const fakeDb: FakeDb = {
   audits: [],
   suppliers: [],
   categories: [
-    { category_id: 'wareneinkauf_food', label_de: 'Wareneinkauf Lebensmittel', default_skr03: '3100', default_skr04: '5100', default_tax_key: '9' },
-    { category_id: 'sonstige_aufwand', label_de: 'Sonstige Betriebskosten', default_skr03: '4980', default_skr04: '6300', default_tax_key: '9' },
+    {
+      category_id: 'wareneinkauf_food',
+      label_de: 'Wareneinkauf Lebensmittel',
+      default_skr03: '3100',
+      default_skr04: '5100',
+      default_tax_key: '9',
+    },
+    {
+      category_id: 'sonstige_aufwand',
+      label_de: 'Sonstige Betriebskosten',
+      default_skr03: '4980',
+      default_skr04: '6300',
+      default_tax_key: '9',
+    },
   ],
   customer_categories: [],
   categorization_cache: new Map(),
@@ -90,27 +105,38 @@ const fakeDb: FakeDb = {
       return { rows: v ? [{ result: v }] : [] };
     }
     if (/UPDATE\s+receipts/i.test(sql)) {
-      const [id, status, key, sha, payloadJson] = params as [string, string, string, string, string];
-      const idx = fakeDb.receipts.findIndex((r) => r.receipt_id === id);
+      // UPDATE params: [$1=id, $2=status, $3=storage_key, $4=file_sha256, $5=metaPatchJson]
+      const [id, status, key, sha, metaPatchJson] = params as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const idx = fakeDb.receipts.findIndex((r) => r.id === id);
       if (idx === -1) return { rows: [] };
+      const patch = JSON.parse(metaPatchJson) as Record<string, unknown>;
       fakeDb.receipts[idx] = {
         ...fakeDb.receipts[idx],
         status,
-        file_object_key: key,
+        storage_key: key,
         file_sha256: sha,
-        payload: JSON.parse(payloadJson),
+        metadata: { ...fakeDb.receipts[idx].metadata, ...patch },
         updated_at: new Date(),
       };
       return { rows: [fakeDb.receipts[idx]] };
     }
     if (/SELECT[\s\S]*FROM\s+receipts/i.test(sql)) {
+      // findById: WHERE id = $1 AND customer_id = $2
       const [id, cid] = params as [string, string];
-      const row = fakeDb.receipts.find((r) => r.receipt_id === id && r.customer_id === cid);
+      const row = fakeDb.receipts.find((r) => r.id === id && r.customer_id === cid);
       return { rows: row ? [row] : [] };
     }
     if (/customer_categories/i.test(sql)) {
       const [cid, catId] = params as [string, string];
-      const row = fakeDb.customer_categories.find((r) => r.customer_id === cid && r.category_id === catId);
+      const row = fakeDb.customer_categories.find(
+        (r) => r.customer_id === cid && r.category_id === catId,
+      );
       return { rows: row ? [row] : [] };
     }
     if (/categories/i.test(sql) && /label_de|default_skr03/i.test(sql)) {
@@ -128,15 +154,21 @@ const fakeDb: FakeDb = {
       });
       if (!row) return { rows: [] };
       return {
-        rows: [{
-          supplier_id: row.supplier_id,
-          vat_id: row.vat_id,
-          display_name: row.display_name,
-          default_category: row.default_category,
-          default_skr: row.default_skr,
-          match_kind: vat && row.vat_id === vat ? 'vat_id' :
-                      name && row.display_name.toLowerCase() === name.toLowerCase() ? 'name' : 'alias',
-        }],
+        rows: [
+          {
+            supplier_id: row.supplier_id,
+            vat_id: row.vat_id,
+            display_name: row.display_name,
+            default_category: row.default_category,
+            default_skr: row.default_skr,
+            match_kind:
+              vat && row.vat_id === vat
+                ? 'vat_id'
+                : name && row.display_name.toLowerCase() === name.toLowerCase()
+                  ? 'name'
+                  : 'alias',
+          },
+        ],
       };
     }
     return { rows: [] };
@@ -157,7 +189,9 @@ interface BuildOpts {
   anthropicResponses?: Array<AnthropicMessageResponse | Error>;
 }
 
-function buildAnthropicMock(responses?: Array<AnthropicMessageResponse | Error>): AnthropicLikeClient {
+function buildAnthropicMock(
+  responses?: Array<AnthropicMessageResponse | Error>,
+): AnthropicLikeClient {
   let i = 0;
   return {
     messages: {
@@ -174,7 +208,9 @@ function buildAnthropicMock(responses?: Array<AnthropicMessageResponse | Error>)
   };
 }
 
-async function buildTestApp(opts: BuildOpts = {}): Promise<{ app: FastifyInstance; client: AnthropicLikeClient }> {
+async function buildTestApp(
+  opts: BuildOpts = {},
+): Promise<{ app: FastifyInstance; client: AnthropicLikeClient }> {
   const app = Fastify({ logger: false });
   app.decorate('db', fakeDb as never);
   app.decorate('redis', fakeRedis as never);
@@ -221,7 +257,14 @@ function makeProfile(custom: ProfileOverrides = {}, threshold = 0.75) {
   };
 }
 
-function seedExtractedReceipt(overrides: { supplier_name?: string; supplier_vat_id?: string | null; status?: string; meta?: Record<string, unknown> } = {}) {
+function seedExtractedReceipt(
+  overrides: {
+    supplier_name?: string;
+    supplier_vat_id?: string | null;
+    status?: string;
+    meta?: Record<string, unknown>;
+  } = {},
+) {
   const fields = {
     supplier_name: overrides.supplier_name ?? 'Generic Lieferant GmbH',
     supplier_vat_id: overrides.supplier_vat_id ?? null,
@@ -234,22 +277,14 @@ function seedExtractedReceipt(overrides: { supplier_name?: string; supplier_vat_
     line_items: [{ description: 'Mehl', qty: 4, unit_price: 18.5 }],
   };
   fakeDb.receipts.push({
-    receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
+    id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
     customer_id: 'cust_a3f4b2',
     status: overrides.status ?? 'extracted',
-    file_object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
+    storage_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
     file_sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-    payload: {
-      receipt_id: '01HVZ8X4M3R9K7N2P6T1Q5Y8B4',
-      customer_id: 'cust_a3f4b2',
-      schema_version: '1.0',
-      status: overrides.status ?? 'extracted',
-      file: {
-        object_key: 'cust_a3f4b2/originals/2026/04/foo.jpg',
-        mime_type: 'image/jpeg',
-        size_bytes: 1024,
-        sha256: 'f3b8a91c2d7e44bb9a1c3f5a92e5f3d7c8b1a2e9f4b5d6c7a8e9f0b1c2d3e4f5',
-      },
+    mime_type: 'image/jpeg',
+    file_size_bytes: 1024,
+    metadata: {
       extraction: { fields },
       ...(overrides.meta ? { meta: overrides.meta } : {}),
     },
@@ -351,7 +386,9 @@ describe('M03 categorize.handler', () => {
     const claude: AnthropicMessageResponse = {
       content: [
         {
-          type: 'tool_use', id: 't1', name: 'categorize_receipt',
+          type: 'tool_use',
+          id: 't1',
+          name: 'categorize_receipt',
           input: {
             category: 'wareneinkauf_food',
             category_label: 'Wareneinkauf Lebensmittel',
@@ -408,7 +445,9 @@ describe('M03 categorize.handler', () => {
     const lowResponse: AnthropicMessageResponse = {
       content: [
         {
-          type: 'tool_use', id: 't1', name: 'categorize_receipt',
+          type: 'tool_use',
+          id: 't1',
+          name: 'categorize_receipt',
           input: {
             category: 'sonstige_aufwand',
             category_label: 'Sonstige Betriebskosten',
@@ -491,7 +530,12 @@ describe('M03 categorize.handler', () => {
     seedExtractedReceipt({ supplier_name: 'Brandneuer Lieferant' });
     const profile = makeProfile({
       ai_categorization_examples: [
-        { supplier: 'BIO-Hof Müller', items_pattern: 'Tomaten, Salat', category: 'wareneinkauf_food', skr: '3100' },
+        {
+          supplier: 'BIO-Hof Müller',
+          items_pattern: 'Tomaten, Salat',
+          category: 'wareneinkauf_food',
+          skr: '3100',
+        },
       ],
     });
     const isolated = await buildTestApp({ anthropicResponses: [VALID_CLAUDE] });
@@ -505,7 +549,8 @@ describe('M03 categorize.handler', () => {
 
     expect(res.statusCode).toBe(200);
     expect(isolated.client.messages.create).toHaveBeenCalledTimes(1);
-    const callArgs = (isolated.client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+    const callArgs = (isolated.client.messages.create as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
     const userMessage = callArgs.messages.find((m) => m.role === 'user')?.content ?? '';
@@ -549,7 +594,11 @@ describe('M03 categorize.handler', () => {
       package: 'standard',
       modules_enabled: ['M03'],
       integrations: {},
-      routing: { skr_chart: 'SKR03' as const, low_confidence_threshold: 0.75, ki_kategorisierung: true },
+      routing: {
+        skr_chart: 'SKR03' as const,
+        low_confidence_threshold: 0.75,
+        ki_kategorisierung: true,
+      },
       // custom fehlt absichtlich
     };
     const isolated = await buildTestApp({ anthropicResponses: [VALID_CLAUDE] });

@@ -13,9 +13,9 @@ import {
   verifyHmac,
 } from '../../src/core/auth/hmac';
 
-const SECRET    = 'a'.repeat(64); // 32-Byte-Hex-String (64 Hex-Zeichen)
+const SECRET = 'a'.repeat(64); // 32-Byte-Hex-String (64 Hex-Zeichen)
 const TIMESTAMP = '1717000000';
-const NOW       = 1717000000;     // identisch → Skew = 0
+const NOW = 1717000000; // identisch → Skew = 0
 
 function makeOpts(overrides: Partial<Parameters<typeof verifyHmac>[0]> = {}) {
   const rawBody = Buffer.from('{"test":true}');
@@ -24,14 +24,14 @@ function makeOpts(overrides: Partial<Parameters<typeof verifyHmac>[0]> = {}) {
   const signature = computeSignature(SECRET, canonical);
 
   return {
-    secret:         SECRET,
+    secret: SECRET,
     maxSkewSeconds: 300,
-    method:         'POST',
-    url:            '/api/v1/customers',
-    timestamp:      TIMESTAMP,
+    method: 'POST',
+    url: '/api/v1/customers',
+    timestamp: TIMESTAMP,
     signature,
     rawBody,
-    nowSeconds:     NOW,
+    nowSeconds: NOW,
     ...overrides,
   };
 }
@@ -129,10 +129,10 @@ describe('verifyHmac', () => {
 
   it('lehnt eine Signatur mit falschem Secret ab', () => {
     const wrongSecret = 'b'.repeat(64);
-    const rawBody  = Buffer.from('{"test":true}');
+    const rawBody = Buffer.from('{"test":true}');
     const bodyHash = sha256Hex(rawBody);
     const canonical = buildCanonicalString('POST', '/api/v1/customers', TIMESTAMP, bodyHash);
-    const wrongSig  = computeSignature(wrongSecret, canonical);
+    const wrongSig = computeSignature(wrongSecret, canonical);
 
     const result = verifyHmac(makeOpts({ signature: wrongSig }));
     expect(result.ok).toBe(false);
@@ -147,16 +147,20 @@ describe('verifyHmac', () => {
   });
 
   it('akzeptiert GET-Anfragen mit leerem Body', () => {
-    const rawBody  = Buffer.alloc(0);
+    const rawBody = Buffer.alloc(0);
     const bodyHash = sha256Hex(rawBody);
     const canonical = buildCanonicalString('GET', '/api/v1/customers', TIMESTAMP, bodyHash);
     const signature = computeSignature(SECRET, canonical);
 
     const result = verifyHmac({
-      secret: SECRET, maxSkewSeconds: 300,
-      method: 'GET', url: '/api/v1/customers',
-      timestamp: TIMESTAMP, signature,
-      rawBody, nowSeconds: NOW,
+      secret: SECRET,
+      maxSkewSeconds: 300,
+      method: 'GET',
+      url: '/api/v1/customers',
+      timestamp: TIMESTAMP,
+      signature,
+      rawBody,
+      nowSeconds: NOW,
     });
     expect(result.ok).toBe(true);
   });

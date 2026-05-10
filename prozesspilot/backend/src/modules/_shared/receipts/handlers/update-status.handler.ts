@@ -15,12 +15,12 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Pool } from 'pg';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 import { z } from 'zod';
 
-import { apiError, apiOk, zodToApiError } from '../../../../core/schemas/common';
 import { publishEvent } from '../../../../core/events/publisher';
+import { apiError, apiOk, zodToApiError } from '../../../../core/schemas/common';
 import * as receiptRepo from '../receipt.repository';
 import type { Receipt } from '../receipt.repository';
 
@@ -110,5 +110,7 @@ async function writeAuditRow(
 }
 
 function asAuditEvents(v: unknown): { at: string; type: string; actor: string; note?: string }[] {
-  return Array.isArray(v) ? (v as { at: string; type: string; actor: string; note?: string }[]) : [];
+  return Array.isArray(v)
+    ? (v as { at: string; type: string; actor: string; note?: string }[])
+    : [];
 }

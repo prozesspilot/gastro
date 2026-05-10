@@ -49,9 +49,9 @@ describe('Smoke — /metrics (B2: Prometheus-Scrape)', () => {
 
     // Muss mind. Default-Metriken enthalten
     const body = res.body;
-    expect(body).toContain('pp_');       // ProzessPilot-Namespace
-    expect(body).toContain('# HELP');    // Prometheus-Format
-    expect(body).toContain('# TYPE');    // Prometheus-Format
+    expect(body).toContain('pp_'); // ProzessPilot-Namespace
+    expect(body).toContain('# HELP'); // Prometheus-Format
+    expect(body).toContain('# TYPE'); // Prometheus-Format
   });
 
   it('GET /metrics enthält HTTP-Request-Metriken', async () => {

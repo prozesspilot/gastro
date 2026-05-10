@@ -40,7 +40,7 @@ export async function checkExpectedReceipts(
   }) => Promise<void>,
 ): Promise<{ checked: number; reminded: number }> {
   const { rows: expected } = await db.query<ExpectedReceipt>(
-    `SELECT * FROM expected_receipts WHERE customer_id = $1 AND active = true`,
+    'SELECT * FROM expected_receipts WHERE customer_id = $1 AND active = true',
     [customerId],
   );
 
@@ -64,14 +64,16 @@ export async function checkExpectedReceipts(
       }
 
       // Zeitraum bestimmen
-      const period = entry.cadence === 'monthly'
-        ? `${currentYear}-${String(currentMonth).padStart(2, '0')}`
-        : `Q${Math.ceil(currentMonth / 3)} ${currentYear}`;
+      const period =
+        entry.cadence === 'monthly'
+          ? `${currentYear}-${String(currentMonth).padStart(2, '0')}`
+          : `Q${Math.ceil(currentMonth / 3)} ${currentYear}`;
 
       // Prüfe ob in diesem Zeitraum ein Beleg von diesem Lieferant eingegangen ist
-      const periodStart = entry.cadence === 'monthly'
-        ? new Date(currentYear, currentMonth - 1, 1)
-        : new Date(currentYear, Math.floor((currentMonth - 1) / 3) * 3, 1);
+      const periodStart =
+        entry.cadence === 'monthly'
+          ? new Date(currentYear, currentMonth - 1, 1)
+          : new Date(currentYear, Math.floor((currentMonth - 1) / 3) * 3, 1);
 
       const { rows: receipts } = await db.query<{ receipt_id: string }>(
         `SELECT r.receipt_id
@@ -117,7 +119,10 @@ export async function checkExpectedReceipts(
       });
       reminded++;
     } catch (err) {
-      logger.warn({ err, expected_id: entry.expected_id, customerId }, 'expected-checker: Fehler bei Eintrag');
+      logger.warn(
+        { err, expected_id: entry.expected_id, customerId },
+        'expected-checker: Fehler bei Eintrag',
+      );
     }
   }
 

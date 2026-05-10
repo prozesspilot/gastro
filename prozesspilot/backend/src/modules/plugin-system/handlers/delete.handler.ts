@@ -4,8 +4,8 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { apiError, apiOk } from '../../../core/schemas/common';
 import { logger } from '../../../core/logger';
+import { apiError, apiOk } from '../../../core/schemas/common';
 
 export function buildDeleteHandler() {
   return async function deleteHandler(
@@ -23,36 +23,28 @@ export function buildDeleteHandler() {
     try {
       // Prüfen ob Plugin dem Tenant gehört
       const { rows: existing } = await db.query(
-        `SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2`,
+        'SELECT plugin_id FROM plugin_registry WHERE plugin_id = $1 AND tenant_id = $2',
         [pluginId, tenantId],
       );
 
       if (existing.length === 0) {
-        return reply.code(404).send(
-          apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`),
-        );
+        return reply.code(404).send(apiError('NOT_FOUND', `Plugin ${pluginId} nicht gefunden`));
       }
 
       // Ausfuehrungs-Historie loeschen (FK-Constraint)
-      await db.query(
-        `DELETE FROM plugin_executions WHERE plugin_id = $1`,
-        [pluginId],
-      );
+      await db.query('DELETE FROM plugin_executions WHERE plugin_id = $1', [pluginId]);
 
       // Plugin loeschen
-      await db.query(
-        `DELETE FROM plugin_registry WHERE plugin_id = $1`,
-        [pluginId],
-      );
+      await db.query('DELETE FROM plugin_registry WHERE plugin_id = $1', [pluginId]);
 
       logger.info({ plugin_id: pluginId, tenant_id: tenantId }, 'Plugin geloescht');
 
       return reply.send(apiOk({ deleted: true, plugin_id: pluginId }));
     } catch (err) {
       logger.error({ err, pluginId, tenantId }, 'Plugin-Loeschung fehlgeschlagen');
-      return reply.code(500).send(
-        apiError('INTERNAL_ERROR', 'Plugin konnte nicht geloescht werden'),
-      );
+      return reply
+        .code(500)
+        .send(apiError('INTERNAL_ERROR', 'Plugin konnte nicht geloescht werden'));
     }
   };
 }

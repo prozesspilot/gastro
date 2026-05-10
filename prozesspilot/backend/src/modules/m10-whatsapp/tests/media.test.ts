@@ -17,9 +17,9 @@ import type { MetaGraphClient } from '../services/meta-graph.client';
 
 vi.mock('../services/credential.service', () => ({
   loadWaCredential: vi.fn(async () => ({
-    credentialId:    'cred_test_1',
-    accessToken:     'EAAtest-token',
-    phoneNumberId:   '123456789012345',
+    credentialId: 'cred_test_1',
+    accessToken: 'EAAtest-token',
+    phoneNumberId: '123456789012345',
     graphApiVersion: 'v19.0',
   })),
   CredentialNotFoundError: class extends Error {
@@ -32,8 +32,8 @@ vi.mock('../services/credential.service', () => ({
 vi.mock('../../../core/storage/storage.service', () => ({
   uploadObject: vi.fn(async (_client, key: string, body: Buffer, contentType: string) => ({
     key,
-    bucket:       'prozesspilot-raw',
-    size_bytes:   body.length,
+    bucket: 'prozesspilot-raw',
+    size_bytes: body.length,
     content_type: contentType,
   })),
   createS3Client: vi.fn(() => ({}) as never),
@@ -45,15 +45,15 @@ import { uploadObject } from '../../../core/storage/storage.service';
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 const SAMPLE_BYTES = Buffer.from('JPEGFAKEBYTES_FOR_TESTING_PURPOSE');
-const SAMPLE_SHA   = sha256Hex(SAMPLE_BYTES);
+const SAMPLE_SHA = sha256Hex(SAMPLE_BYTES);
 
 function makeMetaClient(overrides: Partial<MetaGraphClient> = {}): MetaGraphClient {
   return {
     getMediaMeta: vi.fn(async () => ({
-      url:        'https://lookaside.fbsbx.com/whatsapp/test',
-      mime_type:  'image/jpeg',
-      sha256:     SAMPLE_SHA,
-      file_size:  SAMPLE_BYTES.length,
+      url: 'https://lookaside.fbsbx.com/whatsapp/test',
+      mime_type: 'image/jpeg',
+      sha256: SAMPLE_SHA,
+      file_size: SAMPLE_BYTES.length,
     })),
     downloadMediaBytes: vi.fn(async () => SAMPLE_BYTES),
     sendTemplateMessage: vi.fn(async () => ({ message_id: 'wamid.MOCK' })),
@@ -62,10 +62,10 @@ function makeMetaClient(overrides: Partial<MetaGraphClient> = {}): MetaGraphClie
 }
 
 interface FakeReceiptRow {
-  receipt_id:      string;
+  receipt_id: string;
   file_object_key: string;
-  file_sha256:     string;
-  payload:         { file?: { mime_type?: string; size_bytes?: number } };
+  file_sha256: string;
+  payload: { file?: { mime_type?: string; size_bytes?: number } };
 }
 
 function fakeDb(receipts: FakeReceiptRow[]) {
@@ -74,9 +74,7 @@ function fakeDb(receipts: FakeReceiptRow[]) {
       if (/FROM receipts/i.test(sql)) {
         const customerId = params[0] as string;
         const sha = params[1] as string;
-        const matched = receipts.filter(
-          (r) => r.file_sha256 === sha && customerId.length > 0,
-        );
+        const matched = receipts.filter((r) => r.file_sha256 === sha && customerId.length > 0);
         return { rows: matched };
       }
       return { rows: [] };
@@ -133,10 +131,10 @@ describe('downloadMedia (M10 §8.1)', () => {
 
     // Wir simulieren, dass jetzt ein Receipt mit diesem sha existiert.
     receipts.push({
-      receipt_id:      '01HVZTEST',
+      receipt_id: '01HVZTEST',
       file_object_key: first.object_key,
-      file_sha256:     first.sha256,
-      payload:         { file: { mime_type: 'image/jpeg', size_bytes: SAMPLE_BYTES.length } },
+      file_sha256: first.sha256,
+      payload: { file: { mime_type: 'image/jpeg', size_bytes: SAMPLE_BYTES.length } },
     });
 
     const second = await downloadMedia(
@@ -161,9 +159,9 @@ describe('downloadMedia (M10 §8.1)', () => {
     // Meta lügt über sha256 → uns interessiert der echte Hash der Bytes
     const lyingMeta = makeMetaClient({
       getMediaMeta: vi.fn(async () => ({
-        url:       'https://x.test/file',
+        url: 'https://x.test/file',
         mime_type: 'image/jpeg',
-        sha256:    'deadbeef'.repeat(8),
+        sha256: 'deadbeef'.repeat(8),
         file_size: SAMPLE_BYTES.length,
       })),
     });

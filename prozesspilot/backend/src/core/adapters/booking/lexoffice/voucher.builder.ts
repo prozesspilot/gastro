@@ -48,10 +48,10 @@ export function buildLexofficeVoucher(input: BuildVoucherInput): LexofficeVouche
   ].filter(Boolean);
 
   return {
-    type: 'expense',
+    type: 'purchaseinvoice',
     voucherNumber: fields.document_number ?? receipt.receipt_id,
     voucherDate: fields.document_date ?? new Date().toISOString().slice(0, 10),
-    shippingDate: fields.document_date,
+    // shippingDate: nicht erlaubt für purchaseinvoice (Lexoffice 406)
     dueDate: fields.document_date,
     totalGrossAmount: totalGross,
     totalTaxAmount: totalTax,

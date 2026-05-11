@@ -48,6 +48,7 @@ import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile
 import { receiptRoutes } from './modules/receipts/receipt.routes';
 import { reportRoutes } from './modules/reports/report.routes';
 import { routingPlanRoutes } from './modules/routing/plan.routes';
+import { createS3Client } from './core/storage/storage.service';
 import { routingRoutes } from './modules/routing/routing.routes';
 import { statsRoutes } from './modules/stats/routes';
 import { tenantRoutes } from './modules/tenants/tenant.routes';
@@ -80,6 +81,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
 
   app.decorate('db', db);
   app.decorate('redis', redis);
+  app.decorate('s3', createS3Client());
 
   // Hook-Runner verdrahten — lädt customer_hooks aus DB, signiert HTTP-Hooks.
   setHookRunnerDeps({ pool: db, pgcryptoKey: config.PP_PGCRYPTO_KEY });

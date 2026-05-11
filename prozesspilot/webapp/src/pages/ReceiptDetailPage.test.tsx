@@ -112,6 +112,7 @@ const MOCK_RECEIPT_ARCHIVED = {
   source: 'manual',
   metadata: {},
   error_message: null,
+  original_path: 'tenant-001/receipt-archived-id/archiviert-beleg.pdf',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };

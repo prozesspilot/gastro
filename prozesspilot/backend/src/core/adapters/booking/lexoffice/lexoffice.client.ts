@@ -86,12 +86,12 @@ export class LexofficeClient {
   }
 
   async listCategories(): Promise<LexofficeCategory[]> {
-    const res = await this.requestJson<{ categories?: LexofficeCategory[] } | LexofficeCategory[]>(
+    const res = await this.requestJson<{ content?: LexofficeCategory[] } | LexofficeCategory[]>(
       'GET',
-      '/v1/categories',
+      '/v1/posting-categories',
     );
     if (Array.isArray(res)) return res;
-    return res.categories ?? [];
+    return res.content ?? [];
   }
 
   async findContactByVatId(vatId: string): Promise<{ id: LexofficeUuid } | null> {

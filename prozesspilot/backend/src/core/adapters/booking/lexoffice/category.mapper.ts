@@ -98,24 +98,26 @@ function pickByHeuristic(
 ): { id: string; name: string } | null {
   // SKR03-Bereiche → Heuristische Substring-Suche im Lexoffice-Namen
   // (Lexoffice-Kategorien sind in DE benannt).
+  // Lexoffice-Kategorienamen (Deutsch) — aus /v1/posting-categories abgeleitet
   const map: Record<string, string[]> = {
-    '3100': ['warenein', 'lebensmittel'],
-    '3200': ['warenein'],
+    '3100': ['wareneinkauf', 'lebensmittel', 'waren'],
+    '3200': ['wareneinkauf', 'handelswaren'],
+    '4200': ['raumkosten', 'miete', 'pacht'],
     '4210': ['miete', 'pacht'],
-    '4240': ['energie', 'strom', 'gas'],
-    '4985': ['reinigung', 'wartung'],
-    '4360': ['versicherung'],
-    '4530': ['kfz', 'fahrz'],
-    '4600': ['werbung', 'marketing'],
-    '4970': ['beratung', 'buchhaltung'],
-    '4980': ['sonstige'],
-    '4900': ['fortbildung', 'schulung'],
-    '4100': ['lohn', 'personal'],
+    '4240': ['energie', 'strom', 'gas', 'heizung'],
+    '4985': ['reinigung', 'wartung', 'instandhaltung'],
+    '4360': ['versicherung', 'haftpflicht'],
+    '4530': ['kfz', 'fahrzeug', 'kraftfahrzeug'],
+    '4600': ['werbung', 'marketing', 'reklame'],
+    '4970': ['beratung', 'buchhaltung', 'steuerberatung'],
+    '4980': ['sonstige ausgaben', 'sonstige betrieb'],
+    '4900': ['fortbildung', 'schulung', 'weiterbildung'],
+    '4100': ['lohn', 'gehalt', 'personal'],
   };
   const needles = map[skrAccount];
   if (!needles) return null;
 
-  const expense = cats.filter((c) => /expense/i.test(c.type));
-  const candidates = expense.filter((c) => needles.some((n) => c.name.toLowerCase().includes(n)));
+  // Kein type-Filter — Lexoffice gibt Typen auf Deutsch zurück
+  const candidates = cats.filter((c) => needles.some((n) => c.name.toLowerCase().includes(n)));
   return candidates[0] ?? null;
 }

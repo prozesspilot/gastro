@@ -15,10 +15,10 @@ export interface LexofficeVoucherItem {
 }
 
 export interface LexofficeVoucher {
-  type: 'expense'; // M05 immer 'expense' (eingehende Rechnung)
+  type: 'purchaseinvoice'; // M05 immer 'purchaseinvoice' (Eingangsrechnung)
   voucherNumber: string;
   voucherDate: string; // YYYY-MM-DD
-  shippingDate?: string; // optional
+  // shippingDate: nicht erlaubt für purchaseinvoice
   dueDate?: string; // optional
   totalGrossAmount: number;
   totalTaxAmount: number;

@@ -92,9 +92,10 @@ export function buildSyncCategoriesHandler() {
       });
       const categories = await client.listCategories();
 
-      // Upsert alle Expense-Kategorien für den Kunden
+      // Upsert alle Kategorien für den Kunden (type-Filter entfernt —
+      // Lexoffice gibt Typen auf Deutsch zurück, kein 'expense')
       let synced = 0;
-      for (const cat of categories.filter((c) => /expense/i.test(c.type))) {
+      for (const cat of categories) {
         await db
           .query(
             `INSERT INTO lexoffice_category_map (customer_id, skr_account, lexoffice_category_id, category_name, source)

@@ -81,6 +81,28 @@ export const receiptHandlers = [
     }, { status: 201 }),
   ),
 
+  http.post(`${BASE}/receipts/:id/file`, ({ params }) =>
+    HttpResponse.json({
+      ok: true,
+      data: {
+        id:              params['id'],
+        tenant_id:       'tenant-001',
+        customer_id:     'cust-001',
+        status:          'received',
+        original_name:   'test.pdf',
+        mime_type:       'application/pdf',
+        storage_key:     `tenant-001/${params['id']}/test.pdf`,
+        file_size_bytes: 7,
+        file_sha256:     'a1b2c3',
+        source:          'manual',
+        metadata:        {},
+        error_message:   null,
+        created_at:      '2024-01-01T00:00:00Z',
+        updated_at:      '2024-01-01T00:00:01Z',
+      },
+    }),
+  ),
+
   http.put(`${BASE}/receipts/:id/status`, ({ params }) =>
     HttpResponse.json({
       ok: true,

@@ -30,7 +30,8 @@ interface ConnectionRow {
   detail: string;
 }
 
-const N8N_URL = 'http://localhost:5678';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const N8N_URL = import.meta.env.VITE_N8N_URL || 'http://localhost:5678';
 
 const TOGGLE_STORAGE_KEY = 'pp_processing_settings';
 
@@ -676,13 +677,13 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
-          <a href="http://localhost:3000/api/v1/health" target="_blank" rel="noopener noreferrer">
+          <a href={`${API_URL}/api/v1/health`} target="_blank" rel="noopener noreferrer">
             🩺 Health-Check
           </a>
           <a href={N8N_URL} target="_blank" rel="noopener noreferrer">
             🔄 n8n öffnen
           </a>
-          <a href="http://localhost:3000/docs" target="_blank" rel="noopener noreferrer">
+          <a href={`${API_URL}/docs`} target="_blank" rel="noopener noreferrer">
             📚 API-Dokumentation
           </a>
         </div>

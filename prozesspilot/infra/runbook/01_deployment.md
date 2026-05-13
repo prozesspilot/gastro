@@ -385,3 +385,48 @@ curl -s https://n8n.example.com/healthz | jq .status
 # Datenbank-Tabellen vorhanden
 psql $DATABASE_URL -c "\dt" | grep receipts
 ```
+
+---
+
+## Memory-Monitoring
+
+ProzessPilot laeuft auf einem 4 GB RAM-Server mit 4 GB Swap. Redis + n8n +
+Backend + Postgres koennen zusammen bei Last >3 GB erreichen. Der
+Memory-Check-Cron verhindert OOM-Kills durch fruehzeitige Benachrichtigung.
+
+### Cron-Eintrag einrichten
+
+```bash
+# Als deploy-User auf dem Server:
+crontab -e
+```
+
+Folgenden Eintrag hinzufuegen:
+
+```cron
+*/10 * * * * /opt/prozesspilot/infra/scripts/memory-check.sh >> /var/log/prozesspilot-memory.log 2>&1
+```
+
+Das Skript schickt einen Alert (Mail oder Log-Eintrag) wenn RAM-Auslastung
+ueber 85 % steigt. Konfigurierbar per ENV in `infra/scripts/memory-check.sh`.
+
+### Manuelle Pruefung
+
+```bash
+# Aktuelle RAM-Auslastung
+free -h
+
+# Top-Prozesse nach RAM
+ps aux --sort=-%mem | head -10
+
+# Docker-Container-Stats
+docker stats --no-stream
+```
+
+### Threshold-Anpassung
+
+```bash
+# Threshold in memory-check.sh aendern (Default: 85):
+nano /opt/prozesspilot/infra/scripts/memory-check.sh
+# RAM_THRESHOLD=85  ← anpassen
+```

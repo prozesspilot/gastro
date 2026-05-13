@@ -3,16 +3,35 @@ dist/
 build/
 .next/
 *.tsbuildinfo
+
+# Environment files (incl. backups — never push secrets)
 .env
 .env.local
 .env.*.local
+.env.prod
+.env.bak*
+*.env.bak*
+
+# Logs
 *.log
 logs/
+
+# OS / Editor
 .DS_Store
 Thumbs.db
+.vscode/settings.json
+.idea/
+
+# Test / coverage artifacts
 coverage/
 .nyc_output/
 playwright-report/
 test-results/
-.vscode/settings.json
-.idea/
+
+# Local backups (do not push)
+*.bak
+*.bak-*
+*.backup
+prozesspilot.bak-vor-audit-fix/
+**/migrations-dead-backup-*.tar.gz
+*.tar.gz

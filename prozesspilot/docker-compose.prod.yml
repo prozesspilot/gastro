@@ -126,6 +126,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_N8N_URL: ${VITE_N8N_URL:-http://localhost:5678}
     restart: always
     ports:
       - "80:80"

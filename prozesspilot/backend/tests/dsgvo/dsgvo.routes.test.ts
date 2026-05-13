@@ -1,0 +1,63 @@
+/**
+ * M12 — DSGVO Routes Smoke-Tests
+ *
+ * Stub-Tests die sicherstellen, dass das Modul korrekt in die App registriert
+ * ist und die Endpunkte erreichbar sind.
+ *
+ * Diese Tests laufen ohne echte DB-Verbindung — DB-Fehler sind erwartet.
+ */
+
+import type { FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildApp } from '../../src/app';
+
+describe('M12 — DSGVO-Routes (Smoke)', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await buildApp();
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('Modul geladen: GET /api/v1/dsgvo/pii-inventory antwortet (kein 404)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/dsgvo/pii-inventory',
+      headers: { 'x-tenant-id': 'test-tenant-id' },
+    });
+    expect(res.statusCode).not.toBe(404);
+  });
+
+  it('Modul geladen: GET /api/v1/dsgvo/export-data antwortet (kein 404)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/dsgvo/export-data',
+      headers: { 'x-tenant-id': 'test-tenant-id' },
+    });
+    expect(res.statusCode).not.toBe(404);
+  });
+
+  it('POST /api/v1/dsgvo/delete-request antwortet (kein 404)', async () => {
+    // DECISION: Body kann leer sein — wir testen nur Routing, kein Inhalt
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/dsgvo/delete-request',
+      headers: { 'content-type': 'application/json', 'x-tenant-id': 'test-tenant-id' },
+      payload: {},
+    });
+    expect(res.statusCode).not.toBe(404);
+  });
+
+  it('Auth-Bypass aktiv (PP_AUTH_DISABLED=1): kein 401 bei Endpunkten', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/dsgvo/pii-inventory',
+      headers: { 'x-tenant-id': 'test-tenant-id' },
+    });
+    expect(res.statusCode).not.toBe(401);
+  });
+});

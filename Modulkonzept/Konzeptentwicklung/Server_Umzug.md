@@ -8,6 +8,8 @@
 
 ## 0 · Vorab-Entscheidungen (5 min)
 
+> **Staging-Server:** Aktuell nur 1 Production-VPS geplant (Solo-Dev, 1 Pilot-Kunde). Staging-Infrastruktur wird erst ab 3+ zahlenden Tenants aufgebaut (Entscheidung F3, 2026-05-12).
+
 Beantworte diese drei Fragen, bevor du loslegst:
 
 - [ ] **Hosting:** **IONOS VPS 4-4-120** (Default — EU, DSGVO, 4 vCore + 4 GB RAM + 120 GB NVMe) / Hetzner Cloud / AWS / eigener Server?
@@ -256,8 +258,9 @@ WHATSAPP_GRAPH_API_VERSION=v21.0
 # Sentry (optional)
 SENTRY_DSN=
 
-# Webapp
+# Webapp (Vite Build-Zeit — werden als Docker Build-Args übergeben, nicht Runtime)
 VITE_API_URL=https://api.deinedomain.de
+VITE_N8N_URL=https://n8n.deinedomain.de
 ```
 
 - [ ] **Niemals** `.env.prod` ins Git pushen (steht schon in `.gitignore`):

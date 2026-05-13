@@ -1,4 +1,4 @@
-# 05 — Roadmap (IST-Stand 2026-05-07)
+# 05 — Roadmap (IST-Stand 2026-05-12, post-fix)
 
 > **Hinweis:** Dieses Dokument hat sich gewandelt. Es war ursprünglich ein 16-Wochen-Plan ("SOLL"). Da die Implementierung schneller fertig wurde als geplant, ist es jetzt eine **IST-Übersicht** + nächste Schritte.
 
@@ -60,22 +60,22 @@ Alle 10 Sprint-0-Deliverables aus [Foundation_Spec.md](Foundation_Spec.md) sind 
 
 Vor dem ersten Pilotkunden:
 
-- [ ] Uncommitted Changes (20 Files) reviewen + commiten
+- [x] Uncommitted Changes reviewen + commiten — erledigt 2026-05-12 (Commits A–E)
 - [x] Tote Refactor-Reste raus (m04-categorize, leeres _foundation/) — erledigt 2026-05-07
-- [x] Konzept-Doku ↔ Code synchronisieren — erledigt 2026-05-07
-- [ ] CI-Pipeline grün auf main (`npm test` + Playwright in GitHub Actions)
-- [ ] Audit-Subagent (`/audit-konzept`) für künftige Drifts einrichten
+- [x] Konzept-Doku ↔ Code synchronisieren — erledigt 2026-05-12 (post-fix)
+- [x] CI-Pipeline grün auf main (`npm test` + Playwright in GitHub Actions) — erledigt 2026-05-12
+- [x] Audit-Subagent (`/audit-konzept`) für künftige Drifts einrichten — erledigt 2026-05-12
 
-### 2.1b Phase A+ — M14 User-Verwaltung + Auth (~2–3 Tage)
+### 2.1b Phase A+ — M14 User-Verwaltung + Auth (ERLEDIGT 2026-05-12)
 
-**Vor Phase B (Server-Deployment) zwingend nötig**, weil aktuelles Login nur ein Tenant-Select-Platzhalter ist:
+**Vor Phase B (Server-Deployment) zwingend nötig** — abgeschlossen:
 
-- [ ] M14-Spec ([`modules/M14_User_Verwaltung_Auth.md`](modules/M14_User_Verwaltung_Auth.md)) an Claude Code übergeben — schrittweise nach §14 der Spec
-- [ ] Migration `031_users_auth.sql` + Bootstrap super_admin
-- [ ] Backend `core/auth/` (JWT, argon2, Permissions) + `modules/users/`
-- [ ] Frontend AuthContext + LoginPage + UsersPage umbauen / neu anlegen
-- [ ] Playwright-E2E-Test grün
-- [ ] Initial-super_admin per ENV anlegen, Login durchklicken
+- [x] M14-Spec ([`modules/M14_User_Verwaltung_Auth.md`](modules/M14_User_Verwaltung_Auth.md)) umgesetzt
+- [x] Migration `031_users_auth.sql` + `031b_bootstrap_super_admin.sql` (bootstrap via CLI, kein INSERTin Migration — Sicherheitsentscheidung F2)
+- [x] Backend `core/auth/` (JWT HS256, argon2id, Permissions, HMAC dual-auth) + `modules/users/`
+- [x] Frontend AuthContext + LoginPage + UsersPage + ChangePasswordPage + UserMenu
+- [x] E2E-Tests (auth.e2e.ts) angelegt
+- [ ] Initial-super_admin per `npm run bootstrap:super-admin` anlegen (User-Action — erst auf Production-Server)
 
 ### 2.2 Phase B — Server-Deployment (3–5 Tage)
 
@@ -115,6 +115,8 @@ Sobald 5+ Kunden live sind:
 - [ ] HA-Setup (n8n + Backend in 2 Replicas, Postgres-Replica)
 - [ ] Self-Service-Onboarding in der Webapp (heute: Operator-Onboarding)
 - [ ] DSGVO-Lösch-Workflow Audit (M12 ist da, regelmäßig durchprüfen)
+- [ ] Refactor: `m06-advisor-portal/` → `m13-advisor-portal/` (Konventions-Korrektur — aktuell wegen Stabilität verschoben, erst bei nächstem Refactor-Sprint, F1-Entscheidung 2026-05-12)
+- [ ] Staging-Server einrichten (erst ab 3+ zahlenden Tenants relevant, F3-Entscheidung 2026-05-12)
 
 ---
 

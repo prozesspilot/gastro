@@ -1,4 +1,4 @@
-# ProzessPilot — Architektur (IST-Stand 2026-05-07)
+# ProzessPilot — Architektur (IST-Stand 2026-05-12, post-fix)
 
 > Dieses Verzeichnis enthält die vollständige Architektur von ProzessPilot.
 > Jede Datei ist so gehalten, dass sie **einzeln** an Claude Code übergeben werden kann.
@@ -12,13 +12,13 @@ Live-Übersicht in [STATUS.html](STATUS.html).
 
 | Bereich            | Stand                                                                 |
 |--------------------|-----------------------------------------------------------------------|
-| Module M01–M10     | ✅ implementiert (Code + Migration + n8n-Workflow + Tests)            |
+| Module M01–M14     | ✅ implementiert (Code + Migration + n8n-Workflow + Tests)            |
 | Webapp             | ✅ implementiert (React + Vite + Playwright, Production-Build)        |
 | n8n-Workflows      | ✅ 17 Workflows produktionsbereit                                      |
-| Postgres-Migrations| ✅ 30 Migrationen                                                      |
+| Postgres-Migrations| ✅ 33 Migrationen (inkl. 031_users_auth + 031b_bootstrap)             |
 | Infra              | ✅ Runbooks, Backup, ADRs, Security-Checklist, Load-Tests              |
 | Plugin-System (Pro)| ✅ implementiert                                                       |
-| DSGVO / M11 / Advisor-Portal | ✅ im Code (Specs nachgezogen — siehe `modules/`)            |
+| M11 / M12 / M13 / M14 | ✅ alle implementiert (inkl. JWT-Auth, User-CRUD, ChangePassword)  |
 | Nächster Schritt   | Server-Deployment + erster Pilotkunde (siehe [05_Roadmap.md](05_Roadmap.md)) |
 
 ---
@@ -52,7 +52,7 @@ Konzeptentwicklung/
     ├── M11_IMAP_Eingang.md            ← (nachgezogen 2026-05-07)
     ├── M12_DSGVO.md                   ← (nachgezogen 2026-05-07)
     ├── M13_Steuerberater_Portal.md    ← (nachgezogen 2026-05-07)
-    └── M14_User_Verwaltung_Auth.md    ← (Spec, Implementierung steht aus)
+    └── M14_User_Verwaltung_Auth.md    ← (implementiert 2026-05-12)
 ```
 
 ---
@@ -154,7 +154,7 @@ prozesspilot/
 | M11 | IMAP / E-Mail Eingang                   | Basic+         | Cron / Webhook             | `backend/src/modules/m11-imap/`              |
 | M12 | DSGVO-Workflows                         | alle Pakete    | Manual / API               | `backend/src/modules/dsgvo/`                 |
 | M13 | Steuerberater-Portal                    | Pro            | API (advisor.exports.read) | `backend/src/modules/m06-advisor-portal/`    |
-| M14 | User-Verwaltung & Auth (⬜ noch nicht impl.) | alle Pakete | Login + REST              | `backend/src/modules/users/` + `webapp/src/auth/` |
+| M14 | User-Verwaltung & Auth                      | alle Pakete | Login + REST              | `backend/src/modules/users/` + `webapp/src/auth/` |
 | —   | Plugin-System                           | Pro            | Workflow-Dispatch          | `backend/src/modules/plugin-system/`         |
 
 > Hinweis: M03 ist auf zwei Ordner aufgeteilt (`m03-categorization` für KI-Logik, `m03-ocr` für den OCR-Endpoint). Beide sind aktiv und in `app.ts` registriert. M13 lebt aus historischen Gründen unter `m06-advisor-portal/` — das ist ein separates Modul, kein sevDesk-Submodul.

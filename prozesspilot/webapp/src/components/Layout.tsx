@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { fetchReceiptStats, fetchTenants, getActiveTenantId } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
 import GlobalSearch from './GlobalSearch';
 import UserMenu from './UserMenu';
@@ -42,6 +43,11 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// Nav-Einträge die Permissions erfordern (werden dynamisch eingeblendet)
+const PERMISSIONED_NAV: Array<NavSpec & { permission: string; group: string }> = [
+  { to: '/users', icon: '👥', label: 'Benutzer', permission: 'users.read', group: 'Verwaltung' },
+];
+
 const NAV_BOTTOM: NavSpec[] = [
   { to: '/settings', icon: '⚙️', label: 'Einstellungen' },
 ];
@@ -51,6 +57,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const breadcrumb = buildBreadcrumb(location.pathname);
   const [pendingCount, setPendingCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { hasPermission } = useAuth();
 
   useKeyboardShortcut(['Mod+k'], () => setSearchOpen(true));
 
@@ -103,19 +110,26 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-section" aria-label="Primäre Navigation">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label}>
-              <div className="sidebar-section-label">{group.label}</div>
-              {group.items.map((item) => (
-                <NavItem
-                  key={item.to}
-                  item={item}
-                  showPendingDot={item.to === '/receipts' && pendingCount > 0}
-                  pendingCount={item.to === '/receipts' ? pendingCount : 0}
-                />
-              ))}
-            </div>
-          ))}
+          {NAV_GROUPS.map((group) => {
+            // Füge Permissioned-Items zur entsprechenden Gruppe hinzu
+            const extraItems = PERMISSIONED_NAV
+              .filter((p) => p.group === group.label && hasPermission(p.permission))
+              .map(({ permission: _p, group: _g, ...item }) => item);
+            const items = [...group.items, ...extraItems];
+            return (
+              <div key={group.label}>
+                <div className="sidebar-section-label">{group.label}</div>
+                {items.map((item) => (
+                  <NavItem
+                    key={item.to}
+                    item={item}
+                    showPendingDot={item.to === '/receipts' && pendingCount > 0}
+                    pendingCount={item.to === '/receipts' ? pendingCount : 0}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         <nav className="sidebar-section" style={{ marginTop: 'auto', paddingBottom: 0 }} aria-label="Konfiguration">
@@ -203,6 +217,7 @@ function buildBreadcrumb(path: string): ReactNode[] {
     settings:     'Einstellungen',
     advisor:      'Steuerberater-Portal',
     communications: 'Lieferanten-Kommunikation',
+    users:        'Benutzer',
   };
 
   const crumbs: ReactNode[] = [];

@@ -1,8 +1,13 @@
 # ProzessPilot — Backend
 
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/OWNER/REPO/actions/workflows/codeql.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/codeql.yml)
+
 Modulares Automationssystem für Buchhaltungsprozesse.
 
 Stack: Node 20 · TypeScript strict · Fastify · Vitest · pino · Zod · pg · ioredis · @aws-sdk/client-s3 · biome
+
+> Badge-URLs nutzen Platzhalter `OWNER/REPO` — beim ersten Push auf GitHub durch den echten Pfad ersetzen.
 
 ---
 

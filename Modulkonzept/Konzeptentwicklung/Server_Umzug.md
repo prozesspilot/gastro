@@ -10,28 +10,32 @@
 
 Beantworte diese drei Fragen, bevor du loslegst:
 
-- [ ] **Hosting:** Hetzner Cloud (Empfehlung — EU, DSGVO, ~6 €/Monat) / AWS / DigitalOcean / eigener Server?
+- [ ] **Hosting:** **IONOS VPS 4-4-120** (Default — EU, DSGVO, 4 vCore + 4 GB RAM + 120 GB NVMe) / Hetzner Cloud / AWS / eigener Server?
 - [ ] **Domain:** Schon vorhanden? Wenn ja: welche? Wenn nein: bei einem Registrar (z. B. INWX, Namecheap) holen.
 - [ ] **WhatsApp Meta-Verifizierung:** Schon angestoßen? Wenn nicht — **JETZT** starten, dauert 2–3 Wochen, läuft parallel zum Server-Setup.
 
-> Wenn du die Empfehlung folgst (Hetzner + neue Domain), kostet dich der Umzug ca. 4 Stunden plus Wartezeiten (DNS-Propagierung, SSL-Ausstellung).
+> Empfehlung: IONOS VPS 4-4-120 + neue Domain → Umzug ca. 4 Stunden plus Wartezeiten (DNS-Propagierung, SSL-Ausstellung).
+> **Wichtig (4 GB RAM):** Swap-Setup ist Pflicht, siehe Schritt 2.
 
 ---
 
 ## 1 · Server bestellen (15 min)
 
-Annahme: Hetzner Cloud. Bei anderem Anbieter analoge Schritte.
+**Annahme: IONOS VPS Linux M (4-4-120).** Für andere Anbieter analog vorgehen.
 
-- [ ] [Hetzner Cloud Console](https://console.hetzner.cloud) öffnen, Account anlegen
-- [ ] Neues Projekt anlegen: „ProzessPilot"
+- [ ] [IONOS Cloud Panel](https://login.ionos.de/) öffnen, Vertrag prüfen.
 - [ ] **Server bestellen:**
-  - Standort: Falkenstein (FSN1) oder Nürnberg (NBG1) — beide EU
+  - Standort: Frankfurt oder Berlin (beide EU/DSGVO)
   - Image: **Ubuntu 22.04 LTS**
-  - Typ: **CX22** (4 GB RAM, 2 vCPU, 40 GB SSD — reicht für 10–20 Tenants)
+  - Typ: **VPS Linux M (4-4-120)** — 4 vCore, 4 GB RAM, 120 GB NVMe
   - SSH-Key: dein eigener Public-Key hochladen (wenn du keinen hast: `ssh-keygen -t ed25519` lokal)
-  - Backups: **AKTIVIEREN** (+20 % Kosten, automatische tägliche Snapshots)
-  - Name: `prozesspilot-prod-01`
+  - Backup-Add-On: **zubuchen** (separat zu buchen, ~3 €/Monat) — IONOS-Backups
+    sind kein Default!
+  - Hostname: `prozesspilot-prod-01`
 - [ ] IPv4-Adresse notieren
+- [ ] **Reverse-DNS** (falls Mail-Versand aus dem Backend geplant): im Cloud
+      Panel unter „Server → Netzwerk → Reverse-DNS" den FQDN setzen, sonst
+      werden ausgehende Mails von Gmail/Microsoft als Spam markiert.
 - [ ] Erste SSH-Verbindung testen:
 
 ```bash
@@ -50,6 +54,22 @@ Direkt auf dem Server (per SSH).
 ```bash
 apt update && apt upgrade -y
 ```
+
+- [ ] **Swap einrichten (4 GB RAM-Host — Pflicht!).** Skript liegt im Repo,
+      aber bei IONOS ist das Repo noch nicht ausgecheckt — daher inline:
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo sysctl -w vm.swappiness=10
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+free -h   # zeigt 4 GB Swap
+```
+
+Nach Repo-Clone alternativ: `bash infra/scripts/setup-swap.sh` (idempotent).
 
 - [ ] User anlegen, SSH-Login auf Root deaktivieren:
 
@@ -470,6 +490,34 @@ End-to-End-Validierung:
 - [ ] **In Drive prüfen:** PDF erscheint < 60 s
 - [ ] **In Sheet prüfen:** Zeile erscheint
 - [ ] **Bestätigung via WhatsApp** zurück
+
+---
+
+## 11b · Memory-Monitoring einrichten (5 min — IONOS 4 GB Pflicht)
+
+Bei 4 GB RAM ist Memory-Druck der wahrscheinlichste Outage-Grund. Daher
+täglicher Cron-Check, der bei > 85 % Auslastung eine Mail schickt.
+
+```bash
+sudo crontab -e
+```
+
+```cron
+*/15 * * * * /opt/prozesspilot/infra/scripts/memory-check.sh
+```
+
+Mail-Versand setzt voraus, dass `mail` (mailutils/postfix) installiert ist:
+
+```bash
+sudo apt install -y mailutils
+```
+
+Threshold und Empfänger anpassbar via ENV:
+
+```bash
+export MEM_ALERT_THRESHOLD=85
+export MEM_ALERT_EMAIL=s.andreas-k@hotmail.de
+```
 
 ---
 

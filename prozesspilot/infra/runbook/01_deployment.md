@@ -9,12 +9,27 @@ in einer Produktionsumgebung.
 
 ### Server-Anforderungen
 
-| Ressource | Minimum         | Empfohlen        |
-|-----------|-----------------|------------------|
-| CPU       | 2 vCPU          | 4 vCPU           |
-| RAM       | 4 GB            | 8 GB             |
-| Disk      | 40 GB SSD       | 100 GB SSD       |
-| OS        | Ubuntu 22.04 LTS | Ubuntu 22.04 LTS |
+| Ressource | Minimum (IONOS-Default) | Empfohlen        |
+|-----------|-------------------------|------------------|
+| CPU       | 4 vCore (IONOS 4-4-120) | 4 vCPU           |
+| RAM       | 4 GB + **4 GB Swap**    | 8 GB             |
+| Disk      | 120 GB NVMe             | 100 GB+ SSD/NVMe |
+| OS        | Ubuntu 22.04 LTS        | Ubuntu 22.04 LTS |
+
+### IONOS-spezifische Hinweise
+
+1. **Cloud Panel Login**: <https://login.ionos.de/> → „Server & Cloud" →
+   passenden Server auswählen.
+2. **Image-Wahl**: Ubuntu 22.04 LTS (Default für VPS Linux M).
+3. **Backup-Add-On**: muss explizit zugebucht werden (~3 €/Monat). Default
+   ist OHNE Backup. Im Cloud Panel: „Server → Backup-Optionen → aktivieren".
+4. **IPv4 Reverse-DNS**: für ausgehende Mail-Zustellung wichtig — im Cloud
+   Panel „Server → Netzwerk → Reverse-DNS → FQDN setzen" (z. B.
+   `api.deinedomain.de`). Ohne PTR landen Reporting-Mails im Spam.
+5. **Swap-Setup (Pflicht bei 4 GB)**: nach dem ersten Boot
+   `bash infra/scripts/setup-swap.sh` (idempotent).
+6. **Memory-Check-Cron**: `infra/scripts/memory-check.sh` alle 15 min als
+   Cron registrieren (Alert > 85 %).
 
 ### Benoetigte Software
 

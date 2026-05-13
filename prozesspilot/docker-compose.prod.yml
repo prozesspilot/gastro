@@ -1,7 +1,9 @@
-version: "3.9"
-
 # DECISION: Interne Services (postgres, redis, minio) sind nicht nach außen
 # erreichbar. Nur webapp (80/443) und n8n (5678) sind extern zugänglich.
+#
+# IONOS 4 GB RAM Budget (Phase 4):
+#   postgres 1G, n8n 800M, backend 768M, redis 256M, minio 256M, webapp 128M
+#   = 3.2 GB Container + ~800 MB OS-Reserve. 4G Swap als Notfall-Puffer.
 
 networks:
   internal:
@@ -21,6 +23,14 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: always
+    # IONOS 4 GB RAM: postgres-Tuning für kleinen Host.
+    command: >-
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c effective_cache_size=512MB
+      -c max_connections=80
     environment:
       POSTGRES_USER: pp
       POSTGRES_PASSWORD: ${DB_PASSWORD:-pp_secret}
@@ -34,12 +44,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret}
+    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-redis_secret}
     volumes:
       - redis_data:/data
     networks:
@@ -49,6 +63,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # ── MinIO S3-kompatibler Objektspeicher ───────────────────────────────────
   minio:
@@ -67,6 +85,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # ── Backend ────────────────────────────────────────────────────────────────
   backend:
@@ -92,6 +114,10 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 768M
 
   # ── Webapp / Nginx ─────────────────────────────────────────────────────────
   webapp:
@@ -114,6 +140,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # ── n8n Workflow-Engine ────────────────────────────────────────────────────
   n8n:
@@ -142,3 +172,7 @@ services:
     networks:
       - internal
       - external
+    deploy:
+      resources:
+        limits:
+          memory: 800M

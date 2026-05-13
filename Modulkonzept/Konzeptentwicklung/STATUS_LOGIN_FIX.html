@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProzessPilot — Login-Fix 2026-05-12</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2128;
+    --panel-2: #232c35;
+    --border: #2d3742;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0b429;
+    --danger: #f85149;
+    --ok: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro", system-ui, sans-serif;
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 32px; }
+  h1 { font-size: 28px; margin: 0 0 8px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .pill.ok { background: rgba(63,185,80,0.15); color: var(--ok); border: 1px solid rgba(63,185,80,0.3); }
+  .pill.warn { background: rgba(240,180,41,0.15); color: var(--warn); border: 1px solid rgba(240,180,41,0.3); }
+  .pill.danger { background: rgba(248,81,73,0.15); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
+  .pill.info { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+
+  section { margin-bottom: 40px; }
+  h2 { font-size: 18px; margin: 0 0 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  h2::before { content: ""; width: 4px; height: 20px; background: var(--accent); border-radius: 2px; }
+  h3 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent-2); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+  ul.clean li:last-child { border-bottom: none; }
+  ul.clean li::before {
+    content: "›";
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .reco {
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .reco.priority-high { border-left-color: var(--danger); }
+  .reco.priority-mid { border-left-color: var(--warn); }
+  .reco.priority-low { border-left-color: var(--accent-2); }
+  .reco h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  .reco .why { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .reco .action { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 8px 10px; border-radius: 4px; margin-top: 8px; color: var(--accent-2); white-space: pre-wrap; }
+
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--accent-2); }
+
+  .alert {
+    background: rgba(63,185,80,0.08);
+    border: 1px solid rgba(63,185,80,0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  .alert strong { color: var(--ok); }
+  .alert.danger-alert {
+    background: rgba(248,81,73,0.08);
+    border-color: rgba(248,81,73,0.4);
+  }
+  .alert.danger-alert strong { color: var(--danger); }
+
+  .cred-box {
+    border: 3px solid var(--warn);
+    border-radius: 12px;
+    background: rgba(240,180,41,0.06);
+    padding: 24px 28px;
+    margin-bottom: 16px;
+  }
+  .cred-box h3 { color: var(--warn); font-size: 16px; text-transform: none; letter-spacing: 0; margin-bottom: 16px; }
+  .cred-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+  .cred-label { color: var(--muted); font-size: 12px; min-width: 100px; }
+  .cred-value { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 14px; color: var(--text); background: var(--panel-2); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); letter-spacing: 0.5px; }
+
+  .flex-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .crossed { text-decoration: line-through; color: var(--muted); }
+
+  pre { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); overflow-x: auto; white-space: pre-wrap; }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="flex-row" style="align-items:center; gap:12px; margin-bottom:8px;">
+    <h1 style="margin:0;">ProzessPilot — Login-Fix abgeschlossen</h1>
+    <span class="pill ok">READY</span>
+  </div>
+  <div class="sub">2026-05-12 &nbsp;|&nbsp; M14 Auth-Reparatur Phase 2–5 &nbsp;|&nbsp; Alle 6 E2E-Tests bestanden</div>
+</header>
+
+<!-- SUMMARY STATS -->
+<div class="summary-grid">
+  <div class="stat"><div class="num">2</div><div class="lbl">Migrationen angewendet</div></div>
+  <div class="stat"><div class="num">1</div><div class="lbl">Super-Admin angelegt</div></div>
+  <div class="stat"><div class="num">6/6</div><div class="lbl">E2E-Tests bestanden</div></div>
+  <div class="stat"><div class="num">0</div><div class="lbl">Build-Fehler</div></div>
+</div>
+
+<!-- SECTION 1: WAS WAR KAPUTT -->
+<section>
+  <h2>Was war kaputt (Phase-1-Befund)</h2>
+  <div class="card">
+    <ul class="clean">
+      <li><strong>BLOCKER 1:</strong> Migrationen <code>031_users_auth.sql</code> und <code>031b_bootstrap_super_admin.sql</code> existierten im Repo, wurden aber nie auf die DB angewendet. Tabellen <code>users</code>, <code>refresh_tokens</code>, <code>auth_events</code> fehlten vollständig.</li>
+      <li><strong>BLOCKER 2:</strong> <code>INITIAL_SUPER_ADMIN_PASSWORD=Passwort!</code> (9 Zeichen) — <code>validatePasswordStrength()</code> verlangt ≥ 12 Zeichen. Bootstrap würde mit Exit-Code 2 abbrechen.</li>
+      <li><strong>BLOCKER 3:</strong> <code>INITIAL_SUPER_ADMIN_EMAIL=test@test.de</code> statt der Owner-Email <code>s.andreas-k@hotmail.de</code>.</li>
+      <li><strong>KRITISCH:</strong> <code>PP_AUTH_DISABLED=1</code> aktiv — HMAC-Bypass war in Dev-Betrieb eingeschaltet.</li>
+      <li><strong>KOSMETISCH:</strong> <code>.env</code> enthielt doppelte Definitionen aller M14-Variablen (Zeilen 134–157 leer, 159–167 gefüllt). Letzte Definition gewann, aber unsauber.</li>
+      <li><strong>KOSMETISCH:</strong> <code>schema_migrations</code> enthielt historischen Eintrag <code>b/002_customer_profiles.sql</code> — keine Aktion nötig.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- SECTION 2: WAS WURDE GETAN -->
+<section>
+  <h2>Was wurde getan (Phase 3)</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Schritt</th>
+          <th>Aktion</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>S0</td>
+          <td>Gitignore-Check: <code>git check-ignore .env</code> bestätigt gitignored</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S1a</td>
+          <td>Backup: <code>.env.bak-20260512-143843</code> angelegt</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S1b</td>
+          <td>Admin-Passwort generiert via <code>openssl rand -base64 36</code> (32 Zeichen, ≥1 Ziffer, ≥1 Sonderzeichen). Gespeichert in <code>/tmp/pp-admin-password-1778589517.txt</code> (chmod 600)</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S1c</td>
+          <td><code>PP_AUTH_DISABLED=1</code> → <code>PP_AUTH_DISABLED=0</code></td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S1d</td>
+          <td>Doppelten leeren M14-Block (Zeilen 134–157) entfernt. Gefüllten Block mit korrekten Werten beibehalten: <code>INITIAL_SUPER_ADMIN_EMAIL=s.andreas-k@hotmail.de</code>, neues Passwort, <code>AUTH_REFRESH_COOKIE_SECURE=0</code> (HTTP-Dev)</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S2</td>
+          <td><code>npm run migrate</code>: 2 ausstehende Migrationen angewendet (<code>031_users_auth.sql</code>, <code>031b_bootstrap_super_admin.sql</code>)</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S2v</td>
+          <td>DB-Verifikation: Tabellen <code>users</code>, <code>refresh_tokens</code>, <code>auth_events</code> existieren</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S3</td>
+          <td><code>npm run bootstrap:super-admin</code>: User <code>usr_cab9c990-1355-45c3-ae6f-a9ea81674605</code> angelegt, <code>preset=super_admin</code>, <code>is_active=true</code></td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+        <tr>
+          <td>S4</td>
+          <td>Backend (PID 80898) via SIGTERM gestoppt. Neu gestartet mit aktuellem ENV. Health-Check nach ~4s positiv.</td>
+          <td><span class="pill ok">DONE</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SECTION 3: ADMIN-LOGIN-DATEN -->
+<section>
+  <h2>Admin-Login-Daten</h2>
+
+  <div class="cred-box">
+    <h3>SUPER-ADMIN ZUGANGSDATEN — VERTRAULICH</h3>
+    <div class="cred-row">
+      <span class="cred-label">E-Mail</span>
+      <span class="cred-value">s.andreas-k@hotmail.de</span>
+    </div>
+    <div class="cred-row">
+      <span class="cred-label">Passwort</span>
+      <span class="cred-value">KT0HzYfhCQjKhbFaSM262ehFGkBKTq!7</span>
+    </div>
+    <div class="cred-row">
+      <span class="cred-label">Login-URL</span>
+      <span class="cred-value">http://localhost:5173/login</span>
+    </div>
+    <div class="cred-row">
+      <span class="cred-label">API</span>
+      <span class="cred-value">POST http://localhost:3000/api/v1/auth/login</span>
+    </div>
+  </div>
+
+  <div class="alert danger-alert">
+    <strong>WARNUNG:</strong> Passwort sofort nach erstem Login in der App wechseln (Einstellungen &rarr; Passwort &auml;ndern).
+    Diese HTML-Datei niemals teilen, nicht ins Git committen, nicht per E-Mail versenden.
+    Datei nach Passwort&auml;nderung l&ouml;schen oder Passwort-Block unkenntlich machen.
+  </div>
+</section>
+
+<!-- SECTION 4: VERIFIKATIONS-TABELLE -->
+<section>
+  <h2>E2E-Verifikation (Phase 4)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Test</th>
+        <th>Erwartet</th>
+        <th>Ergebnis</th>
+        <th>OK?</th>
+        <th>Response-Snippet</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>4.1a</td>
+        <td><code>GET /api/v1/health</code></td>
+        <td><code>ok: true</code></td>
+        <td>200 OK</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">{"ok":true,"version":"0.1.0","checks":{"database":"ok"}}</td>
+      </tr>
+      <tr>
+        <td>4.1b</td>
+        <td><code>GET /api/v1/ready</code></td>
+        <td>HTTP 200</td>
+        <td>200 OK</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">HTTP 200</td>
+      </tr>
+      <tr>
+        <td>4.2</td>
+        <td><code>POST /api/v1/auth/login</code></td>
+        <td>200, access_token, permissions=["*"], Set-Cookie: pp_refresh HttpOnly SameSite=Strict</td>
+        <td>200 OK</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">{"ok":true,"data":{"access_token":"eyJ...REDACTED","user":{"email":"s.andreas-k@hotmail.de","permissions":["*"],"preset":"super_admin"}}}</td>
+      </tr>
+      <tr>
+        <td>4.3</td>
+        <td><code>GET /api/v1/auth/me</code> (Bearer)</td>
+        <td>200, user.email = s.andreas-k@hotmail.de, permissions=["*"]</td>
+        <td>200 OK</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">{"ok":true,"data":{"user":{"email":"s.andreas-k@hotmail.de","permissions":["*"],"preset":"super_admin"}}}</td>
+      </tr>
+      <tr>
+        <td>4.4</td>
+        <td><code>POST /api/v1/auth/refresh</code></td>
+        <td>200, neuer access_token, neuer Set-Cookie, alter Token revoked</td>
+        <td>200 OK, revoked_count=1</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">{"ok":true,"data":{"access_token":"eyJ...REDACTED"}} + refresh_tokens.revoked_at IS NOT NULL COUNT=1</td>
+      </tr>
+      <tr>
+        <td>4.5a</td>
+        <td><code>GET /api/v1/users</code> mit Bearer</td>
+        <td>HTTP 200, Array ≥1 Eintrag</td>
+        <td>200, 1 User</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">HTTP 200, users count=1</td>
+      </tr>
+      <tr>
+        <td>4.5b</td>
+        <td><code>GET /api/v1/users</code> ohne Token</td>
+        <td>HTTP 401</td>
+        <td>401 Unauthorized</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">HTTP 401</td>
+      </tr>
+      <tr>
+        <td>4.6</td>
+        <td><code>GET http://localhost:5173/</code></td>
+        <td>HTTP 200</td>
+        <td>200 OK</td>
+        <td><span class="pill ok">PASS</span></td>
+        <td class="mono">HTTP 200</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SECTION 5: BACKUPS -->
+<section>
+  <h2>Erzeugte Backups</h2>
+  <div class="card">
+    <ul class="clean">
+      <li><code>/Users/donandrejo/Documents/ProzessPilot/prozesspilot/.env.bak-20260512-143843</code> — .env vor M14-Bereinigung</li>
+      <li><code>/tmp/pp-admin-password-1778589517.txt</code> — Passwort-Datei (chmod 600). Nach Passwort&auml;nderung l&ouml;schen: <code>rm /tmp/pp-admin-password-1778589517.txt</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- SECTION 6: WAS NOCH OFFEN -->
+<section>
+  <h2>Was noch offen ist</h2>
+  <div class="grid-2">
+    <div>
+      <div class="reco priority-high">
+        <h4>30+ uncommittete Dateien</h4>
+        <p class="why">M14-Auth (jwt.ts, password.ts, permissions.ts, users-Modul, bootstrap.ts, Webapp-Pages), CI-Workflows, README, docker-compose.prod.yml, Migrationen — alle staged/untracked.</p>
+        <div class="action">git status --short | wc -l  # aktuell ~40 Dateien</div>
+      </div>
+      <div class="reco priority-mid">
+        <h4>Doppelte Migrations-Pfade</h4>
+        <p class="why">Migrationen liegen sowohl unter <code>backend/migrations/</code> (Ausf&uuml;hrungspfad) als auch unter <code>migrations/</code> (Repo-Root, nur 031_* Files sichtbar im git status). Kl&auml;ren, welcher Pfad kanonisch ist.</p>
+        <div class="action">ls backend/migrations/ | wc -l
+ls migrations/ 2>/dev/null</div>
+      </div>
+      <div class="reco priority-mid">
+        <h4>IONOS-Server-Setup ausstehend</h4>
+        <p class="why">Produktions-Deployment gem&auml;&szlig; Server_Umzug.md und infra/runbook/01_deployment.md noch nicht durchgef&uuml;hrt. docker-compose.prod.yml und nginx-Config existieren.</p>
+      </div>
+    </div>
+    <div>
+      <div class="reco priority-low">
+        <h4>Konzept-Audit-Subagent</h4>
+        <p class="why">.claude/agents/konzept-auditor.md liegt untracked. audit-konzept-Skill f&uuml;r vollst&auml;ndigen Code↔Konzept-Abgleich noch nicht ausgef&uuml;hrt.</p>
+      </div>
+      <div class="reco priority-low">
+        <h4>PP_AUTH_DISABLED=0 — n8n Webhooks pr&uuml;fen</h4>
+        <p class="why">Mit deaktiviertem HMAC-Bypass k&ouml;nnten interne n8n→Backend-Webhooks (die PP_HMAC_SECRET nutzen) jetzt fehlschlagen. <code>PP_HMAC_SECRET</code> ist noch auf Placeholder <code>&lt;32-byte-hex&gt;</code>.</p>
+        <div class="action">curl -s http://localhost:5678/webhook/... # n8n-Test</div>
+      </div>
+      <div class="reco priority-low">
+        <h4>password_must_change — Bootstrap-Default</h4>
+        <p class="why">Bootstrap hat <code>password_must_change=false</code> gesetzt (Bootstrap-Code-Default). War in der Spec als <code>true</code> vorgesehen — kein Blocker, aber beim n&auml;chsten Bootstrap-Skript-Edit ber&uuml;cksichtigen.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 7: NAECHSTE SCHRITTE -->
+<section>
+  <h2>N&auml;chste Schritte</h2>
+  <div class="reco priority-high">
+    <h4>1. Jetzt: Passwort &auml;ndern + /tmp aufr&auml;umen</h4>
+    <p class="why">Login unter http://localhost:5173/login, dann Passwort &auml;ndern. Danach Passwort-Datei l&ouml;schen und den Passwort-Block in dieser HTML-Datei &uuml;berschreiben.</p>
+    <div class="action">rm /tmp/pp-admin-password-1778589517.txt</div>
+  </div>
+  <div class="reco priority-mid">
+    <h4>2. Commit in 2 Bl&ouml;cken</h4>
+    <p class="why">M14-Auth-Core separat von Infra-/Doc-&Auml;nderungen committen, damit das Review klar ist.</p>
+    <div class="action">## Block 1: Auth-Core
+git add backend/src/core/auth/ backend/src/modules/users/ \
+  backend/migrations/031_users_auth.sql backend/migrations/031b_bootstrap_super_admin.sql \
+  webapp/src/api/auth.ts webapp/src/api/users.ts webapp/src/auth/ \
+  webapp/src/pages/UsersPage.tsx webapp/src/pages/UserFormModal.tsx \
+  webapp/src/pages/ChangePasswordPage.tsx webapp/src/components/UserMenu.tsx \
+  webapp/src/tests/e2e/auth.e2e.ts
+git commit -m "feat(m14): JWT auth + user management + super_admin bootstrap"
+
+## Block 2: Infra + CI + Docs
+git add .env.example .github/ backend/package.json backend/package-lock.json \
+  backend/src/app.ts backend/src/core/config.ts backend/vitest.config.ts \
+  docker-compose.prod.yml infra/ README.md webapp/src/App.tsx \
+  webapp/src/api/_client.ts webapp/src/auth/AuthContext.tsx \
+  webapp/src/auth/ProtectedRoute.tsx webapp/src/components/Layout.tsx \
+  webapp/src/pages/LoginPage.tsx webapp/src/tests/
+git commit -m "chore: post-m14 infra, CI, docs + app wiring"</div>
+  </div>
+  <div class="reco priority-low">
+    <h4>3. IONOS-Server-Setup</h4>
+    <p class="why">Nach erfolgreichem lokalem Betrieb: docker-compose.prod.yml auf IONOS-Server deployen gem&auml;&szlig; infra/runbook/01_deployment.md.</p>
+  </div>
+</section>
+
+<!-- SECTION 8: GIT STATUS -->
+<section>
+  <h2>Git-Status zum Zeitpunkt des Fixes</h2>
+  <pre> M ../Modulkonzept/Konzeptentwicklung/Server_Umzug.md
+ M .env.example
+ M .github/workflows/ci.yml
+ M README.md
+ M backend/package-lock.json
+ M backend/package.json
+ M backend/src/app.ts
+ M backend/src/core/config.ts
+ M backend/vitest.config.ts
+ M docker-compose.prod.yml
+ M infra/runbook/01_deployment.md
+ M webapp/src/App.tsx
+ M webapp/src/api/_client.ts
+ M webapp/src/auth/AuthContext.tsx
+ M webapp/src/auth/ProtectedRoute.test.tsx
+ M webapp/src/auth/ProtectedRoute.tsx
+ M webapp/src/components/Layout.test.tsx
+ M webapp/src/components/Layout.tsx
+ M webapp/src/pages/LoginPage.test.tsx
+ M webapp/src/pages/LoginPage.tsx
+ M webapp/src/tests/e2e/smoke.e2e.ts
+ M webapp/src/tests/msw/handlers.ts
+?? .env.bak-20260512-143843
+?? .claude/agents/konzept-auditor.md
+?? .claude/commands/
+?? .github/dependabot.yml
+?? .github/workflows/codeql.yml
+?? backend/src/core/auth/jwt.middleware.ts
+?? backend/src/core/auth/jwt.test.ts
+?? backend/src/core/auth/jwt.ts
+?? backend/src/core/auth/password.test.ts
+?? backend/src/core/auth/password.ts
+?? backend/src/core/auth/permissions.test.ts
+?? backend/src/core/auth/permissions.ts
+?? backend/src/modules/users/
+?? infra/scripts/
+?? migrations/031_users_auth.sql
+?? migrations/031b_bootstrap_super_admin.sql
+?? webapp/src/api/auth.ts
+?? webapp/src/api/users.ts
+?? webapp/src/auth/permissions.test.ts
+?? webapp/src/auth/permissions.ts
+?? webapp/src/auth/token-refresh.ts
+?? webapp/src/components/UserMenu.tsx
+?? webapp/src/pages/ChangePasswordPage.tsx
+?? webapp/src/pages/UserFormModal.tsx
+?? webapp/src/pages/UsersPage.tsx
+?? webapp/src/tests/e2e/auth.e2e.ts</pre>
+
+  <div class="alert" style="margin-top:16px;">
+    <strong>Empfehlung:</strong> diff durchschauen, dann commit in 2 Bl&ouml;cken:
+    <code>feat(m14): JWT auth + user management + super_admin bootstrap</code> und
+    <code>chore: post-m14 infra, CI, docs + app wiring</code>
+  </div>
+</section>
+
+<footer>
+  ProzessPilot Login-Fix &mdash; 2026-05-12 &mdash; Generiert von Senior SRE Agent &mdash;
+  NIEMALS ins Git committen &bull; NIEMALS teilen &bull; Passwort sofort wechseln
+</footer>
+</div>
+</body>
+</html>

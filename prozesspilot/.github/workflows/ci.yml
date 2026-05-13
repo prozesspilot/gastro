@@ -8,12 +8,12 @@ on:
 
 jobs:
   backend:
-    name: Backend — Build, Migrate, Test
+    name: Backend — Lint, Build, Migrate, Test
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_DB: prozesspilot_test
           POSTGRES_USER: pp
@@ -22,6 +22,15 @@ jobs:
           - '5432:5432'
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -40,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: cd backend && npm ci
 
+      - name: Lint (biome)
+        run: cd backend && npm run lint
+
       - name: TypeScript Build
         run: cd backend && npm run build
 
@@ -50,6 +62,7 @@ jobs:
           PP_AUTH_DISABLED: '1'
           REDIS_URL: redis://localhost:6379
           PP_PGCRYPTO_KEY: test_pgcrypto_key_for_ci_only
+          JWT_SECRET: ci-jwt-secret-min-32-chars-padding-padding
 
       - name: Run tests
         run: cd backend && npm test
@@ -62,10 +75,11 @@ jobs:
           REDIS_URL: redis://localhost:6379
           PP_PGCRYPTO_KEY: test_pgcrypto_key_for_ci_only
           CLAUDE_API_KEY: test_key_not_real
+          JWT_SECRET: ci-jwt-secret-min-32-chars-padding-padding
           NODE_ENV: test
 
   webapp:
-    name: Webapp — TypeScript Check + Build
+    name: Webapp — TypeScript Check, Tests, Build
     runs-on: ubuntu-latest
 
     steps:
@@ -85,5 +99,52 @@ jobs:
       - name: TypeScript check
         run: cd webapp && npx tsc --noEmit
 
+      - name: Vitest
+        run: cd webapp && npm test -- --run
+
       - name: Build
         run: cd webapp && npm run build
+
+  playwright:
+    name: Webapp — Playwright E2E
+    runs-on: ubuntu-latest
+    needs: webapp
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install dependencies
+        run: cd webapp && npm ci
+
+      - name: Install Playwright Browsers
+        run: cd webapp && npx playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: cd webapp && nohup npm run dev > /tmp/dev.log 2>&1 &
+
+      - name: Wait for dev server
+        run: |
+          for i in {1..30}; do
+            curl -sf http://localhost:5173 >/dev/null && exit 0
+            sleep 2
+          done
+          echo "dev server failed to start"; cat /tmp/dev.log; exit 1
+
+      - name: Run Playwright E2E
+        run: cd webapp && npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: webapp/playwright-report
+          retention-days: 7

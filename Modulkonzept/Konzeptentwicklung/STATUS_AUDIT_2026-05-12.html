@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProzessPilot — Vollständiger Audit 2026-05-12</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2128;
+    --panel-2: #232c35;
+    --border: #2d3742;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0b429;
+    --danger: #f85149;
+    --ok: #3fb950;
+    --question: #c792ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro", system-ui, sans-serif;
+    line-height: 1.55;
+    font-size: 14px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 32px; }
+  h1 { font-size: 28px; margin: 0 0 8px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .pill.ok { background: rgba(63,185,80,0.15); color: var(--ok); border: 1px solid rgba(63,185,80,0.3); }
+  .pill.warn { background: rgba(240,180,41,0.15); color: var(--warn); border: 1px solid rgba(240,180,41,0.3); }
+  .pill.danger { background: rgba(248,81,73,0.15); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
+  .pill.info { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+  .pill.q { background: rgba(199,146,234,0.15); color: var(--question); border: 1px solid rgba(199,146,234,0.3); }
+
+  section { margin-bottom: 40px; }
+  h2 { font-size: 20px; margin: 0 0 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  h2::before { content: ""; width: 4px; height: 22px; background: var(--accent); border-radius: 2px; }
+  h3 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent-2); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stat.danger .num { color: var(--danger); }
+  .stat.warn .num { color: var(--warn); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.mono, code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--accent-2); }
+  code { background: var(--panel-2); padding: 1px 6px; border-radius: 3px; }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+  ul.clean li:last-child { border-bottom: none; }
+  ul.clean li::before { content: "›"; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+  .finding {
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .finding.blocker { border-left-color: var(--danger); }
+  .finding.important { border-left-color: var(--warn); }
+  .finding.recommendation { border-left-color: var(--accent-2); }
+  .finding.question { border-left-color: var(--question); }
+  .finding h4 { margin: 0 0 6px; font-size: 14px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .finding .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
+  .finding .why { color: var(--text); font-size: 13px; margin: 4px 0; }
+  .finding .action { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 8px 10px; border-radius: 4px; margin-top: 8px; color: var(--accent-2); white-space: pre-wrap; }
+
+  .alert {
+    background: rgba(240,180,41,0.08);
+    border: 1px solid rgba(240,180,41,0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  .alert.ok { background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.3); }
+  .alert.danger { background: rgba(248,81,73,0.08); border-color: rgba(248,81,73,0.3); }
+  .alert strong.ok { color: var(--ok); }
+  .alert strong.warn { color: var(--warn); }
+  .alert strong.danger { color: var(--danger); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  details { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: 8px; }
+
+  .tag { display: inline-block; padding: 1px 6px; background: var(--panel-2); border-radius: 3px; font-size: 11px; color: var(--muted); margin-right: 4px; }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="top">
+  <h1>ProzessPilot — Vollständiger Repo-Audit</h1>
+  <div class="sub">Stand 2026-05-12 · alle Konzept- und Source-Files gelesen · 4 Blocker, 6 wichtige Probleme, 8 Empfehlungen, 3 offene Fragen</div>
+</header>
+
+<div class="alert ok">
+  <strong class="ok">✓ Großes Gesamtbild:</strong> System ist überraschend weit. 14 Module implementiert, Auth funktioniert (Login-Fix lief durch), Webapp komplett mit allen Pages, 145+ Tests inkl. 3 Playwright-E2E. Was fehlt ist Aufräumen (tote Dateien, veraltete Konzept-Doku, 57 uncommittete Files) — keine echten Architektur-Lücken.
+</div>
+
+<div class="alert">
+  <strong class="warn">⚠ Vor Server-Deployment unbedingt erledigen:</strong> Tote Tests (m04-categorize) werden Build kaputtmachen · Hardcoded localhost-URLs in SettingsPage · Konzept-Doku stark veraltet · 57 uncommittete Files · backend/migrations/ enthält 8 alte committed-Files, die Migration-Chaos provozieren.
+</div>
+
+<section>
+  <h2>Zahlen auf einen Blick</h2>
+  <div class="summary-grid">
+    <div class="stat"><div class="num">14/14</div><div class="lbl">Module dokumentiert + implementiert (M01–M14)</div></div>
+    <div class="stat"><div class="num">17</div><div class="lbl">n8n Workflows</div></div>
+    <div class="stat"><div class="num">30 + 2</div><div class="lbl">Postgres-Migrationen (30 alt + 2 neu für M14)</div></div>
+    <div class="stat"><div class="num">~145</div><div class="lbl">Tests (64 Backend + 78 Webapp + 3 E2E)</div></div>
+    <div class="stat warn"><div class="num">57</div><div class="lbl">Uncommittete Files</div></div>
+    <div class="stat danger"><div class="num">8</div><div class="lbl">Tote Migrationen in backend/migrations/ (committed!)</div></div>
+    <div class="stat warn"><div class="num">5 Tage</div><div class="lbl">Drift Konzept-Doku ↔ Code</div></div>
+    <div class="stat"><div class="num">1</div><div class="lbl">Toter Test (m04-categorize) bricht den Build</div></div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>1 · Was funktioniert — sehr gut</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Backend / Auth</h3>
+      <ul class="clean">
+        <li>Migrationen 031 + 031b sind <strong>jetzt im richtigen Pfad</strong> <code>migrations/</code> (Repo-Root)</li>
+        <li><code>app.ts</code> sauber aufgeräumt: alle 14 Module registriert, inkl. <code>authPublicRoutes</code> + <code>authProtectedRoutes</code> + <code>usersRoutes</code></li>
+        <li>JWT + Refresh-Token, argon2id, Permission-Middleware komplett umgesetzt</li>
+        <li>Rate-Limit + Cookie-Plugin in Fastify registriert</li>
+        <li>Keine hardcoded Secrets im Backend (paranoid geprüft)</li>
+        <li>Bootstrap-Script <code>npm run bootstrap:super-admin</code> existiert + interaktiv</li>
+        <li>Nur 2 echte TODOs im Backend-Code (M08 Mail/WhatsApp Phase 2)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Webapp / Frontend</h3>
+      <ul class="clean">
+        <li>LoginPage hat <code>type="email"</code> + <code>type="password"</code> + Show/Hide-Toggle</li>
+        <li><code>AuthContext.tsx</code> nutzt echten <code>loginWithPassword</code> + <code>/auth/login</code> + Refresh-Logik</li>
+        <li>Alle Pages existieren inkl. <code>UsersPage</code>, <code>UserFormModal</code>, <code>ChangePasswordPage</code>, <code>UserMenu</code></li>
+        <li>App.tsx hat Routes für <code>/login</code>, <code>/change-password</code>, <code>/users</code> (+ alle anderen)</li>
+        <li>Layout hat UserMenu eingebunden</li>
+        <li>78 Webapp-Tests + 3 Playwright-E2E (inkl. <code>auth.e2e.ts</code>)</li>
+        <li>API-Client für <code>auth.ts</code>, <code>users.ts</code> + 8 weitere</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Infra + DevOps</h3>
+      <ul class="clean">
+        <li>5 Runbooks (deployment, rollback, oncall, monitoring, tenant-onboarding)</li>
+        <li><code>infra/scripts/setup-swap.sh</code> + <code>memory-check.sh</code> bereit für IONOS</li>
+        <li><code>docker-compose.prod.yml</code> mit Memory-Limits</li>
+        <li>3 ADRs (PDF-Engine, Mail-Provider, Plugin-Sandbox)</li>
+        <li>Backup-Scripts (Postgres + S3 + Restore-Test)</li>
+        <li>GitHub-Actions: <code>ci.yml</code> + <code>codeql.yml</code> + <code>dependabot.yml</code></li>
+        <li>Audit-Subagent <code>.claude/agents/konzept-auditor.md</code> + 2 Slash-Commands</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Konzept-Doku</h3>
+      <ul class="clean">
+        <li>14 Modul-Specs (M01–M14), 209–557 Zeilen je Spec</li>
+        <li>6 Querschnittsdokumente (00–06)</li>
+        <li>Foundation_Spec als erfüllt markiert</li>
+        <li>Sprint-Files im <code>_archive/</code></li>
+        <li>2 ausführliche Prompts in der Schublade (Projekt-Abschluss + Diagnose-Login-Fix)</li>
+        <li>STATUS_LOGIN_FIX.html dokumentiert Login-Fix-Lauf</li>
+        <li>Server_Umzug.md auf IONOS angepasst</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>2 · Blocker — sofort fixen vor jedem Deploy</h2>
+
+  <div class="finding blocker">
+    <h4>🔴 #B1 — Toter Test bricht den Build: <code>backend/tests/m04-categorize/categorize.routes.test.ts</code></h4>
+    <div class="meta">Severity: BLOCKER · Aufwand: 30 Sekunden</div>
+    <p class="why">Das m04-categorize-Modul wurde im Cleanup gelöscht, aber der zugehörige Integration-Test existiert noch. Beim nächsten <code>npm test</code> wird er fehlschlagen (kann <code>buildApp</code> aufrufen, aber die Routes fehlen). CI grünt dann nicht.</p>
+    <div class="action">cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot
+rm -rf backend/tests/m04-categorize/
+git add -A && git status backend/tests/</div>
+  </div>
+
+  <div class="finding blocker">
+    <h4>🔴 #B2 — 8 tote Migrationen in <code>backend/migrations/</code> sind in git committed</h4>
+    <div class="meta">Severity: BLOCKER · Aufwand: 2 Minuten</div>
+    <p class="why">Files <code>002_customer_profiles.sql</code>, <code>003_phase2_tables.sql</code>, <code>011_sevdesk.sql</code> bis <code>016_dsgvo.sql</code> liegen in einem Verzeichnis, das vom Migration-Runner ignoriert wird. Sie überlappen mit den aktiven Migrationen 002 / 003 / 011 / 012 etc. unter <code>migrations/</code> — aber haben unterschiedlichen Inhalt. <strong>Gefahr:</strong> Wenn jemand versehentlich den Pfad in <code>migrate.ts</code> ändert, gehen die Schemas inkonsistent durcheinander. Auch das m07-README warnt schon explizit davor.</p>
+    <div class="action">cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot
+git rm backend/migrations/{002_customer_profiles.sql,003_phase2_tables.sql,011_sevdesk.sql,012_datev.sql,013_tax_advisor_portal.sql,014_m09_supplier_comm.sql,015_plugin_registry.sql,016_dsgvo.sql}
+# .gitkeep behalten — der Ordner kann existieren bleiben, nur leer
+git commit -m "chore(repo): remove dead duplicate migrations from backend/migrations/"</div>
+  </div>
+
+  <div class="finding blocker">
+    <h4>🔴 #B3 — Hardcoded localhost-URLs in <code>webapp/src/pages/SettingsPage.tsx</code></h4>
+    <div class="meta">Severity: BLOCKER für Production · Aufwand: 10 Minuten</div>
+    <p class="why">In Production zeigen drei Links auf <code>http://localhost:...</code>:<br>
+      <code>Zeile 33: const N8N_URL = 'http://localhost:5678';</code><br>
+      <code>Zeile 679: &lt;a href="http://localhost:3000/api/v1/health"&gt;</code><br>
+      <code>Zeile 685: &lt;a href="http://localhost:3000/docs"&gt;</code><br>
+      Für den IONOS-Server müssen das z. B. <code>https://n8n.deinedomain.de</code>, <code>https://api.deinedomain.de/api/v1/health</code> und <code>https://api.deinedomain.de/docs</code> sein — über Vite-ENV-Variablen.
+    </p>
+    <div class="action">// In SettingsPage.tsx oben:
+const N8N_URL = import.meta.env.VITE_N8N_URL || 'http://localhost:5678';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// dann beide Links nutzen API_URL als Prefix.
+// VITE_N8N_URL + VITE_API_URL in webapp/.env.example + docker-compose.prod.yml ergänzen.</div>
+  </div>
+
+  <div class="finding blocker">
+    <h4>🔴 #B4 — 57 uncommittete Files (M14-Code + viele andere) sind verlustgefährdet</h4>
+    <div class="meta">Severity: BLOCKER · Aufwand: 20 Minuten</div>
+    <p class="why">Mischung aus: M14-Code (neu, <code>?? backend/src/core/auth/jwt.ts</code>, <code>?? backend/src/modules/users/</code>, etc.), M14-Migrationen, GitHub-Actions, Konzept-Files (STATUS_LOGIN_FIX.html, Prompts) und modifizierte Files (LoginPage.tsx, AuthContext.tsx, app.ts). Wenn der Rechner abschmiert oder ein <code>git reset</code> versehentlich passiert, geht ein halber Arbeitstag verloren. Außerdem grünt CI nicht ohne diese Files.</p>
+    <div class="action">cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot
+
+# Vorschlag: 3 thematische Commits
+git add backend/migrations/031_users_auth.sql backend/migrations/031b_bootstrap_super_admin.sql \
+        backend/src/core/auth/ backend/src/modules/users/ \
+        backend/package.json backend/package-lock.json backend/src/app.ts \
+        backend/src/core/config.ts backend/vitest.config.ts \
+        webapp/src/auth/ webapp/src/pages/LoginPage.tsx webapp/src/pages/ChangePasswordPage.tsx \
+        webapp/src/pages/UsersPage.tsx webapp/src/pages/UserFormModal.tsx \
+        webapp/src/components/UserMenu.tsx webapp/src/components/Layout.tsx \
+        webapp/src/api/auth.ts webapp/src/api/users.ts webapp/src/api/_client.ts \
+        webapp/src/App.tsx webapp/src/tests/
+git commit -m "feat(m14): user management + JWT auth + permission middleware"
+
+git add .github/ .claude/agents/ .claude/commands/ infra/scripts/ \
+        docker-compose.prod.yml infra/runbook/01_deployment.md
+git commit -m "chore(infra): CI pipeline + audit subagent + IONOS-specific scripts"
+
+git add README.md .env.example .env.bak-* \
+        ../Modulkonzept/Konzeptentwicklung/
+# .env NICHT stagen!
+git commit -m "docs: update concept docs, prompts, status reports"</div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>3 · Wichtige Probleme — vor erstem Pilotkunden fixen</h2>
+
+  <div class="finding important">
+    <h4>🟡 #W1 — Konzept-Doku ist 5 Tage hinter dem Code: M14 falsch als „nicht implementiert" markiert</h4>
+    <div class="meta">Severity: Wichtig · Aufwand: 15 Minuten</div>
+    <p class="why">Die README.md sagt <em>„M14 ⬜ noch nicht impl."</em>, die Roadmap-Phase A+ hat alle Checkboxen leer, STATUS.html erwähnt M14 gar nicht. Faktisch ist M14 implementiert, Migration gelaufen, Login funktioniert. Wenn ein neuer Mensch (oder Claude Code in einer neuen Session) das Konzept liest, geht er von einem völlig falschen Stand aus.</p>
+    <div class="action">→ README.md Modul-Tabelle: M14 von ⬜ auf ✓ ändern
+→ 05_Roadmap.md Phase A+: alle Checkboxen auf [x]
+→ STATUS.html durch neuere STATUS_AUDIT_2026-05-12.html ablösen oder verlinken
+→ Memory: project_prozesspilot.md aktualisieren mit Stand 2026-05-12</div>
+  </div>
+
+  <div class="finding important">
+    <h4>🟡 #W2 — Layout-Sidebar hat keinen Nav-Link zu <code>/users</code></h4>
+    <div class="meta">Severity: Wichtig · Aufwand: 5 Minuten</div>
+    <p class="why">Route <code>/users</code> existiert in App.tsx, UsersPage ist gebaut, aber kein Sidebar-Link führt dorthin. Admin muss die URL direkt eintippen. Außerdem sollte der Link nur Usern mit <code>users.read</code>-Permission angezeigt werden.</p>
+    <div class="action">In webapp/src/components/Layout.tsx den Nav-Block erweitern:
+
+{hasPermission('users.read') && (
+  <NavLink to="/users">Benutzer</NavLink>
+)}</div>
+  </div>
+
+  <div class="finding important">
+    <h4>🟡 #W3 — Webapp <code>.env.example</code> fehlt VITE_-Variablen für IONOS-Domain</h4>
+    <div class="meta">Severity: Wichtig · Aufwand: 5 Minuten</div>
+    <p class="why">Wenn Production-Build läuft, müssen <code>VITE_API_URL</code> + <code>VITE_N8N_URL</code> + ggf. <code>VITE_WEBHOOK_URL</code> als Build-Args reingegeben werden. Aktuell nur teils dokumentiert.</p>
+    <div class="action">→ webapp/.env.example um VITE_API_URL, VITE_N8N_URL ergänzen
+→ docker-compose.prod.yml webapp service: ARG VITE_N8N_URL hinzufügen
+→ docs/openapi.yaml Server-Block: Production-Server URL ergänzen</div>
+  </div>
+
+  <div class="finding important">
+    <h4>🟡 #W4 — <code>backend/dist/</code> 5.6 MB Build-Reste lokal — sollten in .gitignore (sind sie?)</h4>
+    <div class="meta">Severity: Wichtig · Aufwand: 1 Minute</div>
+    <p class="why">5.6 MB JS-Output-Files in <code>backend/dist/</code> sind lokal vorhanden. Prüfen, ob <code>dist/</code> in <code>.gitignore</code> ist. Falls nicht: rein, sonst werden veraltete Builds versehentlich committed.</p>
+    <div class="action">cd /Users/donandrejo/Documents/ProzessPilot/prozesspilot
+grep -E "^dist|^backend/dist" .gitignore || echo "dist/" >> .gitignore
+git ls-files backend/dist/ | head -3   # falls Output: bereits in git → entfernen</div>
+  </div>
+
+  <div class="finding important">
+    <h4>🟡 #W5 — Keine Tests für 3 wichtige Module: <code>m11-imap</code>, <code>dsgvo</code>, <code>plugin-system</code></h4>
+    <div class="meta">Severity: Wichtig · Aufwand: 4–6 Stunden</div>
+    <p class="why">Diese drei Module haben 0 Test-Files. M11-imap hat insgesamt nur 2 .ts-Files (sehr klein), aber bei DSGVO und Plugin-System (5 + 8 .ts-Files) ist das ein echter Testabdeckungs-Riss. Bei den anderen Modulen liegt die Coverage bei mehreren Tests pro Modul.</p>
+    <div class="action">→ tests/dsgvo/ + tests/plugin-system/ + tests/m11-imap/ anlegen
+→ pro Modul Smoke-Tests: Routes laden, Happy-Path, Error-Path
+→ Coverage-Ziel: 70 % (höher: 90 % später)</div>
+  </div>
+
+  <div class="finding important">
+    <h4>🟡 #W6 — m06-advisor-portal sollte langfristig zu m13-advisor-portal umbenannt werden</h4>
+    <div class="meta">Severity: Wichtig (Code-Hygiene) · Aufwand: 30 Minuten</div>
+    <p class="why">Tax-Advisor-Portal lebt unter <code>m06-advisor-portal/</code>, obwohl es konzeptionell M13 ist (kein sevDesk-Submodul). Sieht aus wie eine kontraintuitive Falle. M14-Spec deutet die Umbenennung beim nächsten Refactor schon an.</p>
+    <div class="action">→ Backend: git mv backend/src/modules/m06-advisor-portal → m13-advisor-portal
+→ app.ts: Import-Pfade anpassen
+→ Tests: backend/tests/m06-advisor-portal → m13-advisor-portal
+→ Webapp: keine Änderung nötig (Route /advisor bleibt)
+→ Roadmap-Eintrag für „nächster Refactor"</div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>4 · Empfehlungen — nice-to-have, blockt nichts</h2>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E1 — Audit-Subagent ist eingerichtet, aber noch nie aufgerufen</h4>
+    <p class="why"><code>.claude/agents/konzept-auditor.md</code> + <code>audit-konzept</code> Slash-Command existieren. Erster Lauf nach dem Cleanup wäre sinnvoll, um die jetzt-erkannten Inkonsistenzen automatisiert zu reportieren und den Subagent zu validieren.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E2 — Sentry-DSN noch leer</h4>
+    <p class="why"><code>SENTRY_DSN=</code> in .env. Kostenlos bis 5K Events/Monat. Sobald Production läuft, sollte das gesetzt sein.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E3 — WhatsApp Meta-Verifizierung steht noch aus (2–3 Wochen Vorlauf)</h4>
+    <p class="why">Externer Engpass. Wenn nicht heute angestoßen, wird das der Bottleneck deines Go-Live. Steht auch in der Roadmap als Phase C.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E4 — UptimeRobot oder ähnlicher Health-Check-Pinger</h4>
+    <p class="why">Sobald Production: 5-min-Intervall auf <code>https://api.deinedomain.de/health</code> mit Mail-Alert. Kostenlos. Brauchst du eh.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E5 — Memory-Check-Cron auf IONOS-Server einrichten</h4>
+    <p class="why">Script <code>infra/scripts/memory-check.sh</code> existiert, aber kein Cron-Eintrag im Deployment-Runbook. Bei 4 GB RAM: Cron alle 10 min, Alert ab 85 %.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E6 — Playwright E2E in CI integrieren</h4>
+    <p class="why"><code>auth.e2e.ts</code>, <code>receipt-flow.e2e.ts</code>, <code>smoke.e2e.ts</code> existieren. <code>.github/workflows/ci.yml</code> prüfen, ob die in CI laufen — sonst werden sie zu Karteileichen.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E7 — TODOs aus M08 angehen oder als Ticket dokumentieren</h4>
+    <p class="why">Zwei <code>TODO Phase 2</code>-Marken in <code>m08-reporting/services/mail-sender.ts</code> und <code>whatsapp-sender.ts</code>. Stub-Implementierungen → wenn ein Tenant Monatsreport-Mail will, funktioniert es noch nicht.</p>
+  </div>
+
+  <div class="finding recommendation">
+    <h4>🟢 #E8 — README.md im Repo-Root: CI-Badge + Production-URL ergänzen</h4>
+    <p class="why">Sobald CI grün läuft und Server steht: README mit Status-Badge + Production-URL (sobald da) + Backend/Webapp-Versionen.</p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>5 · Offene Fragen — Klärungsbedarf</h2>
+
+  <div class="finding question">
+    <h4>❓ #F1 — Soll <code>m06-advisor-portal/</code> wirklich zu <code>m13-advisor-portal/</code> umbenannt werden?</h4>
+    <p class="why">M14-Spec deutet es an, aber Code ist stabil und Tests grün. Umbenennung kostet 30 min + Risiko, dass irgendwo ein Import-Pfad zerschossen wird. Pro: konsistente Namensgebung. Contra: Touchen eines stabilen Bereichs für Kosmetik.</p>
+  </div>
+
+  <div class="finding question">
+    <h4>❓ #F2 — Soll der Initial-Bootstrap (031b) eigentlich noch in Production laufen?</h4>
+    <p class="why">Migration 031b_bootstrap_super_admin.sql legt automatisch einen super_admin aus ENV-Variablen an. Auf Production-Server muss <code>INITIAL_SUPER_ADMIN_PASSWORD</code> in <code>.env.prod</code> stehen — kurz, danach gelöscht/rotiert werden. Alternative: nur das interaktive <code>npm run bootstrap:super-admin</code> nutzen, 031b reine Skeleton-Migration. Empfehlung tendenziell: <strong>Bootstrap rauslassen aus Production-Migration, nur interaktiv</strong> — sicherer. Bestätigung?</p>
+  </div>
+
+  <div class="finding question">
+    <h4>❓ #F3 — Wird ein zweiter Server (Staging) gewünscht oder reicht der IONOS-VPS als „Production = Dev"?</h4>
+    <p class="why">Aktueller Plan: 1 Server (IONOS VPS 4-4-120). Sobald erster zahlender Kunde da ist, riskant — jede Code-Änderung geht live. Variante mit Staging: 2. IONOS-Server, ähnliche Größe, ~6 €/Monat extra. GitHub Actions deployt automatisch nach Push, Promotion zu Production manuell.</p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>6 · Modul-Status-Matrix</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Modul</th>
+        <th>Spec (Zeilen)</th>
+        <th>Backend</th>
+        <th>n8n WF</th>
+        <th>Tests</th>
+        <th>Frontend</th>
+        <th>Notiz</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>M01 Belegerfassung &amp; OCR</td><td>416</td><td>14 .ts</td><td>WF-M01</td><td>3</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M02 Belegarchivierung</td><td>352</td><td>11 .ts</td><td>WF-M02</td><td>3</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M03 Kategorisierung</td><td>341</td><td>16+3 .ts</td><td>WF-M03</td><td>4+2</td><td>—</td><td><span class="pill ok">aufgeteilt in m03-categorization + m03-ocr</span></td></tr>
+      <tr><td>M04 DATEV</td><td>351</td><td>10 .ts</td><td>WF-M04</td><td>1</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M05 Lexoffice</td><td>284</td><td>10 .ts</td><td>WF-M05</td><td>1</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M06 sevDesk</td><td>209</td><td>6 .ts</td><td>WF-M06</td><td>1</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M07 Excel/Sheets</td><td>261</td><td>12 .ts</td><td>WF-M07</td><td>3</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M08 Reporting</td><td>275</td><td>10 .ts</td><td>WF-M08 + Cron</td><td>1</td><td>ReportsPage</td><td><span class="pill warn">TODO Phase 2 Mail/WA</span></td></tr>
+      <tr><td>M09 Comm</td><td>298</td><td>13 .ts</td><td>WF-M09 + Cron</td><td>1</td><td>CommunicationsPage</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M10 WhatsApp Eingang</td><td>485</td><td>22 .ts</td><td>WF-INPUT-WHATSAPP</td><td>4</td><td>—</td><td><span class="pill ok">vollständig</span></td></tr>
+      <tr><td>M11 IMAP</td><td>118</td><td>2 .ts</td><td>WF-INPUT-IMAP</td><td>0</td><td>—</td><td><span class="pill warn">Tests fehlen</span></td></tr>
+      <tr><td>M12 DSGVO</td><td>94</td><td>5 .ts</td><td>—</td><td>0</td><td>SettingsPage</td><td><span class="pill warn">Tests fehlen</span></td></tr>
+      <tr><td>M13 Steuerberater (m06-advisor-portal)</td><td>97</td><td>5 .ts</td><td>—</td><td>0</td><td>AdvisorPortalPage</td><td><span class="pill warn">Naming-Issue + Tests fehlen</span></td></tr>
+      <tr><td>M14 Auth + Users</td><td>557</td><td>24 .ts</td><td>—</td><td>3</td><td>LoginPage + UsersPage + UserFormModal + ChangePasswordPage + UserMenu</td><td><span class="pill ok">vollständig, frisch</span></td></tr>
+      <tr><td>Plugin-System</td><td>(in 04_Erweiterbarkeit)</td><td>8 .ts</td><td>WF-PLUGIN-DISPATCHER</td><td>0</td><td>PluginsPage</td><td><span class="pill warn">Tests fehlen</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>7 · Datei-Inkonsistenzen + Duplikate</h2>
+
+  <table>
+    <thead><tr><th>Typ</th><th>Datei / Bereich</th><th>Beobachtung</th><th>Aktion</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill danger">Duplikat</span></td>
+        <td><code>backend/migrations/</code> (8 Files)</td>
+        <td>Tote Migrationen, in git committed, vom Runner ignoriert</td>
+        <td>Löschen (siehe #B2)</td>
+      </tr>
+      <tr>
+        <td><span class="pill danger">Toter Test</span></td>
+        <td><code>backend/tests/m04-categorize/</code></td>
+        <td>Modul ist gelöscht, Test importiert nicht-existente Routes</td>
+        <td>Löschen (siehe #B1)</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Drift</span></td>
+        <td><code>Konzeptentwicklung/README.md</code> M14 ⬜</td>
+        <td>Sagt „nicht implementiert" obwohl Code da ist</td>
+        <td>auf ✓ ändern (siehe #W1)</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Drift</span></td>
+        <td><code>05_Roadmap.md</code> Phase A+</td>
+        <td>Alle 5 Checkboxen leer, sollten erledigt sein</td>
+        <td>Auf [x] setzen (siehe #W1)</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Drift</span></td>
+        <td><code>STATUS.html</code> (alt)</td>
+        <td>Erwähnt M14 gar nicht (0 Treffer)</td>
+        <td>Durch <code>STATUS_AUDIT_2026-05-12.html</code> (diese Datei) ablösen</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Drift</span></td>
+        <td>Memory <code>project_prozesspilot.md</code></td>
+        <td>Stand 2026-05-07, Code 5 Tage weiter</td>
+        <td>Aktualisieren — passiert gleich</td>
+      </tr>
+      <tr>
+        <td><span class="pill info">Naming</span></td>
+        <td><code>m06-advisor-portal/</code> = M13</td>
+        <td>Konzeptionell M13, lebt unter m06-Präfix</td>
+        <td>Umbenennen (#W6) oder akzeptieren (#F1)</td>
+      </tr>
+      <tr>
+        <td><span class="pill info">Akzeptiert</span></td>
+        <td><code>m03-ocr/</code> + <code>m03-categorization/</code></td>
+        <td>Beides M03, getrennte Endpoints</td>
+        <td>Belassen — bewusst aufgeteilt</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Test fehlt</span></td>
+        <td>dsgvo, plugin-system, m11-imap, m06-advisor-portal</td>
+        <td>0 Tests</td>
+        <td>Test-Stubs anlegen (#W5)</td>
+      </tr>
+      <tr>
+        <td><span class="pill warn">Hardcoded</span></td>
+        <td><code>webapp/.../SettingsPage.tsx</code></td>
+        <td>3× http://localhost-URLs</td>
+        <td>Auf VITE_-ENV-Variablen umbiegen (#B3)</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>8 · Status der bisherigen Pläne</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Master-Prompt für Projektabschluss (Prompt_Projekt_Abschluss.md)</h3>
+      <ul class="clean">
+        <li><span class="pill ok">✓</span> Phase 1: Repo-Hygiene + Baseline — mehrere Commits seit unserer letzten Session (cleanup, lint, m04-categorize raus)</li>
+        <li><span class="pill ok">✓</span> Phase 2: M14 — implementiert, Login funktioniert (siehe STATUS_LOGIN_FIX.html)</li>
+        <li><span class="pill ok">✓</span> Phase 3: CI/CD — ci.yml, codeql.yml, dependabot.yml vorhanden</li>
+        <li><span class="pill ok">✓</span> Phase 4: IONOS-Anpassungen — setup-swap.sh, memory-check.sh, Memory-Limits in compose</li>
+        <li><span class="pill ok">✓</span> Phase 5: Audit-Subagent — .claude/agents/ + Slash-Commands vorhanden</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Diagnose-Login-Fix-Prompt (Prompt_Diagnose_Login_Fix.md)</h3>
+      <ul class="clean">
+        <li><span class="pill ok">✓</span> Lief am 2026-05-12 14:43 durch</li>
+        <li><span class="pill ok">✓</span> Migrationen 031 + 031b sind jetzt im richtigen Pfad</li>
+        <li><span class="pill ok">✓</span> .env mit JWT_SECRET, ARGON2, INITIAL_SUPER_ADMIN_* gesetzt</li>
+        <li><span class="pill ok">✓</span> Backup .env.bak-20260512-143843 erstellt</li>
+        <li><span class="pill warn">offen</span> STATUS_LOGIN_FIX.html liest sich gut, aber Admin-Login wurde noch nicht in der Webapp getestet (laut User-Aussage „kommt nicht rein") — vermutlich Backend noch nicht restarted ODER Cookie-Issue mit localhost vs. 127.0.0.1</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section>
+  <h2>9 · Empfohlene nächste Schritte — Reihenfolge</h2>
+  <div class="card">
+    <p style="margin:0 0 12px"><strong>In den nächsten 1–2 Stunden (Aufräumen):</strong></p>
+    <ol style="margin:0 0 16px;padding-left:24px;line-height:2">
+      <li>Toter Test raus (<code>#B1</code>) — 30 Sekunden</li>
+      <li>Tote <code>backend/migrations/</code> raus (<code>#B2</code>) — 2 Minuten</li>
+      <li>Hardcoded localhost in SettingsPage fixen (<code>#B3</code>) — 10 Minuten</li>
+      <li>3 Commits machen, alle uncommitteten Files (<code>#B4</code>) — 20 Minuten</li>
+      <li>Konzept-Doku auf IST-Stand (<code>#W1</code>: README, Roadmap, Memory) — 15 Minuten</li>
+      <li>Nav-Link zu /users in Layout (<code>#W2</code>) — 5 Minuten</li>
+      <li><code>npm test</code> + <code>npm run build</code> in backend und webapp — beide grün?</li>
+    </ol>
+    <p style="margin:0 0 12px"><strong>Diese Woche (vor Server-Deploy):</strong></p>
+    <ol style="margin:0 0 16px;padding-left:24px;line-height:2;color:var(--muted)">
+      <li>VITE-ENV-Variablen + .env.example ergänzen (<code>#W3</code>)</li>
+      <li>backend/dist/ in .gitignore prüfen (<code>#W4</code>)</li>
+      <li>Audit-Subagent einmal laufen lassen — verifizieren dass er funktioniert (<code>#E1</code>)</li>
+      <li>WhatsApp Meta-Verifizierung anstoßen — 2–3 Wochen Vorlauf! (<code>#E3</code>)</li>
+    </ol>
+    <p style="margin:0 0 12px"><strong>Vor erstem Pilotkunden:</strong></p>
+    <ol style="margin:0;padding-left:24px;line-height:2;color:var(--muted)">
+      <li>Server-Umzug nach <code>Konzeptentwicklung/Server_Umzug.md</code> (IONOS-VPS)</li>
+      <li>Sentry-DSN setzen, UptimeRobot konfigurieren (<code>#E2</code>, <code>#E4</code>)</li>
+      <li>Tests für M11/M12/Plugin-System ergänzen (<code>#W5</code>)</li>
+      <li>m06→m13 Umbenennung in Refactor-Sprint einplanen (<code>#W6</code>, <code>#F1</code>)</li>
+      <li>Entscheidung Staging-Server (<code>#F3</code>)</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  Vollständiger Audit am 2026-05-12 — alle Konzept-MD-Files + alle Backend-Source-Files + Webapp-Pages + n8n-Workflows + Migrationen + Tests gelesen.<br>
+  Datei: <code>Konzeptentwicklung/STATUS_AUDIT_2026-05-12.html</code>
+</footer>
+
+</div>
+</body>
+</html>

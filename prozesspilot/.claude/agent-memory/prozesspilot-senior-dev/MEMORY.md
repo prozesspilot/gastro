@@ -5,3 +5,4 @@
 - [Production Setup](project_production_setup.md) — Docker, docker-compose.prod, nginx, health check, env vars
 - [Solo Session Progress](project_solo_session.md) — autonom/solo branch work on 2026-05-04: endpoints, tests, auth, n8n cleanup
 - [Pipeline Wiring Session](project_pipeline_wiring.md) — 2026-05-07: WF-INPUT-UPLOAD, receipt trigger fix, routing plan fix, credentials UI
+- [Dual-Auth HMAC Fix](project_dual_auth.md) — 2026-05-12: Bearer+HMAC dual-auth, login-loop fix, password_must_change correction

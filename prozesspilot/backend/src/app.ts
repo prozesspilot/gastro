@@ -1,3 +1,4 @@
+import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Redis from 'ioredis';
@@ -44,6 +45,11 @@ import {
 import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
+import {
+  authProtectedRoutes,
+  authPublicRoutes,
+  usersRoutes,
+} from './modules/users/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
 import { reportRoutes } from './modules/reports/report.routes';
@@ -166,6 +172,15 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       }),
     });
   }
+
+  // M14: Cookie-Plugin für Refresh-Token-Cookie (HttpOnly, Secure, SameSite)
+  await app.register(cookie);
+
+  // M14: Auth-Routes — KEIN HMAC. JWT-geschützte Routes haben eigene Middleware.
+  // Registriert VOR dem HMAC-Block, damit /api/v1/auth/* nicht durch HMAC läuft.
+  await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
+  await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
+  await app.register(usersRoutes, { prefix: '/api/v1/users' });
 
   // Öffentliche Endpoints — kein Auth (D1)
   await app.register(healthRoutes, { prefix: '/api/v1' });

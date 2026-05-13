@@ -7,6 +7,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '../tests/msw/server';
+import { AuthProvider } from '../auth/AuthContext';
 import Layout from './Layout';
 import { ToastProvider } from './ToastProvider';
 
@@ -14,11 +15,13 @@ const BASE = '/api/v1';
 
 function renderLayout(children: React.ReactNode = <div>Content</div>) {
   return render(
-    <ToastProvider>
-      <MemoryRouter>
-        <Layout>{children}</Layout>
-      </MemoryRouter>
-    </ToastProvider>,
+    <AuthProvider>
+      <ToastProvider>
+        <MemoryRouter>
+          <Layout>{children}</Layout>
+        </MemoryRouter>
+      </ToastProvider>
+    </AuthProvider>,
   );
 }
 

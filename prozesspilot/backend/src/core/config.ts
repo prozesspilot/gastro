@@ -55,6 +55,27 @@ const envSchema = z.object({
   // customer_credentials hinterlegt; Client-ID/Secret sind global.
   GOOGLE_OAUTH_CLIENT_ID: z.string().default(''),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(''),
+
+  // ── M14: Auth (JWT + Refresh-Token + argon2) ────────────────────────────
+  // Server-Start verweigert in Production, wenn JWT_SECRET leer ist (min 32 Byte).
+  JWT_SECRET: z.string().default(''),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2592000),
+  ARGON2_MEMORY_COST: z.coerce.number().int().positive().default(65536),
+  ARGON2_TIME_COST: z.coerce.number().int().positive().default(3),
+  ARGON2_PARALLELISM: z.coerce.number().int().positive().default(1),
+  AUTH_MAX_FAILED_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  AUTH_LOCKOUT_MINUTES: z.coerce.number().int().positive().default(15),
+  AUTH_REFRESH_COOKIE_NAME: z.string().default('pp_refresh'),
+  // SameSite Strict für CSRF-Härtung; in Dev kann auch 'lax' nötig sein.
+  AUTH_REFRESH_COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('strict'),
+  AUTH_REFRESH_COOKIE_SECURE: z
+    .string()
+    .transform((v) => v === '1' || v === 'true')
+    .default('1'),
+  // Optional: einmalig zum Bootstrappen des ersten super_admin
+  INITIAL_SUPER_ADMIN_EMAIL: z.string().default(''),
+  INITIAL_SUPER_ADMIN_PASSWORD: z.string().default(''),
 });
 
 export type Config = z.infer<typeof envSchema>;
@@ -68,6 +89,12 @@ function loadConfig(): Config {
   const cfg = result.data;
   if (cfg.NODE_ENV === 'production' && cfg.PP_AUTH_DISABLED) {
     console.error('FATAL: PP_AUTH_DISABLED=1 ist in Production verboten');
+    process.exit(1);
+  }
+  // M14: JWT_SECRET ist in Production Pflicht (min 32 Zeichen).
+  // Im Test/Dev wird ein deterministischer Default eingesetzt, damit Tests laufen.
+  if (cfg.NODE_ENV === 'production' && cfg.JWT_SECRET.length < 32) {
+    console.error('FATAL: JWT_SECRET fehlt oder kürzer als 32 Zeichen (M14 Spec §7)');
     process.exit(1);
   }
   return cfg;

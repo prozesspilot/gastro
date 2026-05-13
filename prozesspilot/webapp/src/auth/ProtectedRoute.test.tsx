@@ -1,282 +1,132 @@
 /**
- * Tests für ProtectedRoute und AuthContext
+ * M14 — Tests für ProtectedRoute (mit echtem JWT-AuthContext)
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { AuthProvider, useAuth } from './AuthContext';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { server } from '../tests/msw/server';
+import { AuthProvider } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 
-// Helper: render with MemoryRouter + AuthProvider
-function renderWithAuth(
-  ui: React.ReactNode,
-  { initialEntries = ['/'] }: { initialEntries?: string[] } = {},
-) {
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <AuthProvider>
-        {ui}
-      </AuthProvider>
-    </MemoryRouter>,
+function makeAccessToken(claims: Record<string, unknown>): string {
+  // Test-Helper: kein gültiger JWT für Server, aber decodierbar für token-refresh.
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return `${header}.${payload}.sig`;
+}
+
+const inFuture = Math.floor(Date.now() / 1000) + 600;
+
+function withSession(opts: { user?: Record<string, unknown>; refreshStatus?: number } = {}) {
+  const user = opts.user ?? {
+    id: 'usr_1', email: 'admin@test.de', display_name: 'Admin',
+    tenant_id: 'tnt_x', permissions: ['*'], preset: 'super_admin',
+    is_active: true, password_must_change: false, last_login_at: null, created_at: '',
+  };
+  const token = makeAccessToken({ sub: user.id, tenant_id: user.tenant_id, permissions: user.permissions, preset: user.preset, exp: inFuture });
+  server.use(
+    http.post('/api/v1/auth/refresh', () =>
+      HttpResponse.json({ ok: true, data: { access_token: token, user } }),
+    ),
   );
 }
 
-// Captures current location for assertions
 function LocationDisplay() {
   const loc = useLocation();
   return <div data-testid="location">{loc.pathname}</div>;
 }
 
-// ── ProtectedRoute ───────────────────────────────────────────────────────────
-
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     sessionStorage.clear();
-  });
-
-  it('zeigt Lade-Indicator solange Auth lädt', async () => {
-    // Auth initial loading
-    renderWithAuth(
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <div>Protected Content</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/login" element={<div>Login</div>} />
-      </Routes>,
-    );
-
-    // After mounting, isLoading briefly true then resolves
-    // Just check the component renders without error
-    await waitFor(() => {
-      // Either loading, redirected to login, or showing content
-      const body = document.body.textContent ?? '';
-      expect(body.length).toBeGreaterThan(0);
-    });
+    localStorage.clear();
   });
 
   it('leitet zu /login wenn kein User eingeloggt', async () => {
-    // No session in sessionStorage → not logged in
-    renderWithAuth(
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <div>Protected Content</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/login" element={<div data-testid="login-page">Login</div>} />
-      </Routes>,
+    // default MSW handler antwortet 401 auf /auth/refresh
+    render(
+      <MemoryRouter initialEntries={['/protected']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/protected" element={<ProtectedRoute><div>Protected</div></ProtectedRoute>} />
+            <Route path="/login" element={<div data-testid="login-page">Login</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
     );
-
     await waitFor(() => {
       expect(screen.getByTestId('login-page')).toBeInTheDocument();
     });
   });
 
   it('zeigt geschützte Inhalte wenn User eingeloggt', async () => {
-    // Seed session
-    sessionStorage.setItem('pp_session', JSON.stringify({
-      tenantId: 'tenant-001',
-      tenantName: 'Test GmbH',
-      displayName: 'Admin',
-    }));
-
-    renderWithAuth(
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <div data-testid="protected-content">Geschützte Seite</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/login" element={<div>Login</div>} />
-      </Routes>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('protected-content')).toBeInTheDocument();
-    });
-  });
-
-  it('leitet zu /login mit from-Parameter', async () => {
-    renderWithAuth(
-      <Routes>
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <div>Dashboard</div>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/login"
-          element={<LocationDisplay />}
-        />
-      </Routes>,
-      { initialEntries: ['/dashboard'] },
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/login');
-    });
-  });
-});
-
-// ── AuthContext ──────────────────────────────────────────────────────────────
-
-function AuthConsumer() {
-  const { user, isLoading, login, logout } = useAuth();
-
-  if (isLoading) return <div data-testid="loading">Laden…</div>;
-  if (!user) return (
-    <div>
-      <div data-testid="no-user">Nicht eingeloggt</div>
-      <button
-        onClick={() => login({ tenantId: 'tid-1', tenantName: 'Acme', displayName: 'Admin' })}
-        data-testid="login-btn"
-      >
-        Login
-      </button>
-    </div>
-  );
-  return (
-    <div>
-      <div data-testid="user-name">{user.displayName}</div>
-      <div data-testid="tenant-id">{user.tenantId}</div>
-      <button onClick={logout} data-testid="logout-btn">Logout</button>
-    </div>
-  );
-}
-
-describe('AuthContext', () => {
-  beforeEach(() => {
-    sessionStorage.clear();
-    vi.clearAllMocks();
-  });
-
-  it('startet mit keinem User wenn keine Session vorhanden', async () => {
+    withSession();
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/protected']}>
         <AuthProvider>
-          <AuthConsumer />
+          <Routes>
+            <Route path="/protected" element={<ProtectedRoute><div data-testid="content">Geschützte Seite</div></ProtectedRoute>} />
+            <Route path="/login" element={<div>Login</div>} />
+          </Routes>
         </AuthProvider>
       </MemoryRouter>,
     );
-
     await waitFor(() => {
-      expect(screen.getByTestId('no-user')).toBeInTheDocument();
+      expect(screen.getByTestId('content')).toBeInTheDocument();
     });
   });
 
-  it('stellt Session aus sessionStorage wieder her', async () => {
-    sessionStorage.setItem('pp_session', JSON.stringify({
-      tenantId: 'tenant-xyz',
-      tenantName: 'XYZ GmbH',
-      displayName: 'Max Mustermann',
-    }));
-
+  it('leitet bei password_must_change auf /change-password', async () => {
+    withSession({
+      user: {
+        id: 'usr_2', email: 'new@test.de', display_name: 'Neu',
+        tenant_id: 'tnt_y', permissions: ['receipts.read'], preset: 'operator',
+        is_active: true, password_must_change: true, last_login_at: null, created_at: '',
+      },
+    });
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/']}>
         <AuthProvider>
-          <AuthConsumer />
+          <Routes>
+            <Route path="/" element={<ProtectedRoute><div>Home</div></ProtectedRoute>} />
+            <Route path="/change-password" element={<LocationDisplay />} />
+          </Routes>
         </AuthProvider>
       </MemoryRouter>,
     );
-
     await waitFor(() => {
-      expect(screen.getByTestId('user-name').textContent).toBe('Max Mustermann');
-      expect(screen.getByTestId('tenant-id').textContent).toBe('tenant-xyz');
+      expect(screen.getByTestId('location').textContent).toBe('/change-password');
     });
   });
 
-  it('login setzt User und speichert in sessionStorage', async () => {
-    const user = userEvent.setup();
-
+  it('zeigt 403-Hinweis wenn Permission fehlt', async () => {
+    withSession({
+      user: {
+        id: 'usr_3', email: 'op@test.de', display_name: 'Op',
+        tenant_id: 'tnt_x', permissions: ['receipts.read'], preset: 'operator',
+        is_active: true, password_must_change: false, last_login_at: null, created_at: '',
+      },
+    });
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/admin']}>
         <AuthProvider>
-          <AuthConsumer />
+          <Routes>
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requirePermission="users.manage">
+                  <div>Admin-Only</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
         </AuthProvider>
       </MemoryRouter>,
     );
-
-    await waitFor(() => screen.getByTestId('login-btn'));
-    await user.click(screen.getByTestId('login-btn'));
-
     await waitFor(() => {
-      expect(screen.getByTestId('user-name').textContent).toBe('Admin');
+      expect(screen.getByRole('alert')).toHaveTextContent(/users.manage/);
     });
-
-    const stored = JSON.parse(sessionStorage.getItem('pp_session') ?? '{}');
-    expect(stored.tenantId).toBe('tid-1');
-  });
-
-  it('logout räumt User und sessionStorage auf', async () => {
-    sessionStorage.setItem('pp_session', JSON.stringify({
-      tenantId: 'tenant-abc',
-      tenantName: 'ABC GmbH',
-      displayName: 'Hans',
-    }));
-
-    const user = userEvent.setup();
-
-    render(
-      <MemoryRouter>
-        <AuthProvider>
-          <AuthConsumer />
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => screen.getByTestId('logout-btn'));
-    await user.click(screen.getByTestId('logout-btn'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('no-user')).toBeInTheDocument();
-    });
-
-    expect(sessionStorage.getItem('pp_session')).toBeNull();
-  });
-
-  it('ignoriert invalides JSON in sessionStorage', async () => {
-    sessionStorage.setItem('pp_session', 'INVALID_JSON');
-
-    render(
-      <MemoryRouter>
-        <AuthProvider>
-          <AuthConsumer />
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('no-user')).toBeInTheDocument();
-    });
-  });
-
-  it('useAuth wirft Error außerhalb von AuthProvider', () => {
-    function BrokenConsumer() {
-      useAuth();
-      return null;
-    }
-    expect(() =>
-      render(
-        <MemoryRouter>
-          <BrokenConsumer />
-        </MemoryRouter>,
-      ),
-    ).toThrow('useAuth muss innerhalb von AuthProvider genutzt werden');
   });
 });

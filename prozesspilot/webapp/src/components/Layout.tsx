@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { fetchReceiptStats, fetchTenants, getActiveTenantId } from '../api';
 import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
 import GlobalSearch from './GlobalSearch';
+import UserMenu from './UserMenu';
 
 interface NavSpec {
   to: string;
@@ -144,17 +145,20 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <button
-            type="button"
-            className="global-search-trigger"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Globale Suche öffnen (Cmd+K)"
-            aria-haspopup="dialog"
-          >
-            <span aria-hidden="true">🔍</span>
-            <span>Suche…</span>
-            <kbd aria-hidden="true">⌘K</kbd>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              className="global-search-trigger"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Globale Suche öffnen (Cmd+K)"
+              aria-haspopup="dialog"
+            >
+              <span aria-hidden="true">🔍</span>
+              <span>Suche…</span>
+              <kbd aria-hidden="true">⌘K</kbd>
+            </button>
+            <UserMenu />
+          </div>
         </div>
 
         <main id="main-content" className="page-body" key={location.pathname} tabIndex={-1}>

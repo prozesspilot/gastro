@@ -264,9 +264,23 @@ export const statsHandlers = [
   ),
 ];
 
+// ── M14: Auth ─────────────────────────────────────────────────────────────
+// Default: /auth/refresh schlägt fehl (Cold-Start) → nicht eingeloggt.
+// Tests, die einen eingeloggten User brauchen, überschreiben das per server.use().
+
+export const authHandlers = [
+  http.post(`${BASE}/auth/refresh`, () =>
+    HttpResponse.json({ ok: false, error: { code: 'NO_REFRESH_TOKEN', message: 'kein Cookie' } }, { status: 401 }),
+  ),
+  http.post(`${BASE}/auth/logout`, () =>
+    HttpResponse.json({ ok: true, data: { logged_out: true } }),
+  ),
+];
+
 // ── Alle Handler zusammen ─────────────────────────────────────────────────
 
 export const handlers = [
+  ...authHandlers,
   ...receiptHandlers,
   ...customerHandlers,
   ...tenantHandlers,

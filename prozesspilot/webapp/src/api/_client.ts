@@ -2,8 +2,9 @@
  * Gemeinsamer Fetch-Client für alle API-Module.
  *
  * - Basis-URL: /api/v1 (Vite-Proxy → Backend)
- * - Tenant-Header: x-pp-tenant-id (vom Backend erwartet — entspricht "X-Tenant-ID")
- * - Authentifizierung: HMAC ist im Dev-Modus deaktiviert (PP_AUTH_DISABLED=1)
+ * - Tenant-Header: x-pp-tenant-id (für non-Auth-Endpoints)
+ * - M14: Authorization: Bearer <access_token>
+ * - M14: Auto-Refresh bei 401 → genau ein Retry mit neuem Token
  */
 
 const BASE = '/api/v1';
@@ -31,11 +32,37 @@ export class ApiError extends Error {
   }
 }
 
+// ── M14: Access-Token-Provider + Refresh-Hook ─────────────────────────────────
+// AuthContext setzt diese Hooks. Vor dem Setzen liefern getAccessToken() → null
+// und triggerRefresh() → null (kein Retry).
+
+type AccessTokenProvider = () => string | null;
+type RefreshTrigger = () => Promise<string | null>;
+type UnauthorizedHandler = () => void;
+
+let accessTokenProvider: AccessTokenProvider = () => null;
+let refreshTrigger: RefreshTrigger = async () => null;
+let unauthorizedHandler: UnauthorizedHandler = () => undefined;
+
+export function setAuthHooks(opts: {
+  getAccessToken: AccessTokenProvider;
+  refresh: RefreshTrigger;
+  onUnauthorized: UnauthorizedHandler;
+}): void {
+  accessTokenProvider = opts.getAccessToken;
+  refreshTrigger = opts.refresh;
+  unauthorizedHandler = opts.onUnauthorized;
+}
+
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   tenantId?: string | null;
   /** Wenn true, wird bei 404 statt eines Fehlers `undefined` zurückgegeben. */
   optional?: boolean;
+  /** Internes Flag, um Endlos-Refresh-Schleifen zu verhindern. */
+  _retry?: boolean;
+  /** Wenn true, kein Bearer-Header anhängen (z. B. für Health-Endpoint). */
+  skipAuth?: boolean;
 }
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -46,14 +73,22 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, msg, obj?.error?.code, obj?.error?.details);
 }
 
-export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+function buildHeaders(opts: RequestOptions): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...(opts.headers as Record<string, string> | undefined),
   };
-
   const tenantId = opts.tenantId !== undefined ? opts.tenantId : getActiveTenantId();
   if (tenantId) headers['x-pp-tenant-id'] = tenantId;
+  if (!opts.skipAuth) {
+    const token = accessTokenProvider();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const headers = buildHeaders(opts);
 
   let body: BodyInit | undefined;
   if (opts.body !== undefined) {
@@ -65,7 +100,23 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
     }
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers, body });
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    credentials: 'include',
+    headers,
+    body,
+  });
+
+  if (res.status === 401 && !opts._retry && !opts.skipAuth) {
+    // M14: Versuche genau einen Refresh und retry mit neuem Token.
+    const newToken = await refreshTrigger();
+    if (newToken) {
+      return apiRequest<T>(path, { ...opts, _retry: true });
+    }
+    // Refresh fehlgeschlagen → User muss neu einloggen.
+    unauthorizedHandler();
+    throw await parseError(res);
+  }
 
   if (!res.ok) {
     if (res.status === 404 && opts.optional) {
@@ -82,13 +133,20 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
 
 /** Variante für Binär-Downloads (PDF / Original-Datei). */
 export async function apiBlob(path: string, opts: RequestOptions = {}): Promise<Blob> {
-  const headers: Record<string, string> = {
-    ...(opts.headers as Record<string, string> | undefined),
-  };
-  const tenantId = opts.tenantId !== undefined ? opts.tenantId : getActiveTenantId();
-  if (tenantId) headers['x-pp-tenant-id'] = tenantId;
-
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers, body: undefined });
+  const headers = buildHeaders(opts);
+  delete headers.Accept;
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    credentials: 'include',
+    headers,
+    body: undefined,
+  });
+  if (res.status === 401 && !opts._retry && !opts.skipAuth) {
+    const newToken = await refreshTrigger();
+    if (newToken) return apiBlob(path, { ...opts, _retry: true });
+    unauthorizedHandler();
+    throw await parseError(res);
+  }
   if (!res.ok) throw await parseError(res);
   return res.blob();
 }

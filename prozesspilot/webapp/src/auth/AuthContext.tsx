@@ -1,82 +1,191 @@
 /**
- * D2 — Auth-Flow
+ * M14 — AuthContext
  *
- * Einfacher Auth-Context für ProzessPilot.
- * In Dev (PP_AUTH_DISABLED=1 am Backend) wird kein echter Token benötigt —
- * der "Login" setzt nur den Tenant-Kontext in sessionStorage.
+ * Spec: Konzeptentwicklung/modules/M14_User_Verwaltung_Auth.md §6.5
  *
- * Token-Strategie: sessionStorage (nicht localStorage) für XSS-Härtung.
- * Beim Tab-Schließen wird die Session automatisch beendet.
- *
- * DECISION: HMAC-Signierung läuft server-seitig (n8n → Backend).
- * Die Webapp nutzt keinen HMAC — sie setzt nur x-pp-tenant-id Header.
- * LoginPage ist daher ein "Tenant-Select" mit optionalem Password-Feld
- * (für zukünftige echte Auth).
+ * - Access-Token: in-memory (useState) — beim Reload via /auth/refresh wiederhergestellt
+ * - Refresh-Token: HttpOnly Cookie, vom Backend gesetzt
+ * - Permissions: live aus Token decoded oder via /auth/me
+ * - Auto-Refresh: 60s vor Ablauf
+ * - hasPermission: Wildcard-aware
  */
 
 import {
   createContext,
+  useCallback,
   useContext,
-  useState,
   useEffect,
+  useMemo,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react';
-import { setActiveTenantId } from '../api/_client';
+import type { AuthUserDto } from '../api/auth';
+import * as authApi from '../api/auth';
+import { setAuthHooks, setActiveTenantId } from '../api/_client';
+import { matchPermission } from './permissions';
+import { scheduleRefresh } from './token-refresh';
 
-const SESSION_KEY = 'pp_session';
-
-export interface AuthUser {
-  tenantId:    string;
-  tenantName:  string;
+export interface AuthUser extends AuthUserDto {
+  // alias for display (legacy code)
   displayName: string;
-  // In Phase 3: JWT-Token für echte Auth
-  token?: string;
+  tenantId: string | null;
 }
 
 interface AuthContextValue {
-  user:    AuthUser | null;
+  user: AuthUser | null;
+  accessToken: string | null;
   isLoading: boolean;
-  login:   (user: AuthUser) => void;
-  logout:  () => void;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshNow: () => Promise<string | null>;
+  hasPermission: (perm: string) => boolean;
+  updateLocalUser: (patch: Partial<AuthUser>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]       = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+function toAuthUser(dto: AuthUserDto): AuthUser {
+  return {
+    ...dto,
+    displayName: dto.display_name,
+    tenantId: dto.tenant_id,
+  };
+}
 
-  // Session aus sessionStorage wiederherstellen
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const refreshCancelRef = useRef<(() => void) | null>(null);
+  const accessTokenRef = useRef<string | null>(null);
+
+  // Refs spiegeln state — damit setAuthHooks immer auf aktuellen Wert zugreift.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as AuthUser;
-        setUser(parsed);
-        setActiveTenantId(parsed.tenantId);
-      }
-    } catch {
-      sessionStorage.removeItem(SESSION_KEY);
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
+
+  const applySession = useCallback((token: string, dto: AuthUserDto) => {
+    const u = toAuthUser(dto);
+    setAccessToken(token);
+    setUser(u);
+    if (u.tenantId) {
+      setActiveTenantId(u.tenantId);
     }
-    setIsLoading(false);
   }, []);
 
-  const login = (newUser: AuthUser) => {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(newUser));
-    setActiveTenantId(newUser.tenantId);
-    setUser(newUser);
-  };
-
-  const logout = () => {
-    sessionStorage.removeItem(SESSION_KEY);
+  const clearSession = useCallback(() => {
+    setAccessToken(null);
     setUser(null);
-  };
+    accessTokenRef.current = null;
+    if (refreshCancelRef.current) {
+      refreshCancelRef.current();
+      refreshCancelRef.current = null;
+    }
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const refreshNow = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await authApi.refresh();
+      applySession(res.access_token, res.user);
+      return res.access_token;
+    } catch {
+      clearSession();
+      return null;
+    }
+  }, [applySession, clearSession]);
+
+  // Hooks für den API-Client setzen (Bearer + Auto-Refresh bei 401).
+  useEffect(() => {
+    setAuthHooks({
+      getAccessToken: () => accessTokenRef.current,
+      refresh: refreshNow,
+      onUnauthorized: () => clearSession(),
+    });
+  }, [refreshNow, clearSession]);
+
+  // Beim Mount: Refresh-Cookie ausprobieren → Session wiederherstellen.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await authApi.refresh();
+        if (cancelled) return;
+        applySession(res.access_token, res.user);
+      } catch {
+        // Kein gültiger Refresh-Token → nicht eingeloggt.
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applySession]);
+
+  // Auto-Refresh-Timer planen, sobald accessToken sich ändert.
+  useEffect(() => {
+    if (refreshCancelRef.current) {
+      refreshCancelRef.current();
+      refreshCancelRef.current = null;
+    }
+    if (accessToken) {
+      refreshCancelRef.current = scheduleRefresh(accessToken, async () => {
+        await refreshNow();
+      });
+    }
+    return () => {
+      if (refreshCancelRef.current) {
+        refreshCancelRef.current();
+        refreshCancelRef.current = null;
+      }
+    };
+  }, [accessToken, refreshNow]);
+
+  const loginWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const res = await authApi.login(email, password);
+      applySession(res.access_token, res.user);
+    },
+    [applySession],
   );
+
+  const logout = useCallback(async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Auch bei Fehler lokale Session beenden.
+    }
+    clearSession();
+  }, [clearSession]);
+
+  const hasPermission = useCallback(
+    (perm: string): boolean => {
+      if (!user) return false;
+      return matchPermission(user.permissions, perm);
+    },
+    [user],
+  );
+
+  const updateLocalUser = useCallback((patch: Partial<AuthUser>) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      accessToken,
+      isLoading,
+      loginWithPassword,
+      logout,
+      refreshNow,
+      hasPermission,
+      updateLocalUser,
+    }),
+    [user, accessToken, isLoading, loginWithPassword, logout, refreshNow, hasPermission, updateLocalUser],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

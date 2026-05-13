@@ -24,11 +24,11 @@ test.describe('ProzessPilot Smoke-Tests', () => {
     ).toBeVisible({ timeout: 10_000 });
   });
 
-  test('Login-Page hat Tenant-Auswahl und Passwort-Feld', async ({ page }) => {
+  test('Login-Page hat Email- und Passwort-Feld', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: 'ProzessPilot' })).toBeVisible();
-    await expect(page.getByLabel(/mandant/i)).toBeVisible();
-    await expect(page.getByLabel(/passwort/i)).toBeVisible();
+    await expect(page.getByLabel(/email/i)).toBeVisible();
+    await expect(page.getByLabel('Passwort', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
   });
 

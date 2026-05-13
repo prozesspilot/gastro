@@ -1,84 +1,65 @@
 /**
- * D2 — LoginPage
+ * M14 — LoginPage
  *
- * Minimal-Login: User wählt Tenant aus Liste + gibt optionales Passwort ein.
- * In Dev-Modus (PP_AUTH_DISABLED=1 am Backend) ist Passwort nicht nötig.
- *
- * Nach Login → Redirect zur ursprünglichen Seite (oder Dashboard).
+ * Spec §6.2: Email + Password. Generic-Error (OWASP). Bei
+ * password_must_change → Redirect /change-password.
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { getTenants } from '../api/tenants';
-import type { Tenant } from '../types';
+import { ApiError } from '../api/_client';
 
 export default function LoginPage() {
-  const { login, user }   = useAuth();
-  const navigate          = useNavigate();
-  const location          = useLocation();
+  const { loginWithPassword, user, isLoading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [tenants, setTenants]     = useState<Tenant[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [password, setPassword]   = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [tenantsLoading, setTenantsLoading] = useState(true);
-  const [error, setError]         = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  // Falls bereits eingeloggt → weiterleiten
   useEffect(() => {
     if (user) {
+      if (user.password_must_change) {
+        navigate('/change-password', { replace: true });
+        return;
+      }
       const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
       navigate(from, { replace: true });
     }
   }, [user, navigate, location.state]);
 
-  // Tenants laden
-  useEffect(() => {
-    getTenants()
-      .then((list) => {
-        setTenants(list);
-        if (list.length > 0) setSelectedId(list[0].id);
-      })
-      .catch(() => {
-        // Backend nicht erreichbar — Demo-Tenant als Fallback
-        const demo: Tenant = { id: 'demo', name: 'Demo-Tenant', slug: 'demo', created_at: '' };
-        setTenants([demo]);
-        setSelectedId(demo.id);
-      })
-      .finally(() => setTenantsLoading(false));
-  }, []);
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!selectedId) {
-      setError('Bitte wähle einen Tenant aus.');
+    setError('');
+    if (!email || !password) {
+      setError('Bitte Email und Passwort eingeben.');
       return;
     }
-
-    setLoading(true);
-    setError('');
-
+    setSubmitting(true);
     try {
-      const tenant = tenants.find((t) => t.id === selectedId);
-
-      // DECISION: In Dev-Modus kein echter Auth-Call — wir validieren nur,
-      // dass der Tenant existiert. Password-Prüfung kommt in Phase 3.
-      // In Produktion: POST /auth/login mit tenant_id + password → JWT.
-      login({
-        tenantId:    selectedId,
-        tenantName:  tenant?.name ?? selectedId,
-        displayName: tenant?.name ?? selectedId,
-        // token: wird in Phase 3 befüllt
-      });
-
-      const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
-      navigate(from, { replace: true });
-    } catch {
-      setError('Login fehlgeschlagen. Bitte versuche es erneut.');
+      await loginWithPassword(email, password);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'ACCOUNT_LOCKED') {
+        setError('Konto vorübergehend gesperrt. Bitte später erneut versuchen.');
+      } else {
+        // OWASP: kein "unbekannte Email" vs "falsches Passwort"
+        setError('Login fehlgeschlagen. Bitte prüfe Email und Passwort.');
+      }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--text-muted)' }}>
+        Wird geladen…
+      </div>
+    );
   }
 
   return (
@@ -102,7 +83,6 @@ export default function LoginPage() {
           padding: '40px 36px',
         }}
       >
-        {/* Logo / Titel */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>🧭</div>
           <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
@@ -114,70 +94,60 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} noValidate aria-label="Login">
-          {/* Tenant-Auswahl */}
           <div className="field" style={{ marginBottom: 20 }}>
-            <label htmlFor="tenant-select" style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>
-              Mandant / Tenant
-            </label>
-            {tenantsLoading ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '10px 0' }}>
-                Wird geladen…
-              </div>
-            ) : (
-              <select
-                id="tenant-select"
-                value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value)}
-                disabled={loading}
-                required
-                style={{ width: '100%' }}
-              >
-                <option value="">— Bitte wählen —</option>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Passwort (optional in Dev) */}
-          <div className="field" style={{ marginBottom: 24 }}>
-            <label htmlFor="password" style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>
-              Passwort{' '}
-              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>
-                (optional im Dev-Modus)
-              </span>
+            <label htmlFor="email" style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>
+              Email
             </label>
             <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Passwort eingeben"
-              disabled={loading}
-              autoComplete="current-password"
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="du@beispiel.de"
+              autoComplete="username"
+              required
+              disabled={submitting}
               style={{ width: '100%' }}
             />
           </div>
 
-          {/* Fehlermeldung */}
+          <div className="field" style={{ marginBottom: 24 }}>
+            <label htmlFor="password" style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>
+              Passwort
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                disabled={submitting}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Verbergen' : 'Anzeigen'}
+                style={{ padding: '0 12px', background: 'var(--surface-2, var(--surface))', border: '1px solid var(--border)', borderRadius: 6 }}
+              >
+                {showPassword ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
+
           {error && (
-            <div
-              className="error-box"
-              role="alert"
-              style={{ marginBottom: 16, fontSize: 13 }}
-            >
+            <div className="error-box" role="alert" style={{ marginBottom: 16, fontSize: 13 }}>
               {error}
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             className="primary"
-            disabled={loading || !selectedId || tenantsLoading}
+            disabled={submitting}
             style={{
               width: '100%',
               display: 'flex',
@@ -188,14 +158,14 @@ export default function LoginPage() {
               padding: '12px 0',
             }}
           >
-            {loading && <span className="spinner" />}
-            {loading ? 'Wird angemeldet…' : 'Anmelden'}
+            {submitting && <span className="spinner" />}
+            {submitting ? 'Wird angemeldet…' : 'Anmelden'}
           </button>
-        </form>
 
-        <p style={{ marginTop: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-          ProzessPilot v0.1 · Dev-Modus
-        </p>
+          <p style={{ marginTop: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+            Passwort vergessen? Bitte deinen Admin kontaktieren.
+          </p>
+        </form>
       </div>
     </div>
   );

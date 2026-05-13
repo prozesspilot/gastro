@@ -1,8 +1,9 @@
 /**
- * D2 — ProtectedRoute
+ * M14 — ProtectedRoute
  *
- * Leitet zur LoginPage weiter wenn kein User eingeloggt ist.
- * Zeigt Skeleton-Loading während Auth-State geladen wird.
+ * - Leitet zu /login wenn kein User
+ * - Leitet zu /change-password wenn password_must_change
+ * - Optional: Permission-Check (`requirePermission` Prop)
  */
 
 import { Navigate, useLocation } from 'react-router-dom';
@@ -10,14 +11,15 @@ import { useAuth } from './AuthContext';
 
 interface Props {
   children: React.ReactNode;
+  /** Optionale Permission, die erforderlich ist (z. B. "users.manage"). */
+  requirePermission?: string;
 }
 
-export default function ProtectedRoute({ children }: Props) {
-  const { user, isLoading } = useAuth();
-  const location            = useLocation();
+export default function ProtectedRoute({ children, requirePermission }: Props) {
+  const { user, isLoading, hasPermission } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
-    // Kurzes Flackern vermeiden — zeige nichts bis Auth-State bekannt
     return (
       <div
         style={{
@@ -36,8 +38,27 @@ export default function ProtectedRoute({ children }: Props) {
   }
 
   if (!user) {
-    // Redirect zur Login-Page, current URL als `from` Parameter speichern
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Forced password change: nur /change-password + /login erlaubt
+  if (user.password_must_change && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  if (requirePermission && !hasPermission(requirePermission)) {
+    return (
+      <div
+        role="alert"
+        style={{
+          padding: '32px',
+          textAlign: 'center',
+          color: 'var(--text-muted)',
+        }}
+      >
+        Du hast keine Berechtigung für diese Seite ({requirePermission}).
+      </div>
+    );
   }
 
   return <>{children}</>;

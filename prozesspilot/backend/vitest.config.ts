@@ -4,7 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['tests/**/*.test.ts', 'src/modules/**/tests/*.test.ts', 'src/__tests__/**/*.test.ts'],
+    include: [
+      'tests/**/*.test.ts',
+      'src/modules/**/tests/*.test.ts',
+      'src/modules/**/*.test.ts',
+      'src/__tests__/**/*.test.ts',
+      'src/core/**/*.test.ts',
+    ],
     setupFiles: ['tests/setup.ts'],
   },
 });

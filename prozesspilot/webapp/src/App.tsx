@@ -14,6 +14,8 @@ import AdvisorPortalPage from './pages/AdvisorPortalPage';
 import CommunicationsPage from './pages/CommunicationsPage';
 import PluginsPage from './pages/PluginsPage';
 import LoginPage from './pages/LoginPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
+import UsersPage from './pages/UsersPage';
 import NotFoundPage from './pages/NotFoundPage';
 import Layout from './components/Layout';
 import OnboardingModal from './components/OnboardingModal';
@@ -30,6 +32,15 @@ export default function App() {
           <Routes>
             {/* Öffentliche Route — kein Auth erforderlich */}
             <Route path="/login" element={<LoginPage />} />
+            {/* Eingeloggt, aber Forced-Change-Password */}
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePasswordPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Alle geschützten Routen — erfordern eingeloggten User */}
             <Route
@@ -59,6 +70,15 @@ export default function App() {
                         <Route path="/plugins" element={<PluginsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/settings/dsgvo" element={<SettingsPage />} />
+                        {/* M14 Benutzer-Verwaltung */}
+                        <Route
+                          path="/users"
+                          element={
+                            <ProtectedRoute requirePermission="users.read">
+                              <UsersPage />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </ErrorBoundary>

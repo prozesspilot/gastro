@@ -1,105 +1,164 @@
 # STRUCTURE.md
 
-Stand: 2026-05-07
-Branch-Policy: genau ein Branch (`main`). Keine Worktrees ausser dem Hauptverzeichnis.
+> **Stand:** 2026-05-15 (komplett neu nach Repo-Refactor — Verschachtelung aufgelöst)
+>
+> **Naming:** Repo heißt auf GitHub **`gastro`** (Code-Name). Firma + Brand für Außen-Kommunikation heißt **ProzessPilot**.
+>
+> Branch-Policy: `main` ist geschützt, Feature-Branches mit Naming-Convention `<owner>/T<id>-<kurz>` (siehe [Claude_Code_Workflow.md](Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md)).
 
-Diese Datei ist die kanonische Karte des Repositorys. Wenn etwas hier nicht beschrieben ist, ist es entweder
-veraltet (siehe `docs/archive/`) oder benutzergetrieben (Konzept-/Prompt-Dateien im Repo-Root).
+Diese Datei ist die kanonische Karte des Repositorys. Bei Diskrepanzen zwischen dieser Datei und der Realität: bitte aktualisieren.
 
 ---
 
 ## Top-Level-Layout
 
-| Ordner / Datei                      | Aufgabe |
-|-------------------------------------|---------|
-| `Modulkonzept/`                     | Fachliche Spezifikationen, Architektur, Roadmap, Modul-Specs (M01..M11). Quelle der Wahrheit fuer **was** gebaut wird. |
-| `prozesspilot/`                     | Lauffaehiger Code-Monorepo (Backend, Webapp, n8n, Migrations, Infra-Compose). |
-| `prozesspilot/backend/`             | Fastify/TypeScript-Backend. Modulare Struktur unter `src/modules/<m##>-*/`. |
-| `prozesspilot/webapp/`              | React/Vite-Frontend (Tailwind + Radix). Pages, Hooks, MSW-Tests. |
-| `prozesspilot/n8n/`                 | n8n-Workflow-JSONs + Deploy-Skript. Konvention `WF-<TYPE>-<MODULE>.json`. |
-| `prozesspilot/migrations/`          | Postgres-SQL-Migrations, fortlaufend nummeriert (`001_..` .. `030_..`). |
-| `prozesspilot/infra/`               | Infra-spezifische Configs (verschachtelt unter `monitoring/`, etc.). |
-| `prozesspilot/docker-compose.yml`   | Lokales Compose-Setup (Postgres, Redis, n8n, Backend, Webapp). |
-| `prozesspilot/docker-compose.prod.yml` | Produktions-Compose-Variante. |
-| `prozesspilot/scripts/`             | Hilfsskripte (Build, Smoke, Audit). |
-| `infra/`                            | Repo-weite Infra (top-level `Konzeptentwicklung`-Spec). |
-| `docs/archive/`                     | Archivierte Status-/Session-Berichte. Wird beim Aufraeumen befuellt, nicht von Code referenziert. |
-| `AGENT_SOLO.md`, `AGENTS_AUTONOM.md` | Agent-Anleitungen aus paralleler Phase. Header trägt Hinweis "ggf. überholt". |
-| `CLEANUP_PLAN.md`                   | Cleanup-Bericht (dieser Lauf). |
-| `STRUCTURE.md`                      | **Dieses** Dokument. Repository-Karte. |
-| `prompt_*.txt`, `aufgaben_*.txt`, `agent_system_prompt*.txt`, `*.html`, `Website_Prompt.md` | Benutzergetriebene Konzept- und Prompt-Dateien. Nicht im Code-Pfad. |
+```
+prozesspilot/                              ← Repo-Root
+│
+├── README.md                              ← Projekt-Übersicht
+├── CONTRIBUTING.md                        ← Tägliche Arbeits-Referenz
+├── STRUCTURE.md                           ← Diese Datei
+├── ProzessPilot_Anleitung.docx            ← Endkunden-Anleitung (Stand alt)
+├── ProzessPilot_Projektplan.docx          ← Historischer Projektplan
+│
+├── docker-compose.yml                     ← Lokales Dev-Setup
+├── docker-compose.prod.yml                ← Production-Setup für Hetzner
+│
+├── Modulkonzept/                          ← Konzept-Doku (komplett)
+│   └── Konzeptentwicklung/
+│       ├── README.md                      ← Konzept-Übersicht (Lese-Reihenfolge!)
+│       ├── 00_*.md                        ← Strategie, Vertrieb, Pilot, Architektur
+│       ├── 01–06_*.md                     ← Datenmodell, Kundenprofil, n8n, Erweiterbar, Roadmap, Prompts
+│       ├── Claude_Code_Workflow.md        ← Wie wir mit Claude Code arbeiten
+│       ├── Discord_Integration.md         ← Discord-Bot + OAuth + Customer-Bridge
+│       ├── Mitarbeiter_Webapp.md          ← Internes Tool
+│       ├── Onboarding_Wizard.md           ← Customer-Setup-Frontend
+│       ├── Web_Chat_Widget.md             ← Customer-Chat-Frontend
+│       ├── STATUS.html                    ← Live-Status
+│       ├── modules/                       ← M01–M15 Spec-Files
+│       ├── legal/                         ← Vertrags-Vorlagen für Anwalt
+│       ├── prompts/                       ← Historische Prompts (Archiv)
+│       ├── _archive/                      ← Veraltete Konzept-Files (read-only)
+│       ├── _audit/                        ← Audit-Befunde
+│       └── _pilot/                        ← Pilot-spezifische Notizen (vertraulich)
+│
+├── backend/                               ← Fastify + TypeScript (Backend)
+│   ├── src/
+│   │   ├── modules/                       ← M01–M15 Implementation
+│   │   ├── core/                          ← Customer-Profile, Events, Hooks, Adapter, Auth, Chat, Discord-Bridge
+│   │   ├── api/                           ← Fastify Routes
+│   │   └── infra/                         ← DB, Redis, MinIO Clients
+│   ├── package.json
+│   └── tests/
+│
+├── webapp/                                ← Mitarbeiter-Webapp (React + Vite)
+│   ├── src/
+│   │   ├── pages/                         ← Tenants, Tasks, Chat, Provisions, Settings
+│   │   ├── auth/                          ← Discord-OAuth-Frontend
+│   │   ├── components/
+│   │   └── hooks/
+│   └── tests/
+│
+├── n8n/
+│   ├── workflows/                         ← n8n-Workflow-JSONs (versioniert)
+│   ├── credentials/                       ← Templates (echte Keys aus Vault)
+│   └── deploy.sh
+│
+├── migrations/                            ← PostgreSQL-Migrationen (chronologisch)
+│   ├── 001_*.sql                          ← Initial-Schemas
+│   ├── 030_users_auth.sql                 ← M14 Auth (Discord-OAuth + Notfall-Login)
+│   └── 040_*.sql                          ← M15 SumUp + neue Tabellen
+│
+├── scripts/                               ← Hilfs-Skripte
+│   ├── bootstrap-first-admin.ts           ← Initial-GF anlegen
+│   ├── backup.sh
+│   └── deploy.sh
+│
+├── infra/                                 ← Infrastructure-as-Code
+│   ├── monitoring/                        ← Grafana-Dashboards, Loki-Configs
+│   ├── runbook/                           ← Deployment, Rollback, Oncall, Onboarding
+│   ├── backup/                            ← Postgres + S3 Backup-Skripte + Restore-Test
+│   ├── decisions/                         ← ADRs (PDF-Engine, Mail-Provider, Plugin-Sandbox)
+│   ├── security/                          ← Security-Checklist, Incident-Response
+│   ├── load-tests/                        ← Locust-Config
+│   └── _inner_README.md                   ← Historische Inhalts-Notiz
+│
+├── docs/                                  ← Tech-Doku
+│   ├── openapi.yaml                       ← OpenAPI-Spec
+│   └── archive/                           ← Alte Status/Session-Berichte
+│
+├── tasks/                                 ← Aufgaben-System
+│   ├── _README.md                         ← System-Erklärung
+│   ├── _template.md                       ← Vorlage für neue Tasks
+│   ├── _backlog/                          ← Tasks die noch nicht gestartet sind
+│   ├── _in_progress/                      ← Aktuell in Arbeit
+│   └── _done/                             ← Fertig + gemerged
+│
+├── .claude/                               ← Geteilte Claude-Code-Konfiguration
+│   ├── CLAUDE.md                          ← Master-Context (jede Session lädt das)
+│   ├── settings.json                      ← Modelle, Berechtigungen, Hooks
+│   ├── agents/                            ← 7 Sub-Agents (code-reviewer, test-writer, etc.)
+│   │   └── _archived_pre_reboot/          ← alte Agents aus Pre-Reboot-Phase
+│   └── commands/                          ← 5 Slash-Commands
+│       └── _archived_pre_reboot/          ← alte audit-Commands
+│
+├── .github/
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── ci.yml                         ← Mein Workflow (Lint+Test+Build+Discord-Notify)
+│       ├── ci-backend.yml                 ← Existierender Backend-CI (bestehend)
+│       ├── codeql.yml                     ← Security-Scan
+│       ├── deploy-staging.yml             ← Auto-Deploy auf Hetzner
+│       ├── deploy-stub.yml                ← TODO-Stub (noch nicht aktiv)
+│       └── discord-notify.yml             ← GitHub-Events → Discord
+│
+├── .env.example                           ← Beispiel-Env (echte .env separat)
+├── .gitignore                             ← VCS-Ignores (Secrets, Backups, Build-Output)
+│
+└── prozesspilot/                          ← VERALTETER Sub-Ordner — bitte manuell löschen
+    └── _DEPRECATED_FOLDER.md              ← Anleitung zum manuellen Aufräumen
+```
 
 ---
 
-## Wo finde ich was?
+## Wichtige Pfad-Konventionen
 
-| Was            | Wo |
-|----------------|----|
-| Fachkonzepte (Module, Architektur) | `Modulkonzept/Konzeptentwicklung/` (`00_Architektur_Hauptdokument.md`, `modules/M01..M11_*.md`, `05_Roadmap.md`) |
-| Backend-Quelltext                  | `prozesspilot/backend/src/` (Module unter `src/modules/`, Plumbing unter `src/core/`) |
-| Backend-Routen-Definitionen        | `prozesspilot/backend/src/routes/` und `src/modules/<m##>-*/routes.ts` |
-| Backend-Tests                      | `prozesspilot/backend/tests/` und `src/__tests__/` (Integration) |
-| Web-App-Quelltext                  | `prozesspilot/webapp/src/` (Pages, Components, Hooks, Api-Clients) |
-| Web-App-Pages                      | `prozesspilot/webapp/src/pages/` (kanonische Page-Liste) |
-| Web-App-Tests                      | `prozesspilot/webapp/src/tests/` (Vitest + MSW + Playwright e2e) |
-| n8n-Workflows                      | `prozesspilot/n8n/workflows/WF-*.json` (eine Datei je Workflow) |
-| n8n-Deploy-Hilfen                  | `prozesspilot/n8n/deploy.sh` |
-| DB-Migrations                      | `prozesspilot/migrations/<NNN>_<modul>.sql` (laufend, nummerisch monoton) |
-| ENV-Vorlagen                       | `prozesspilot/.env.example` (kanonisch fuer Backend); n8n-ENV in `prozesspilot/n8n/workflows/README.md` Section "ENV-Variablen in n8n" |
-| Doku Designentscheidungen Webapp   | `prozesspilot/webapp/DESIGN_DECISIONS.md` |
-| Doku Implementierungs-Status Backend | `prozesspilot/backend/IMPLEMENTATION_STATUS.md` |
-| Archivierte Session-Statusberichte | `docs/archive/` |
+| Bereich | Pfad | Wo es lebt |
+|---|---|---|
+| Modul-Implementation | `backend/src/modules/m<NN>-<name>/` | Code |
+| Modul-Spec | `Modulkonzept/Konzeptentwicklung/modules/M<NN>_<Name>.md` | Doku |
+| n8n-Workflow | `n8n/workflows/WF-<Domain>-<Variant>.json` | Workflow |
+| Migration | `migrations/<NNN>_<beschreibung>.sql` | DB |
+| Sub-Agent | `.claude/agents/<name>.md` | Claude Code |
+| Slash-Command | `.claude/commands/<name>.md` | Claude Code |
+| Task-Spec | `tasks/_backlog/T<XXX>-<beschreibung>.md` (dann `_in_progress/`, dann `_done/`) | Workflow |
 
 ---
 
-## Lokales Setup (3 Befehle)
+## Was wo gepflegt wird
 
-Alle Befehle aus `/Users/donandrejo/Documents/ProzessPilot/prozesspilot/`.
-
-```bash
-# 1) Infrastruktur (Postgres, Redis, n8n) hochfahren
-docker compose -f docker-compose.yml up -d
-
-# 2) Backend starten (mit Watch)
-cd backend && npm install && npm run dev
-
-# 3) Webapp starten (separates Terminal)
-cd ../webapp && npm install && npm run dev
-```
-
-Migrations einspielen (Backend muss DB-Verbindung haben):
-```bash
-cd prozesspilot/backend && npm run migrate
-```
+| Bereich | Pflege durch | Wann |
+|---|---|---|
+| Konzept-Doku (`Modulkonzept/...`) | beide gemeinsam | bei jeder Architektur-Änderung |
+| Backend-Code (`backend/`) | Andreas | bei jeder Modul-Erweiterung |
+| Webapp-Code (`webapp/`) | Steve | bei UI-Änderungen |
+| n8n-Workflows (`n8n/`) | Andreas | bei Workflow-Änderungen |
+| Migrations (`migrations/`) | Andreas | rückwärts-kompatibel, eine pro PR |
+| Tasks (`tasks/`) | beide | laufend |
+| Sub-Agents (`.claude/agents/`) | beide | Workflow-Änderungen |
+| Legal-Docs (`Modulkonzept/.../legal/`) | Steve + Anwalt | bei AGB-/AVV-Updates |
+| Subunternehmer-Liste (`legal/Subunternehmer.md`) | Steve | bei jedem neuen externen Dienst |
 
 ---
 
-## Kanonische Wahrheit
+## Veraltete Bereiche
 
-| Bereich            | Quelle |
-|--------------------|--------|
-| Backend-Routen     | `prozesspilot/backend/src/modules/*/routes.ts` und `src/routes/` (eingebunden in `src/app.ts`) |
-| Web-App-Pages      | `prozesspilot/webapp/src/pages/` (jede `.tsx`-Datei = eine Route, gemappt in `App.tsx`) |
-| n8n-Workflows      | `prozesspilot/n8n/workflows/WF-*.json` — eine Datei je Workflow, kanonischer Dateiname siehe README in dem Ordner |
-| DB-Schema          | `prozesspilot/migrations/*.sql` — chronologisch durchnummeriert |
-| Modul-Specs        | `Modulkonzept/Konzeptentwicklung/modules/M*.md` |
-
-Versionierte Workflow-Aenderungen: in n8n bearbeiten, exportieren, Datei im Repo committen.
-Dateinamen-Suffixe wie `_clean`, `_old`, `_backup` sind verboten; sie werden im Cleanup entfernt.
+- `Modulkonzept/Konzeptentwicklung/_archive/` — historische Konzept-Files (bleiben, werden nicht mehr gepflegt)
+- `Modulkonzept/Konzeptentwicklung/prompts/` — historische Prompt-Sammlung (bleibt als Referenz, kein aktiver Workflow mehr)
+- `prozesspilot/` (innerer Sub-Ordner) — Refactor-Rest, bitte manuell löschen (siehe `_DEPRECATED_FOLDER.md` darin)
 
 ---
 
-## Branch- und Worktree-Policy
-
-- **Genau ein Branch**: `main`. Feature-Arbeit darf in kurzlebigen Branches passieren, wird aber **immer** in main gemergt und dann geloescht.
-- **Keine sekundaeren Worktrees** im Standardbetrieb. Bei Bedarf temporaer, danach `git worktree remove` und `git branch -D`.
-- **Backup ueber Tags**: Vor jeder Konsolidierung `git tag pre-cleanup-YYYYMMDD-HHMM` und `git tag archive/<branch>-YYYY-MM-DD <branch>` setzen, **dann** loeschen.
-
-## Workflow-Datei-Konvention
-
-```
-WF-{TYPE}-{MODULE}.json
-```
-
-Erlaubte `TYPE`-Werte: `INPUT`, `MASTER`, `M01`..`M11`, `CRON`, `ERROR`, `PLUGIN`.
-Eine Datei pro Workflow. Keine `_clean`/`_old`/`_backup`-Varianten committen.
+**Letzte Aktualisierung:** 2026-05-15 (komplett neu nach Refactor)
+**Verantwortlich:** Steve + Andreas

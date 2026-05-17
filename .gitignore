@@ -1,10 +1,13 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 build/
 .next/
 *.tsbuildinfo
 
-# Environment files (incl. backups — never push secrets)
+# Environment (niemals commiten — Secrets!)
 .env
 .env.local
 .env.*.local
@@ -12,26 +15,23 @@ build/
 .env.bak*
 *.env.bak*
 
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
 # Logs
 *.log
 logs/
 
-# OS / Editor
-.DS_Store
-Thumbs.db
-.vscode/settings.json
-.idea/
-
-# Test / coverage artifacts
+# Test coverage
 coverage/
 .nyc_output/
-playwright-report/
-test-results/
 
-# Local backups (do not push)
-*.bak
-*.bak-*
-*.backup
-prozesspilot.bak-vor-audit-fix/
-**/migrations-dead-backup-*.tar.gz
-*.tar.gz
+# Refactor-Backups (lokal, nicht im Repo)
+.refactor_backup_*/
+
+# Lokale Backup-Ordner
+*.bak-*/
+prozesspilot.bak-*/

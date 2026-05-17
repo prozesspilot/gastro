@@ -1,168 +1,239 @@
-# ProzessPilot — Architektur (IST-Stand 2026-05-12, post-fix)
+# Gastro — Konzept-Übersicht
 
-> Dieses Verzeichnis enthält die vollständige Architektur von ProzessPilot.
-> Jede Datei ist so gehalten, dass sie **einzeln** an Claude Code übergeben werden kann.
-
----
-
-## Status
-
-Implementierung **abgeschlossen** (alle Module + Webapp + Infra).
-Live-Übersicht in [STATUS.html](STATUS.html).
-
-| Bereich            | Stand                                                                 |
-|--------------------|-----------------------------------------------------------------------|
-| Module M01–M14     | ✅ implementiert (Code + Migration + n8n-Workflow + Tests)            |
-| Webapp             | ✅ implementiert (React + Vite + Playwright, Production-Build)        |
-| n8n-Workflows      | ✅ 17 Workflows produktionsbereit                                      |
-| Postgres-Migrations| ✅ 33 Migrationen (inkl. 031_users_auth + 031b_bootstrap)             |
-| Infra              | ✅ Runbooks, Backup, ADRs, Security-Checklist, Load-Tests              |
-| Plugin-System (Pro)| ✅ implementiert                                                       |
-| M11 / M12 / M13 / M14 | ✅ alle implementiert (inkl. JWT-Auth, User-CRUD, ChangePassword)  |
-| Nächster Schritt   | Server-Deployment + erster Pilotkunde (siehe [05_Roadmap.md](05_Roadmap.md)) |
+> **Stand:** 2026-05-15 (komplett überarbeitet nach Konzept-Reboot)
+>
+> **Naming-Konvention:** Das System/Produkt heißt intern **Gastro** (Code, Repo, Tech-Doku). Die Firma + Brand für Außen-Kommunikation heißt **ProzessPilot** (AGB, Sales, Marketing, Customer-Touchpoints, Domain). Beide Namen erscheinen in dieser Doku — der jeweilige Kontext entscheidet welcher passt.
+>
+> Dieses Verzeichnis enthält die gesamte Konzept-Dokumentation für das Gastro-System (vertrieben unter dem Brand ProzessPilot). Jede Datei ist so gehalten, dass sie auch einzeln gelesen werden kann.
 
 ---
 
-## Verzeichnisaufbau
+## Was ist ProzessPilot?
+
+ProzessPilot ist ein modulares SaaS-System für deutsche **Gastronomie-Kleinunternehmer**, das deren Steuerberater-Kosten um 60–80 % senkt. Wirte schicken Belege per WhatsApp / E-Mail / Web-Chat, ProzessPilot extrahiert per OCR + KI, kategorisiert mit Gastro-Spezialfällen (Bewirtung, MwSt-Splitting, Pfand), archiviert GoBD-konform und übergibt monatlich aufbereitet an den Steuerberater (DATEV / Lexware Office / sevDesk).
+
+**Vertriebsmodell:** Eine externe Vertriebsagentur als Handelsvertreter, 50 % Provision auf Setup + recurring.
+
+**Pricing:** Solo €39 / Standard €79 / Pro €149 / Filiale €299 pro Monat plus Setup-Fee. 30 Tage Geld-zurück-Garantie.
+
+**Aktueller Stand:** Konzept komplett, Pilot-Wirt bekannt (Lexware-Office-Steuerberaterin, SumUp-Lite-Kasse, sofortiger Start ab KW 22).
+
+---
+
+## Lese-Reihenfolge
+
+### Für eine neue Person (Quick-Start)
+
+1. **`STATUS.html`** im Browser öffnen — schneller Überblick
+2. **`00_Strategie_Gastro.md`** — Geschäftsmodell, Markt, USP
+3. **`00_Architektur_Hauptdokument.md`** — System-Architektur
+4. **`00_Pilot_Strategie.md`** — was wir gerade konkret bauen
+5. **`05_Roadmap.md`** — was als nächstes ansteht
+
+### Für Andreas (Backend, Module, Infrastructure)
+
+- `00_Architektur_Hauptdokument.md`
+- `01_Datenmodell_Events.md`
+- `02_Kundenprofil_System.md`
+- `03_n8n_Workflows.md`
+- `04_Erweiterbarkeit_Pro.md`
+- `06_Prompt_System.md`
+- `Discord_Integration.md` (Bot-Architektur)
+- `modules/M0X_*.md` für jedes konkrete Modul
+- `Claude_Code_Workflow.md` (wie wir arbeiten)
+
+### Für Steve (Frontend, Discord, Vertrieb, Legal)
+
+- `00_Strategie_Gastro.md`
+- `00_Vertriebsmodell.md`
+- `00_Pilot_Strategie.md`
+- `Mitarbeiter_Webapp.md`
+- `Onboarding_Wizard.md`
+- `Web_Chat_Widget.md`
+- `Discord_Integration.md`
+- `legal/*.md`
+- `Claude_Code_Workflow.md`
+
+### Für den Anwalt
+
+- `legal/Anwalt_Briefing.md` (Master-Brief)
+- `legal/AGB_Endkunden_Vorlage.md`
+- `legal/AVV_Vorlage.md`
+- `legal/TOMs_Vorlage.md`
+- `legal/Vertriebsagentur_Vertrag_Vorlage.md`
+- `legal/Subunternehmer.md`
+- `legal/Datenschutz_Webapp.md`
+- `legal/Datenschutz_Website_Ergaenzung.md`
+
+---
+
+## Verzeichnis-Struktur
 
 ```
-Konzeptentwicklung/
-├── README.md                          ← diese Datei
-├── STATUS.html                        ← Live-Stand (öffnen)
-├── 00_Architektur_Hauptdokument.md    ← Systemüberblick, Tech-Stack, n8n vs. Backend
-├── 01_Datenmodell_Events.md           ← Receipt-Schema, Events, Naming, DB-Schema
-├── 02_Kundenprofil_System.md          ← Kunden-DB, Web-App, Routing-Logik
-├── 03_n8n_Workflows.md                ← Master-Workflow, Konventionen, Deployment
-├── 04_Erweiterbarkeit_Pro.md          ← Hooks, Custom Modules, Plugin-System
-├── 05_Roadmap.md                      ← IST-Stand + nächste Schritte
-├── 06_Prompt_System.md                ← Prompt-Templates für Code-Generierung
-├── Foundation_Spec.md                 ← (erfüllt — historische Referenz)
-├── _archive/                          ← Sprint-Files Sprint 0 + Sprint 1 (erfüllt)
-└── modules/
-    ├── M01_Belegerfassung_OCR.md
-    ├── M02_Belegarchivierung.md
-    ├── M03_Kategorisierung.md
-    ├── M04_DATEV_Export.md
-    ├── M05_Lexoffice_Integration.md
-    ├── M06_sevDesk_Integration.md
-    ├── M07_Excel_Sheets_Export.md
-    ├── M08_Monatsreporting.md
-    ├── M09_Lieferanten_Kommunikation.md
-    ├── M10_WhatsApp_Eingang.md
-    ├── M11_IMAP_Eingang.md            ← (nachgezogen 2026-05-07)
-    ├── M12_DSGVO.md                   ← (nachgezogen 2026-05-07)
-    ├── M13_Steuerberater_Portal.md    ← (nachgezogen 2026-05-07)
-    └── M14_User_Verwaltung_Auth.md    ← (implementiert 2026-05-12)
+Modulkonzept/Konzeptentwicklung/
+│
+├── README.md                              ← diese Datei
+├── STATUS.html                            ← aktueller Live-Stand
+│
+├── Strategie & Geschäftsmodell
+│   ├── 00_Strategie_Gastro.md             ← Markt, Persona, Pricing, USP
+│   ├── 00_Vertriebsmodell.md              ← Vertriebsagentur, Provisions-Logik
+│   ├── 00_Pilot_Strategie.md              ← Pilot-Wirt-Setup, Sub-Phasen
+│   └── 05_Roadmap.md                      ← Customer-Outcome-Meilensteine
+│
+├── Tech-Architektur
+│   ├── 00_Architektur_Hauptdokument.md    ← System-Überblick
+│   ├── 01_Datenmodell_Events.md           ← Receipt-Schema, Event-Format
+│   ├── 02_Kundenprofil_System.md          ← Tenant-Profil
+│   ├── 03_n8n_Workflows.md                ← Workflow-Konventionen
+│   ├── 04_Erweiterbarkeit_Pro.md          ← Hooks, Custom-Plugins
+│   └── 06_Prompt_System.md                ← Prompt-Templates
+│
+├── Frontends + interne Tools
+│   ├── Mitarbeiter_Webapp.md              ← admin.prozesspilot.net (intern)
+│   ├── Onboarding_Wizard.md               ← setup.prozesspilot.net (Customer einmalig)
+│   └── Web_Chat_Widget.md                 ← chat.prozesspilot.net (Customer bei Bedarf)
+│
+├── Workflow + Integration
+│   ├── Discord_Integration.md             ← Mitarbeiter-Auth + Bot + Customer-Bridge
+│   └── Claude_Code_Workflow.md            ← wie wir mit Claude Code entwickeln
+│
+├── modules/                               ← Detail-Specs pro Modul (M01–M15)
+│   ├── M01_Belegerfassung_OCR.md
+│   ├── M02_Belegarchivierung.md
+│   ├── M03_Kategorisierung.md             ← inkl. Gastro-Hooks (Bewirtung, MwSt-Split, Pfand)
+│   ├── M04_DATEV_Export.md
+│   ├── M05_Lexoffice_Integration.md       ← (= Lexware Office)
+│   ├── M06_sevDesk_Integration.md
+│   ├── M07_Excel_Sheets_Export.md
+│   ├── M08_Monatsreporting.md             ← inkl. Steuerberater-Übergabe + Spar-Bericht
+│   ├── M09_Lieferanten_Kommunikation.md
+│   ├── M10_WhatsApp_Eingang.md
+│   ├── M11_IMAP_Eingang.md
+│   ├── M12_DSGVO.md                       ← inkl. GoBD-Doku-Generator
+│   ├── M13_Steuerberater_Portal.md
+│   ├── M14_User_Verwaltung_Auth.md        ← Discord OAuth + Notfall-Login
+│   └── M15_Kassensystem_Connector.md      ← NEU SumUp first
+│
+├── legal/                                 ← Vorlagen für den Anwalt
+│   ├── Anwalt_Briefing.md
+│   ├── AGB_Endkunden_Vorlage.md
+│   ├── AVV_Vorlage.md
+│   ├── TOMs_Vorlage.md
+│   ├── Vertriebsagentur_Vertrag_Vorlage.md
+│   ├── Subunternehmer.md
+│   ├── Datenschutz_Webapp.md
+│   └── Datenschutz_Website_Ergaenzung.md
+│
+├── prompts/                               ← Historische Prompt-Sammlung (vor Reboot)
+│   ├── README.md
+│   ├── legacy/
+│   └── terminal-tasks/
+│
+├── _archive/                              ← Veraltete Konzept-Dokumente (read-only)
+│   ├── README.md
+│   ├── Foundation_Spec.md
+│   ├── Sprint_0_Foundation.md
+│   ├── Sprint_1_MVP.md
+│   ├── Github_Sync_Setup.md
+│   ├── Server_Umzug.md
+│   ├── AGENT*.md, CLEANUP_PLAN.md
+│   └── alte STATUS-HTMLs
+│
+├── _audit/                                ← Audit-Befunde (gepflegt von code-reviewer-Agent)
+│
+└── _pilot/                                ← Pilot-spezifische, vertrauliche Notizen (nicht öffentlich)
 ```
-
----
-
-## Lese-Reihenfolge (für eine neue Person)
-
-1. **`STATUS.html`** im Browser öffnen — der schnellste Überblick.
-2. **`00_Architektur_Hauptdokument.md`** — Top-Level-Architektur, Trennung n8n / Backend.
-3. **`01_Datenmodell_Events.md`** — `Receipt`-Objekt + Event-Format. Pflicht.
-4. **`02_Kundenprofil_System.md`** — Kundenprofil als Single Source of Truth.
-5. **`03_n8n_Workflows.md`** — Orchestrierungs-Layer.
-6. **`05_Roadmap.md`** — was als nächstes ansteht.
-7. **`modules/M01..M13`** — Detail-Specs, gelesen wenn du am Modul arbeitest.
-8. **`04_Erweiterbarkeit_Pro.md`** — relevant für Custom-Pro-Anpassungen.
-
----
-
-## Implementierung
-
-Code-Repo liegt parallel unter `/Users/donandrejo/Documents/ProzessPilot/prozesspilot/`:
-
-```
-prozesspilot/
-├── backend/              ← Node 20 + TypeScript + Fastify, 57 Tests
-├── webapp/               ← React + Vite + Playwright, 74 Tests
-├── n8n/workflows/        ← 17 Workflows
-├── migrations/           ← 30 SQL-Migrationen
-├── infra/
-│   ├── runbook/          ← Deployment, Rollback, Oncall, Monitoring, Onboarding
-│   ├── backup/           ← Postgres + S3 Backup-Skripte + Restore-Test
-│   ├── decisions/        ← ADRs (PDF-Engine, Mail-Provider, Plugin-Sandbox)
-│   ├── security/         ← Security-Checklist
-│   └── load-tests/       ← Locust-Config
-├── docs/openapi.yaml
-├── docker-compose.yml
-├── docker-compose.prod.yml
-└── ProzessPilot_Anleitung.docx
-```
-
----
-
-## Wichtigste Konventionen
-
-| Thema                     | Festlegung                                                              |
-|---------------------------|-------------------------------------------------------------------------|
-| Workflow-Engine           | n8n self-hosted (Docker)                                                 |
-| Backend                   | Node.js 20 + TypeScript strict + Fastify (kein ORM, pg-Treiber direkt)   |
-| DB                        | PostgreSQL 16                                                            |
-| Cache / Events            | Redis 7 Streams                                                          |
-| Object Storage            | MinIO (S3-kompatibel)                                                    |
-| OCR                       | Google Vision API (Phase 1), Mindee-Adapter vorbereitet                  |
-| KI                        | Claude API (Sonnet 4.6)                                                  |
-| WhatsApp                  | WhatsApp Business Cloud API (Meta direkt, optional Twilio)               |
-| Buchhaltungs-Adapter      | Lexoffice + sevDesk (Standard), DATEV CSV (Pro)                          |
-| Archiv                    | Google Drive (Default), Dropbox (Optional)                               |
-| Auth Service-to-Service   | HMAC-SHA256 mit Shared Secret + Idempotency-Key + Trace-ID               |
-| Idempotenz                | sha256(file) + customer_id im Backend; Idempotency-Key auf API-Ebene      |
-| JSON-Felder               | snake_case                                                                |
-| TypeScript                | camelCase                                                                  |
-| DB-Tabellen               | snake_case Plural                                                         |
-| Workflow-Namen            | `WF-<Domain>-<Variant>`                                                  |
-| Events                    | `pp.<entity>.<verb_past>`                                                |
-
----
-
-## Rollen-Trennung — was läuft wo?
-
-| Aufgabe                                  | n8n | Backend | DB |
-|------------------------------------------|-----|---------|----|
-| Webhook-Empfang                          | ✓   |         |    |
-| Webhook-Signaturprüfung                  |     | ✓       |    |
-| Externe API-Calls (OCR, Lexoffice, etc.) | ✓   | ✓       |    |
-| Idempotenz-Check                         |     | ✓       | ✓  |
-| Validierung (Schema, Plausibilität)      |     | ✓       |    |
-| Routing-Entscheidungen                   |     | ✓       |    |
-| Sub-Workflow-Orchestrierung              | ✓   |         |    |
-| Persistenz Belege/Profile/Audit          |     |         | ✓  |
-| Hook-Ausführung                          |     | ✓       |    |
-| Cron-Jobs (DATEV, Reporting, Comms)      | ✓   | ✓       |    |
-| PDF-Erzeugung                            |     | ✓       |    |
-| Mail-Versand                             |     | ✓       |    |
 
 ---
 
 ## Modul-Übersicht (Quick-Reference)
 
-| ID  | Modul                                   | Paket          | Trigger                    | Code-Pfad                                    |
-|-----|-----------------------------------------|----------------|----------------------------|----------------------------------------------|
-| M01 | Belegerfassung & OCR                    | Basic+         | Sub-Workflow               | `backend/src/modules/m01-receipt-intake/`    |
-| M02 | Belegarchivierung (GoBD)                | Basic+         | Sub-Workflow               | `backend/src/modules/m02-archive/`           |
-| M03 | Kategorisierung & OCR-Postprocessing   | Standard+      | Sub-Workflow               | `backend/src/modules/m03-categorization/` + `m03-ocr/` |
-| M04 | DATEV-Export                            | Pro            | Cron monatlich             | `backend/src/modules/m04-datev/`             |
-| M05 | Lexoffice-Integration                   | Standard+      | Sub-Workflow               | `backend/src/modules/m05-lexoffice/`         |
-| M06 | sevDesk-Integration                     | Standard+      | Sub-Workflow               | `backend/src/modules/m06-sevdesk/`           |
-| M07 | Excel/Google Sheets Export              | Basic+         | Sub-Workflow               | `backend/src/modules/m07-spreadsheet/`       |
-| M08 | Monatsreporting                         | Standard+      | Cron monatlich             | `backend/src/modules/m08-reporting/`         |
-| M09 | Lieferanten-Kommunikation              | Pro            | Event/Cron/Manual          | `backend/src/modules/m09-supplier-comm/`     |
-| M10 | WhatsApp Eingang                        | Basic+         | Webhook                    | `backend/src/modules/m10-whatsapp/`          |
-| M11 | IMAP / E-Mail Eingang                   | Basic+         | Cron / Webhook             | `backend/src/modules/m11-imap/`              |
-| M12 | DSGVO-Workflows                         | alle Pakete    | Manual / API               | `backend/src/modules/dsgvo/`                 |
-| M13 | Steuerberater-Portal                    | Pro            | API (advisor.exports.read) | `backend/src/modules/m06-advisor-portal/`    |
-| M14 | User-Verwaltung & Auth                      | alle Pakete | Login + REST              | `backend/src/modules/users/` + `webapp/src/auth/` |
-| —   | Plugin-System                           | Pro            | Workflow-Dispatch          | `backend/src/modules/plugin-system/`         |
-
-> Hinweis: M03 ist auf zwei Ordner aufgeteilt (`m03-categorization` für KI-Logik, `m03-ocr` für den OCR-Endpoint). Beide sind aktiv und in `app.ts` registriert. M13 lebt aus historischen Gründen unter `m06-advisor-portal/` — das ist ein separates Modul, kein sevDesk-Submodul.
+| ID | Modul | Paket | MVP? | Spec |
+|---|---|---|---|---|
+| M01 | Belegerfassung & OCR | Basic+ | ✓ | `modules/M01_Belegerfassung_OCR.md` |
+| M02 | Belegarchivierung GoBD | Basic+ | ✓ | `modules/M02_Belegarchivierung.md` |
+| M03 | Kategorisierung + Gastro-Hooks | Standard+ | ✓ erweitert | `modules/M03_Kategorisierung.md` |
+| M04 | DATEV-Export | Pro | ✓ | `modules/M04_DATEV_Export.md` |
+| M05 | Lexware Office Integration | Standard+ | ✓ | `modules/M05_Lexoffice_Integration.md` |
+| M06 | sevDesk-Integration | Standard+ | später | `modules/M06_sevDesk_Integration.md` |
+| M07 | Excel/Sheets-Export | Basic+ | optional | `modules/M07_Excel_Sheets_Export.md` |
+| M08 | Monatsreporting + Steuerberater-Übergabe | Standard+ | ✓ erweitert | `modules/M08_Monatsreporting.md` |
+| M09 | Lieferanten-Kommunikation | Pro | später | `modules/M09_Lieferanten_Kommunikation.md` |
+| M10 | WhatsApp Eingang | Basic+ | ✓ Phase 2 | `modules/M10_WhatsApp_Eingang.md` |
+| M11 | IMAP / E-Mail Eingang | Basic+ | ✓ | `modules/M11_IMAP_Eingang.md` |
+| M12 | DSGVO + GoBD-Doku-Generator | alle | ✓ erweitert | `modules/M12_DSGVO.md` |
+| M13 | Steuerberater-Portal | Pro | später | `modules/M13_Steuerberater_Portal.md` |
+| M14 | User-Verwaltung & Auth (Discord) | alle | ✓ neu | `modules/M14_User_Verwaltung_Auth.md` |
+| **M15** | **Kassensystem-Connector (SumUp)** | Standard+ | **✓ NEU** | `modules/M15_Kassensystem_Connector.md` |
 
 ---
 
-## Was als nächstes?
+## Drei Frontends (strikte Trennung)
 
-Siehe [05_Roadmap.md](05_Roadmap.md). Kurz: Server-Deployment und erster Pilotkunde.
+| Frontend | URL | Wer | Login |
+|---|---|---|---|
+| Mitarbeiter-Webapp | `admin.prozesspilot.net` | intern | Discord OAuth + Notfall-Login |
+| Onboarding-Wizard | `setup.prozesspilot.net` | Customer einmalig | Magic-Link |
+| Web-Chat-Widget | `chat.prozesspilot.net` / `prozesspilot.net/c/{token}` | Customer bei Bedarf | Magic-Link |
 
-Wenn du am Code arbeitest und neue Features dazukommen, **bitte zuerst die zugehörige Modul-Spec aktualisieren** — sonst entsteht wieder ein Drift wie zuvor (Konzept hing vier Wochen hinter dem Code).
+**Endkunden (Wirte) sehen NIE die Mitarbeiter-Webapp.**
+
+---
+
+## Wichtige Konventionen
+
+| Thema | Festlegung |
+|---|---|
+| Workflow-Engine | n8n self-hosted (Docker) |
+| Backend | Node.js 20 + TypeScript strict + Fastify |
+| DB | PostgreSQL 16 (raw SQL, kein ORM) |
+| Cache / Events | Redis 7 Streams |
+| Object Storage | MinIO (S3-kompatibel) |
+| OCR | Google Vision API (`europe-west3`) |
+| KI | Anthropic Claude (Sonnet 4.6) |
+| WhatsApp | Twilio (Pilot) → Meta Business Cloud (Phase 1.3+) |
+| Buchhaltungs-Adapter | DATEV CSV, Lexware Office API, sevDesk API |
+| Archiv | Google Drive (Default), Dropbox (Optional) |
+| Mitarbeiter-Auth | Discord OAuth 2.0 + Notfall-Login mit TOTP |
+| Customer-Auth | Magic-Link mit DB-Token |
+| Hosting | Hetzner EU |
+| Mitarbeiter-Komm | Discord-Server + eigener Bot |
+| JSON-Felder | snake_case |
+| TypeScript | camelCase |
+| DB-Tabellen | snake_case Plural |
+| Branches | `<owner>/T<id>-<kurz>` |
+| Workflow-Namen | `WF-<Domain>-<Variant>` |
+| Events | `pp.<entity>.<verb_past>` |
+
+---
+
+## Wenn du etwas änderst
+
+**Pflicht-Reihenfolge:** Erst Spec aktualisieren, dann Code. Nicht umgekehrt — sonst entsteht wieder ein Drift wie vor dem Reboot.
+
+Workflow:
+1. Spec anpassen, Spec-PR
+2. Anderer Mensch reviewt
+3. Spec gemerged
+4. **Dann** Code-Task erstellen, der die neue Spec implementiert
+
+---
+
+## Wo finde ich was
+
+| Frage | Antwort |
+|---|---|
+| Wie funktioniert OAuth-Flow? | `modules/M14_User_Verwaltung_Auth.md` |
+| Wie sind die Sales-Klauseln formuliert? | `00_Vertriebsmodell.md` + `legal/Vertriebsagentur_Vertrag_Vorlage.md` |
+| Was passiert bei OCR-Confidence < 80%? | `modules/M03_Kategorisierung.md` Abschnitt 17–22 |
+| Wie sieht Web-Chat-Widget für Wirt aus? | `Web_Chat_Widget.md` |
+| Wer macht was im Team? | `Claude_Code_Workflow.md` Abschnitt 2 |
+| Welche Datenbanktabellen gibt es? | jeweils in den Modul-Specs + `01_Datenmodell_Events.md` |
+| Welche Hooks gibt es im Plugin-System? | `04_Erweiterbarkeit_Pro.md` |
+| Wann ist der Pilot-Wirt live? | `00_Pilot_Strategie.md` Abschnitt 3 + `05_Roadmap.md` Abschnitt 3 |
+
+---
+
+**Letzte Aktualisierung:** 2026-05-15 (komplette Neufassung nach Konzept-Reboot Mai 2026)
+**Verantwortlich:** Steve Bernhardt + Andreas

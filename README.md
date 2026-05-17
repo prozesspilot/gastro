@@ -1,28 +1,145 @@
-# ProzessPilot
+# Gastro
 
-Modular accounting automation platform (n8n + TypeScript + React + Postgres).
+> **Stand:** 2026-05-15 (post Konzept-Reboot)
+>
+> **Naming-Konvention:** Das System/Produkt heißt intern **Gastro** (Code, Repo, Tech-Doku, ENV-Vars, DB). Die Firma + Brand für die Außen-Kommunikation heißt **ProzessPilot** (AGB, Rechnungen, Marketing, Customer-Touchpoints).
 
-📖 **Konzept-Doku:** [`Modulkonzept/Konzeptentwicklung/`](Modulkonzept/Konzeptentwicklung/) — Architektur, Modul-Specs M01–M14, Roadmap, Status-HTMLs, Prompts. Pflicht-Kontext für Claude Code: [`Modulkonzept/Konzeptentwicklung/README.md`](Modulkonzept/Konzeptentwicklung/README.md).
+Modulares SaaS-System für deutsche **Gastronomie-Kleinunternehmer**, das deren Steuerberater-Kosten um 60–80 % senkt durch automatische Belegerfassung, KI-Kategorisierung und direkte Übergabe an DATEV / Lexware Office / sevDesk.
 
-## Repo-Struktur
+**Firma:** ProzessPilot (Einzelunternehmen Steve Bernhardt, Schneverdingen)
+**Code-Name:** Gastro
+
+📖 **Konzept-Doku:** [`Modulkonzept/Konzeptentwicklung/`](Modulkonzept/Konzeptentwicklung/) — vollständige Architektur, Strategie, Modul-Specs M01–M15, Legal-Vorlagen, Roadmap.
+
+🚀 **Pflicht-Lektüre für jede Claude-Code-Session:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md)
+
+📋 **Workflow:** [`Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md`](Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md)
+
+---
+
+## Repo-Struktur (nach Refactor 2026-05-15)
 
 | Pfad | Inhalt |
 |---|---|
-| [`prozesspilot/`](prozesspilot/) | Code: `backend/` (Fastify/TS), `webapp/` (React/Vite), `n8n/`, `migrations/`, `infra/` |
-| [`Modulkonzept/Konzeptentwicklung/`](Modulkonzept/Konzeptentwicklung/) | Konzept-Doku (Specs, Roadmap, Prompts, Status-HTMLs) |
+| [`backend/`](backend/) | Backend-Code (Fastify + TypeScript), Modul-Code für M01–M15 |
+| [`webapp/`](webapp/) | Mitarbeiter-Webapp Frontend (React + Vite, wird zu `webapp-internal/` umbenannt) |
+| [`n8n/workflows/`](n8n/workflows/) | n8n-Workflow-JSONs (versioniert) |
+| [`migrations/`](migrations/) | PostgreSQL-Migrationen (chronologisch nummeriert) |
+| [`scripts/`](scripts/) | Hilfs-Skripte (Bootstrap, Backup, Deploy) |
+| [`infra/`](infra/) | Docker-Compose, Caddy, Grafana, Runbooks, Backups, ADRs, Security-Checklist, Load-Tests |
+| [`docs/`](docs/) | OpenAPI-Spec, Tech-Doku, Archive |
+| [`.claude/`](.claude/) | Geteilte Claude-Code-Konfiguration (Sub-Agents, Slash-Commands, CLAUDE.md) |
+| [`.github/workflows/`](.github/workflows/) | CI/CD (Lint, Tests, Discord-Notify, Auto-Deploy, Security) |
+| [`tasks/`](tasks/) | Aufgaben-System: `_backlog/`, `_in_progress/`, `_done/` |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Schnell-Referenz fürs tägliche Arbeiten |
+| [`Modulkonzept/Konzeptentwicklung/`](Modulkonzept/Konzeptentwicklung/) | Konzept-Doku |
+| [`Modulkonzept/Konzeptentwicklung/legal/`](Modulkonzept/Konzeptentwicklung/legal/) | Vertrags-Vorlagen für Anwalt |
 
-## Setup auf neuem Rechner
+---
+
+## Drei Frontends
+
+| Frontend | URL | Wer | Login |
+|---|---|---|---|
+| Mitarbeiter-Webapp | `admin.prozesspilot.net` | intern (Steve, Andreas, zukünftige MA) | Discord OAuth + Notfall-Login mit TOTP |
+| Onboarding-Wizard | `setup.prozesspilot.net` | Customer einmalig | Magic-Link |
+| Web-Chat-Widget | `chat.prozesspilot.net` / `prozesspilot.net/c/{token}` | Customer bei Bedarf | Magic-Link |
+
+**Endkunden (Wirte) sehen NIE die Mitarbeiter-Webapp.**
+
+---
+
+## Wer macht was
+
+| Bereich | Verantwortlich |
+|---|---|
+| Backend, Module M01–M15, Migrations, n8n, Infrastructure | Andreas |
+| Mitarbeiter-Webapp Frontend, Onboarding-Wizard, Web-Chat-Widget, Discord-Bot | Steve |
+| Sales-Material, Legal-Texte, Vertriebsagentur-Kontakt | Steve |
+| Konzept-Doku-Pflege | beide gemeinsam |
+
+Detail siehe [Claude_Code_Workflow.md](Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md).
+
+---
+
+## Setup auf neuem Mac (für Steve oder Andreas)
 
 ```bash
+# 1. Tools installieren
 brew install gh node docker
 gh auth login
+
+# 2. Repo clonen (Repo heißt "gastro" auf GitHub)
 mkdir -p ~/Documents/ProzessPilot && cd ~/Documents/ProzessPilot
-gh repo clone <github-user>/prozesspilot .
-cd prozesspilot/backend && npm install
+gh repo clone <github-org>/gastro prozesspilot
+cd prozesspilot
+# (Lokaler Ordner kann beliebig heißen — viele behalten "prozesspilot" aus Gewohnheit)
+
+# 3. Git-Identity lokal setzen (Pflicht für Co-Authored-By-Tracking)
+git config --local user.name "Steve Bernhardt"          # oder Andreas
+git config --local user.email "steve@prozesspilot.net"  # oder Andreas
+
+# 4. Claude Code installieren + einloggen
+# Siehe https://claude.com/claude-code
+claude auth login
+
+# 5. GitHub-MCP konfigurieren
+# Siehe Claude-Code-Doku
+
+# 6. .env separat übertragen (AirDrop / 1Password) — NICHT via GitHub
+# 7. Discord-Webhook-URLs in lokale Env packen
+
+# 8. Dependencies installieren
+cd backend && npm install
 cd ../webapp && npm install
-# .env separat übertragen (AirDrop / 1Password) — NICHT via GitHub
-docker compose -f ../docker-compose.yml up -d   # falls vorhanden, sonst aus prozesspilot/
-cd ../backend && npm run migrate && npm run bootstrap:super-admin
+
+# 9. Lokale Postgres + Redis starten
+cd ..
+docker compose up -d
+
+# 10. Migrations + Bootstrap
+cd backend && npm run migrate
+npm run bootstrap:first-admin   # erstellt ersten Geschäftsführer
+
+# 11. Erste Test-Session
+cd ..
+claude
+> /start-task T000
 ```
 
-> `.env`, `.env.bak*`, lokale Backups (`*.bak-*`, `prozesspilot.bak-vor-audit-fix/`) sind via `.gitignore` ausgeschlossen und müssen separat übertragen werden.
+---
+
+## Schnell-Befehle in Claude Code
+
+| Befehl | Zweck |
+|---|---|
+| `/start-task T015` | Task aus Backlog ziehen, Branch erstellen, Implementation beginnen |
+| `/finish-task` | Tests + Lint + Push + PR |
+| `/review-pr 42` | code-reviewer-Agent läuft auf PR |
+| `/new-module M16 name` | Modul-Skelett komplett generiert |
+| `/sync-with-main` | Pull + Rebase mit Konflikt-Hilfe |
+
+Vollständige Workflow-Doku in [`Claude_Code_Workflow.md`](Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md).
+
+---
+
+## Wichtige Hinweise
+
+- **Geheimnisse niemals committen.** `.env`, `.env.bak*`, lokale Backups (`*.bak-*`) sind via `.gitignore` ausgeschlossen und müssen separat übertragen werden.
+- **Direkter Push auf `main` ist nicht erlaubt** — Branch-Protection erzwingt PR-Workflow
+- **Cross-Review durch den jeweils anderen** — Self-Review ist nicht erlaubt
+- **Bei Unsicherheit: erst Konzept-Doku lesen, dann fragen — nicht raten**
+
+---
+
+## Status
+
+Aktueller Live-Stand: [STATUS.html](Modulkonzept/Konzeptentwicklung/STATUS.html)
+
+Roadmap: [05_Roadmap.md](Modulkonzept/Konzeptentwicklung/05_Roadmap.md)
+
+Pilot-Strategie: [00_Pilot_Strategie.md](Modulkonzept/Konzeptentwicklung/00_Pilot_Strategie.md)
+
+---
+
+**Letzte Aktualisierung:** 2026-05-15 (komplett neu nach Konzept-Reboot)

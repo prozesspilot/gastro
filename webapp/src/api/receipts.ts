@@ -241,25 +241,13 @@ export async function uploadReceipt(
   const receipt = mapReceipt(unwrap<RawReceipt>(raw));
 
   // Schritt 2 — Datei hochladen (MinIO via Backend-Proxy)
-  // Body: roher Datei-Inhalt, Content-Type = MIME-Typ der Datei
-  const contentType = file.type || 'application/octet-stream';
-  const headers: Record<string, string> = { 'Content-Type': contentType };
-  if (activeTenantId) headers['x-pp-tenant-id'] = activeTenantId;
-
-  const fileRes = await fetch(`/api/v1/receipts/${receipt.id}/file`, {
-    method:  'POST',
-    headers,
-    body:    file,
+  // Body: roher Datei-Inhalt, Content-Type = MIME-Typ der Datei.
+  // Über apiRequest, damit Bearer-Token + Tenant-Header korrekt gesetzt werden.
+  const uploadedRaw = await apiRequest<unknown>(`/receipts/${receipt.id}/file`, {
+    method:   'POST',
+    tenantId: activeTenantId,
+    body:     file,
   });
-
-  if (!fileRes.ok) {
-    const errBody = await fileRes.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(
-      errBody?.error?.message ?? `Datei-Upload fehlgeschlagen (${fileRes.status})`,
-    );
-  }
-
-  const uploadedRaw = await fileRes.json() as { data?: RawReceipt };
   return mapReceipt(unwrap<RawReceipt>(uploadedRaw));
 }
 

@@ -273,3 +273,276 @@ backend/src/modules/m08-reporting/
 - [ ] Vormonats-Vergleich funktioniert.
 - [ ] Cron läuft zuverlässig am Monats-1.
 - [ ] Hook `before_report.monthly` kann Daten ergänzen.
+
+---
+
+# ERWEITERUNG 2026-05-15 — Steuerberater-Übergabe + Spar-Bericht
+
+> Hinzugefügt nach Konzept-Reboot. Diese Sektion ergänzt M08 um die monatliche Steuerberater-Mail mit DATEV/Lexware-Export, einer Zusammenfassungs-PDF und dem Spar-Bericht für den Wirt.
+
+## 16. Übersicht der Erweiterungen
+
+| Komponente | Empfänger | Frequenz | MVP-Pflicht? |
+|---|---|---|---|
+| **Steuerberater-Übergabe-Mail** | Steuerberater des Wirts | monatlich am 1. | ✓ |
+| **Spar-Bericht für Wirt** | Wirt selbst | monatlich am 1. | Phase 2 (laut F18) |
+| **Quartals-Übersicht USt-Voranmeldung** | Steuerberater | quartalsweise | Phase 2 |
+
+---
+
+## 17. Steuerberater-Übergabe-Mail
+
+### 17.1 Inhalt der Mail
+
+```
+Subject: ProzessPilot — Buchhaltungs-Übergabe Mai 2026, Mandant Müller-Bistro
+
+Sehr geehrte Frau [Steuerberater-Name],
+
+anbei die aufbereiteten Buchhaltungs-Daten für Ihren Mandanten Müller-Bistro
+für den Monat Mai 2026.
+
+ÜBERSICHT
+- Anzahl verarbeitete Belege: 47
+- Gesamt-Brutto-Volumen: € 4.234,17
+- Davon Kassenumsatz (SumUp Tagesabschlüsse): € 12.487,30
+- Davon Wareneinkauf: € 2.890,45
+- Davon Bewirtungsbelege: € 87,40 (1 Beleg)
+- Davon Pfand (durchlaufend): € 78,50
+
+ANHÄNGE
+1. DATEV-Buchungsstapel Mai 2026 (CSV)
+2. Original-Belege (ZIP, 47 PDFs)
+3. Übersichtsbericht (PDF)
+4. Z-Bon-Tagesabschlüsse Mai 2026 (PDF, 31 Tage)
+
+[Bei Lexware-Office-Steuerberater statt CSV+ZIP:]
+Die Buchungen wurden bereits direkt in Ihr Lexware-Office-Konto übertragen
+(Empfänger-Mandant: 12345). Sie finden sie unter "Belege & Buchungen" → Mai 2026.
+
+AUFFÄLLIGKEITEN
+- 3 Belege wurden vom Mandanten zur Klärung markiert (siehe Übersichtsbericht S. 3)
+- Kein Beleg ohne USt-Ausweis in diesem Monat
+
+Bei Rückfragen: einfach auf diese Mail antworten.
+
+Beste Grüße
+ProzessPilot
+
+---
+ProzessPilot
+[Adresse Schneverdingen]
+support@prozesspilot.net
+```
+
+### 17.2 Generierungs-Logik
+
+- **Cron:** 1. jedes Monats um 06:00 Uhr (per `WF-CRON-MONTHLY-ACCOUNTANT-HANDOVER.json`)
+- Pro Tenant:
+  1. Aggregiere alle Belege des Vormonats mit Status `processed` oder `exported`
+  2. Generiere DATEV-CSV (via M04) ODER Lexware-Office-API-Push (via M05) ODER sevDesk-Push (via M06)
+  3. Pack alle Original-Belege als ZIP
+  4. Generiere Übersichtsbericht-PDF (siehe 17.3)
+  5. Z-Bon-PDFs aus M15 sammeln, falls vorhanden
+  6. Email an `tenant.steuerberater_email` mit allen Anhängen
+  7. Audit-Log-Eintrag, Discord-Notification an `#dev-log`
+
+### 17.3 Übersichtsbericht-PDF (Inhalt)
+
+Seite 1 — **Kennzahlen:**
+- Anzahl Belege gesamt
+- Brutto-/Netto-Summe
+- USt-Splitting (19% / 7% / 0%)
+- Top-10 Lieferanten nach Volumen
+- Anzahl Kategorien-Verteilung
+
+Seite 2 — **Auffälligkeiten:**
+- Belege mit Wirt-Korrekturen (manuell durch Mitarbeiter)
+- Belege mit niedriger OCR-Confidence (markiert)
+- Bewirtungsbelege mit Anlass-Liste
+
+Seite 3 — **Tagesabschlüsse:**
+- Übersicht Z-Bons (Datum, Brutto, MwSt-Split)
+- Hinweis auf Z-Bon-PDFs im Anhang
+
+Seite 4 — **Diese Monatsübergabe enthält folgende Dateien:** (Liste der Anhänge)
+
+### 17.4 Implementation
+
+```
+backend/src/modules/m08-reporting/
+├── handover-mail-generator.ts      # Mail-Body-Generator
+├── handover-pdf-generator.ts       # Übersichtsbericht-PDF
+├── attachment-bundler.ts           # Sammelt Originale + ZIP
+└── tests/
+```
+
+PDF-Generierung mit `pdfkit` oder `puppeteer` (HTML→PDF).
+
+### 17.5 Datenmodell
+
+```sql
+CREATE TABLE accountant_handovers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id),
+  handover_month DATE NOT NULL,                    -- z.B. 2026-05-01 für Mai-Übergabe
+  delivery_method VARCHAR(30) NOT NULL,            -- 'mail_with_attachments' / 'lexware_api_push' / 'sevdesk_api_push'
+  status VARCHAR(20) DEFAULT 'pending',            -- pending / sent / failed / acknowledged
+  receipt_count INTEGER,
+  total_brutto DECIMAL(12,2),
+  pdf_overview_path VARCHAR(500),                  -- MinIO-Pfad
+  csv_export_path VARCHAR(500),
+  zip_attachment_path VARCHAR(500),
+  sent_at TIMESTAMPTZ,
+  acknowledged_at TIMESTAMPTZ NULL,                -- Steuerberater hat geantwortet
+  error_message TEXT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+---
+
+## 18. Spar-Bericht für Wirt (Phase 2)
+
+### 18.1 Zweck
+
+Monatliche Mail/WhatsApp an Wirt mit konkreter Spar-Rechnung. Reduziert Kündigungs-Quote, weil Wirt sieht wofür er zahlt.
+
+### 18.2 Inhalt der Mail/WhatsApp
+
+```
+Subject: Deine ProzessPilot-Bilanz Mai 2026
+
+Hi Müller-Bistro 👋
+
+Hier deine Spar-Bilanz für Mai 2026:
+
+📊 Was wir diesen Monat für dich gemacht haben:
+- 47 Belege automatisch erfasst und kategorisiert
+- 31 Tagesabschlüsse von SumUp importiert
+- Komplettes DATEV-Paket an deine Steuerberaterin geschickt
+
+💰 Was du gespart hast:
+- Steuerberaterin-Aufwand: ~3,5 Std weniger × 150€ = 525€ gespart
+- Eigene Zeit: ~4 Std weniger × 30€/Std = 120€ Zeit-Wert
+- Skonti diesen Monat: 0€ (Phase 2-Feature)
+
+💸 Was ProzessPilot kostet:
+- Standard-Paket: 79€
+
+🎯 Dein Netto-Vorteil im Mai: +566€
+
+📋 Wichtige Hinweise:
+- Wir haben dich bei 1 Beleg um Rückmeldung gebeten (am 14.05) — danke fürs schnelle Zurückspielen!
+
+Fragen? Antworte einfach auf diese Mail.
+
+Beste Grüße
+Dein ProzessPilot-Team
+```
+
+### 18.3 Berechnungs-Formel
+
+```
+Steuerberater-Ersparnis = (Std-vor-PP - Std-nach-PP) × Stundensatz
+Eigene-Zeit-Ersparnis = (Std-vor-PP - Std-nach-PP) × Wirt-Stundensatz
+ProzessPilot-Kosten = Monatsbeitrag + (Setup-Fee / 12)
+Netto-Vorteil = Steuerberater-Ersparnis + Eigene-Zeit-Ersparnis - ProzessPilot-Kosten
+```
+
+Werte aus:
+- `tenants.baseline_steuerberater_stunden` (im Onboarding erfasst)
+- `tenants.baseline_steuerberater_stundensatz` (default 150€)
+- `tenants.baseline_eigene_stunden` (im Onboarding erfasst)
+- Aktuelle Std nach PP: aus `tasks` und `interventions` ableitbar
+
+### 18.4 Versand
+
+- WhatsApp wenn Wirt WhatsApp-Channel hat
+- Sonst E-Mail
+- Plus: Mail-Link zum Web-Chat-Widget für Rückfragen
+
+### 18.5 Datenmodell
+
+```sql
+ALTER TABLE tenants ADD COLUMN baseline_steuerberater_stunden DECIMAL(4,1);
+ALTER TABLE tenants ADD COLUMN baseline_steuerberater_stundensatz DECIMAL(6,2) DEFAULT 150.00;
+ALTER TABLE tenants ADD COLUMN baseline_eigene_stunden DECIMAL(4,1);
+ALTER TABLE tenants ADD COLUMN baseline_eigene_stundensatz DECIMAL(6,2) DEFAULT 30.00;
+ALTER TABLE tenants ADD COLUMN baseline_steuerberater_kosten_monatlich DECIMAL(8,2);
+
+CREATE TABLE wirt_savings_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id),
+  report_month DATE NOT NULL,
+  steuerberater_stunden_gespart DECIMAL(4,1),
+  steuerberater_euro_gespart DECIMAL(8,2),
+  eigene_stunden_gespart DECIMAL(4,1),
+  eigene_euro_gespart DECIMAL(8,2),
+  skonti_euro DECIMAL(8,2) DEFAULT 0,
+  pp_kosten DECIMAL(8,2),
+  netto_vorteil DECIMAL(8,2),
+  sent_at TIMESTAMPTZ,
+  channel VARCHAR(20),                              -- 'whatsapp' / 'email'
+  UNIQUE (tenant_id, report_month)
+);
+```
+
+---
+
+## 19. Quartals-Übersicht USt-Voranmeldung (Phase 2)
+
+### 19.1 Zweck
+
+Vorab-Berechnung der USt-Last pro Quartal für den Steuerberater. Spart ihm Zeit, ist für den Wirt finanzieller Mehrwert.
+
+### 19.2 Inhalt
+
+- USt 19% / 7% / 0% Aufkommen aus Erlösen
+- VSt 19% / 7% aus Eingangsbelegen
+- USt-Schuld / -Guthaben
+- Hinweise auf Korrekturbedarfe
+
+### 19.3 Versand
+
+- Quartalsweise (am 5. nach Quartalsende: 5. April, 5. Juli, 5. Oktober, 5. Januar)
+- Als PDF-Anhang an Steuerberater
+- Pflicht-Hinweis: "Dies ist eine Vorab-Berechnung von ProzessPilot. Die finale USt-Voranmeldung erfolgt durch den Steuerberater."
+
+---
+
+## 20. Implementations-Reihenfolge
+
+| Phase | Komponente |
+|---|---|
+| P1.2 (KW 25) | Steuerberater-Übergabe-Mail mit DATEV-CSV |
+| P1.2 (KW 26) | Lexware-Office-API-Push als Alternative |
+| P1.2 (KW 27) | Erste Live-Übergabe an Pilot-Steuerberaterin |
+| Phase 2 (M2+) | Spar-Bericht für Wirt (Erweiterung von M08) |
+| Phase 3 (M3+) | Quartals-USt-Voranmeldung |
+
+---
+
+## 21. Tests
+
+### 21.1 Unit-Tests
+
+- Mail-Body-Generator mit verschiedenen Tenant-Konfigurationen
+- PDF-Generierung mit Mock-Daten
+- ZIP-Bundler mit n Belegen
+- Spar-Berechnungs-Formel
+
+### 21.2 Integration-Tests
+
+- Voller Monatslauf mit Test-Tenant + Test-Daten → Mail kommt an
+- Lexware-Office-API-Push gegen Sandbox
+
+### 21.3 Goldstandard
+
+- Ein echter Pilot-Tenant mit echten Mai-Daten → manuelle Validierung der Mail-Inhalte vor Versand
+- Steuerberaterin gibt schriftliches Feedback nach erstem Empfang
+
+---
+
+**Letzte Aktualisierung:** 2026-05-15 (Erweiterung Steuerberater-Übergabe + Spar-Bericht)
+**Verantwortlich:** Andreas (Backend), Steve (Steuerberaterin-Kommunikation)

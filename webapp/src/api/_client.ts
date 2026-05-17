@@ -94,6 +94,11 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   if (opts.body !== undefined) {
     if (opts.body instanceof FormData) {
       body = opts.body;
+    } else if (opts.body instanceof Blob) {
+      body = opts.body;
+      if (!headers['Content-Type']) {
+        headers['Content-Type'] = opts.body.type || 'application/octet-stream';
+      }
     } else {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(opts.body);

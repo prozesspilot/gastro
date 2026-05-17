@@ -8,24 +8,25 @@
 
 ## 1. Hosting und Infrastruktur
 
-### 1.1 Hetzner Online GmbH
+### 1.1 IONOS SE
 
 | Feld | Wert |
 |---|---|
-| **Vollständiger Name** | Hetzner Online GmbH |
-| **Sitz** | Industriestraße 25, 91710 Gunzenhausen, Deutschland |
-| **Verarbeitungs-Ort** | Rechenzentren in Falkenstein und Nürnberg, Deutschland |
+| **Vollständiger Name** | IONOS SE |
+| **Sitz** | Elgendorfer Str. 57, 56410 Montabaur, Deutschland |
+| **Verarbeitungs-Ort** | Rechenzentren in Deutschland (EU-Standort gemäß VPS-Konfiguration) |
 | **Drittland** | nein (EU) |
-| **Verarbeitete Daten** | sämtliche ProzessPilot-Daten (Postgres, MinIO, Backups, Application-Logs) |
-| **Zweck** | Server-Hosting, Storage, Backups |
+| **Verarbeitete Daten** | sämtliche Gastro-Daten (Postgres, MinIO, Backups, Application-Logs) |
+| **Zweck** | Server-Hosting (VPS), Storage, Backups |
 | **DSGVO-Grundlage** | EU-Standort, kein Drittland-Transfer |
-| **AVV abgeschlossen** | ja (Hetzner Standard-AVV) |
-| **Datenschutz-URL** | https://www.hetzner.com/de/rechtliches/datenschutz |
-| **Zertifizierungen** | ISO 27001 |
+| **AVV abgeschlossen** | ja (IONOS Auftragsverarbeitungsvertrag, verfügbar unter ionos.de/hilfe) |
+| **Datenschutz-URL** | https://www.ionos.de/terms-gtc/terms-privacy |
+| **Zertifizierungen** | ISO 27001, ISO 9001, Cloud Computing Compliance Controls Catalogue (C5) |
+| **Aktueller Server** | VPS 4-4-120 (4 vCore, 4 GB RAM, 120 GB NVMe), IP 87.106.8.111 |
 
-### 1.2 MinIO (selbst-gehostet auf Hetzner)
+### 1.2 MinIO (selbst-gehostet auf IONOS-VPS)
 
-MinIO läuft auf den Hetzner-Servern und ist daher kein eigener Subunternehmer im rechtlichen Sinne. Wird hier nur zur Vollständigkeit erwähnt.
+MinIO läuft auf dem IONOS-Server und ist daher kein eigener Subunternehmer im rechtlichen Sinne. Wird hier nur zur Vollständigkeit erwähnt.
 
 ---
 
@@ -207,7 +208,7 @@ Analog zu Google Drive — Endkunden-eigenes Konto, ProzessPilot agiert nur als 
 ### 8.2 Alternativen (zur Risikoreduktion vorbereitet)
 
 - **Brevo** (Sendinblue, Frankreich, EU) — als möglicher Wechsel falls Postmark-USA-Risiko zu hoch
-- **Eigener SMTP-Server auf Hetzner** — bei größerem Volumen evaluieren
+- **Eigener SMTP-Server auf IONOS** — bei größerem Volumen evaluieren
 
 ---
 

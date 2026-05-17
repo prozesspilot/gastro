@@ -98,7 +98,7 @@ ProzessPilot ist **Auftragsverarbeiter** im Sinne Art. 28 DSGVO. Verarbeitete Da
 
 Subunternehmer (ausführliche Liste siehe `legal/Subunternehmer.md`):
 
-- **Hetzner Online GmbH** (Hosting, EU-Falkenstein/Nürnberg) — unkritisch
+- **IONOS SE** (Hosting, EU-Deutschland, Montabaur) — unkritisch
 - **Google Cloud / Vision API** (USA mit EU-Region `europe-west3`) — SCCs nötig
 - **Anthropic PBC** (USA, KI-Kategorisierung) — SCCs nötig
 - **Discord Inc.** (USA, Mitarbeiter-Kommunikation, kein Customer-Daten-Touch) — SCCs nötig
@@ -147,7 +147,7 @@ Subunternehmer (ausführliche Liste siehe `legal/Subunternehmer.md`):
 
 8. **Datenschutzerklärung Marketing-Website** finalisieren (basierend auf bisherigem Entwurf vom 28.10.2025)
    - Verantwortliche-Daten ausfüllen (Steve Bernhardt, Schneverdingen)
-   - Hoster (Hetzner) eintragen
+   - Hoster (IONOS) eintragen
    - Cookies + Tracking-Hinweise ergänzen
    - Hinweis auf Webapp-DSE verlinken
 

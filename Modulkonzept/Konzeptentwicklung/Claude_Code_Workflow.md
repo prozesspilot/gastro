@@ -25,9 +25,9 @@ Der Workflow muss:
 |---|---|---|
 | **Steve-lokal** | MacBook von Steve | Frontend-Entwicklung (Webapp, Wizard, Chat-Widget), Discord-Bot, Sales-Material |
 | **Andreas-lokal** | MacBook von Andreas | Backend, Module (M01–M15), n8n-Workflows, Infrastructure, Migrations |
-| **Hetzner-remote** | Server bei Hetzner | Production-Deploys, Migrations-Run, Hot-Fixes, Monitoring |
+| **IONOS-remote** | Server bei IONOS (87.106.8.111) | Production-Deploys, Migrations-Run, Hot-Fixes, Monitoring |
 
-Alle drei nutzen denselben GitHub-Account (Steve und Andreas sind auf beiden MacBooks im selben Account angemeldet, Hetzner ebenso). Unterscheidung wer-was-gemacht-hat geht über **Branch-Naming** und **Co-Authored-By-Trailer in Commits**.
+Alle drei nutzen denselben GitHub-Account (Steve und Andreas sind auf beiden MacBooks im selben Account angemeldet, IONOS-Server ebenso). Unterscheidung wer-was-gemacht-hat geht über **Branch-Naming** und **Co-Authored-By-Trailer in Commits**.
 
 ---
 
@@ -40,7 +40,7 @@ Alle drei nutzen denselben GitHub-Account (Steve und Andreas sind auf beiden Mac
 | **Backend** (Module M01–M15, Services, Adapter, Hooks) | Andreas | Tech-Tiefe, Datenmodell, n8n-Workflows |
 | **Datenbank** (Migrations, Schema, RLS) | Andreas | Hoher Konsistenz-Bedarf, ein Verantwortlicher reduziert Konflikte |
 | **n8n-Workflows** | Andreas | Eng mit Backend verbunden |
-| **Infrastructure** (Docker, CI/CD, Hetzner-Setup) | Andreas | Ops-Kompetenz |
+| **Infrastructure** (Docker, CI/CD, IONOS-Setup) | Andreas | Ops-Kompetenz |
 | **Mitarbeiter-Webapp Frontend** | Steve | Sichtbar für Mitarbeiter, Steve nutzt es täglich |
 | **Onboarding-Wizard Frontend** | Steve | Customer-facing, Steve kennt Wirt-Pain-Points |
 | **Web-Chat-Widget Frontend** | Steve | Customer-UX |
@@ -83,7 +83,7 @@ main                                 # Produktions-Branch, geschützt
   ├── steve/webapp-tenant-list
   ├── andreas/m15-sumup-connector    # Andreas arbeitet hier
   ├── andreas/m03-bewirtungs-hook
-  ├── server/hotfix-deployment       # Hetzner-Claude für Hotfixes
+  ├── server/hotfix-deployment       # IONOS-Claude für Hotfixes
   └── ...
 ```
 
@@ -91,7 +91,7 @@ main                                 # Produktions-Branch, geschützt
 
 - `steve/<task-id>-<kurzbeschreibung>` für Steve's Tasks
 - `andreas/<task-id>-<kurzbeschreibung>` für Andreas' Tasks
-- `server/<task-id>-<kurzbeschreibung>` für Hetzner-Hotfixes
+- `server/<task-id>-<kurzbeschreibung>` für IONOS-Hotfixes
 - `gemeinsam/<task-id>-<kurzbeschreibung>` für Pair-Programming-Sessions
 
 ### 3.3 Branch-Protection auf `main`
@@ -114,7 +114,7 @@ git config --local user.email "steve@prozesspilot.net"
 git config --local user.name "Andreas [Nachname]"
 git config --local user.email "andreas@prozesspilot.net"
 
-# Auf Hetzner:
+# Auf IONOS:
 git config --local user.name "ProzessPilot Server (Claude Code)"
 git config --local user.email "server@prozesspilot.net"
 ```
@@ -163,7 +163,7 @@ So sieht man in `git log` wer-mit-Claude-was-gemacht-hat.
    - Merge per Squash
    - Branch wird automatisch gelöscht
    - Discord-Notification: "✅ PR #42 gemerged auf main"
-   - Wenn auf Hetzner-Auto-Deploy: Deploy-Workflow startet
+   - Wenn auf IONOS-Auto-Deploy: Deploy-Workflow startet
 ```
 
 ---
@@ -249,7 +249,7 @@ Jede Task ist eine Markdown-Datei mit standardisierter Struktur:
        │
        │ Bei Approve + CI grün:
        │ → PR wird gemerged
-       │ → Auto-Deploy auf Hetzner
+       │ → Auto-Deploy auf IONOS
        ▼
 [_done/T0XX-...md]
 ```
@@ -366,7 +366,7 @@ Detail-Definitionen in `prozesspilot/.claude/commands/<name>.md`.
 
 - Docker-Image bauen
 - Image zu Container-Registry pushen
-- SSH zu Hetzner
+- SSH zu IONOS
 - `docker compose pull && docker compose up -d`
 - Health-Check
 - Discord-Notification "✅ Deploy erfolgreich" oder "❌ Deploy fehlgeschlagen"
@@ -473,7 +473,7 @@ Wenn ein Endpoint ändert:
 - **Manuelle Code-Schritte durch Steve oder Andreas** — alles über Claude Code
 - **Code-Review durch Steve oder Andreas tief technisch** — kommt von code-reviewer-Agent
 - **Direkte DB-Manipulation in Production** — nur via Migrations + Auto-Deploy
-- **Deploy auf Hetzner per FTP / manuell** — nur via GitHub Actions oder /deploy-Command
+- **Deploy auf IONOS per FTP / manuell** — nur via GitHub Actions oder /deploy-Command
 - **Coding ohne Spec** — jede Task hat erst Spec, dann Code
 - **Eigene Sub-Agents von Steve oder Andreas spontan** — alle Sub-Agents leben im Repo, werden gemeinsam beschlossen
 
@@ -495,7 +495,7 @@ Wenn ein Endpoint ändert:
 
 ## 14. Zusammenfassung in einem Absatz
 
-ProzessPilot wird komplett durch Claude Code entwickelt. Drei Instanzen (Steve-lokal, Andreas-lokal, Hetzner-remote) im selben GitHub-Account, unterschieden über Branch-Naming und git-local-Identity. Aufteilung: Andreas baut Backend + Module + Infrastructure, Steve baut Frontends + Discord-Bot + Sales-Material. Tasks im Repo unter `tasks/`, mit klarem Lebenszyklus _backlog → _in_progress → _done. Sieben Sub-Agents (code-reviewer, test-writer, n8n-author, discord-bot-builder, migration-author, docs-writer, task-explainer), fünf Slash-Commands für Routine-Tätigkeiten. PR-Pflicht auf main, Cross-KI-Review durch code-reviewer-Agent, GitHub Actions CI mit Lint+Test+Build+Deploy, Discord-Webhook für alle Events. Sonnet 4.6 für Coding, Opus 4.6 für Reviews. Ziel: 0 % manuell geschriebener Code.
+Gastro (Brand: ProzessPilot) wird komplett durch Claude Code entwickelt. Drei Instanzen (Steve-lokal, Andreas-lokal, IONOS-remote) im selben GitHub-Account, unterschieden über Branch-Naming und git-local-Identity. Aufteilung: Andreas baut Backend + Module + Infrastructure, Steve baut Frontends + Discord-Bot + Sales-Material. Tasks im Repo unter `tasks/`, mit klarem Lebenszyklus _backlog → _in_progress → _done. Sieben Sub-Agents (code-reviewer, test-writer, n8n-author, discord-bot-builder, migration-author, docs-writer, task-explainer), fünf Slash-Commands für Routine-Tätigkeiten. PR-Pflicht auf main, Cross-KI-Review durch code-reviewer-Agent, GitHub Actions CI mit Lint+Test+Build+Deploy, Discord-Webhook für alle Events. Sonnet 4.6 für Coding, Opus 4.6 für Reviews. Ziel: 0 % manuell geschriebener Code.
 
 ---
 

@@ -54,7 +54,7 @@
 
 | Beispiel-Satz | Begründung |
 |---|---|
-| "Das Gastro-Backend (vermarktet als ProzessPilot) läuft auf Hetzner." | Tech-Beschreibung mit Brand-Referenz |
+| "Das Gastro-Backend (vermarktet als ProzessPilot) läuft auf IONOS." | Tech-Beschreibung mit Brand-Referenz |
 | "Der ProzessPilot-Customer-Chat-Widget rendert HTML aus dem Gastro-Frontend." | Customer-Touchpoint hat Brand-Header, Code-Basis ist Gastro |
 | "Die Vertriebsagentur vermittelt ProzessPilot-Kunden, die im Gastro-System angelegt werden." | Außen vs. Code-System |
 

@@ -22,7 +22,7 @@ prozesspilot/                              ← Repo-Root
 ├── ProzessPilot_Projektplan.docx          ← Historischer Projektplan
 │
 ├── docker-compose.yml                     ← Lokales Dev-Setup
-├── docker-compose.prod.yml                ← Production-Setup für Hetzner
+├── docker-compose.prod.yml                ← Production-Setup für IONOS
 │
 ├── Modulkonzept/                          ← Konzept-Doku (komplett)
 │   └── Konzeptentwicklung/
@@ -109,7 +109,7 @@ prozesspilot/                              ← Repo-Root
 │       ├── ci.yml                         ← Mein Workflow (Lint+Test+Build+Discord-Notify)
 │       ├── ci-backend.yml                 ← Existierender Backend-CI (bestehend)
 │       ├── codeql.yml                     ← Security-Scan
-│       ├── deploy-staging.yml             ← Auto-Deploy auf Hetzner
+│       ├── deploy-staging.yml             ← Auto-Deploy auf IONOS
 │       ├── deploy-stub.yml                ← TODO-Stub (noch nicht aktiv)
 │       └── discord-notify.yml             ← GitHub-Events → Discord
 │

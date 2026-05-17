@@ -83,7 +83,7 @@ Der Pilot ist in drei aufeinander aufbauende Sub-Phasen gegliedert.
 ### 3.1 P1.1 — Solo-Test (KW 21–22, ~2 Wochen)
 
 **Setup:**
-- Server auf Hetzner CX22 hochgezogen, EU-Region
+- Server auf IONOS VPS hochgezogen, EU-Region
 - Mitarbeiter-Webapp läuft auf `admin.prozesspilot.net`
 - Discord-Server angelegt mit Channel-Struktur
 - Discord-Webhooks aktiv (Phase 1 ohne Bot)
@@ -161,7 +161,7 @@ Der Pilot ist in drei aufeinander aufbauende Sub-Phasen gegliedert.
 
 | Schritt | Verantwortlich | Geschätzt |
 |---|---|---|
-| Hetzner-Server bestellen + Docker-Compose deployen | Andreas | 0,5 Tag |
+| IONOS-Server konfigurieren + Docker-Compose deployen | Andreas | 0,5 Tag |
 | Domain DNS-Setup (admin/setup/api/prozesspilot.net) | Andreas | 0,5 Tag |
 | Postgres-Migrations + Bootstrap-Admin | Andreas | 0,5 Tag |
 | Discord-Server angelegt + Webhooks konfiguriert + Channel-Struktur | Steve | 0,5 Tag |

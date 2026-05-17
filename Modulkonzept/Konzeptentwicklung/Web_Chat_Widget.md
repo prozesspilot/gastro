@@ -308,7 +308,7 @@ Alle drei Wege schreiben in dieselbe DB (single source of truth). Jeder Antwort-
 ### 9.1 Verbindungs-Limits
 
 - Pro Tenant max. 5 gleichzeitige Customer-Verbindungen (verhindert Missbrauch)
-- Pro Backend-Instanz max. 5.000 WebSocket-Verbindungen (Hetzner CX22 packt das locker)
+- Pro Backend-Instanz max. 5.000 WebSocket-Verbindungen (IONOS VPS 4-4-120 packt das locker)
 
 ### 9.2 Bei 500 Tenants und Annahme 10 % aktiv
 

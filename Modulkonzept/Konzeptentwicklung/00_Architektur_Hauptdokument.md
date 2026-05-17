@@ -61,7 +61,7 @@ Interne Werkzeuge wie Tenant-Management, Task-Dashboard, Provisions-Tracking sin
                            │  HTTP / REST
                            ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                  PROZESSPILOT BACKEND (Node/TS, EU-Hetzner)            │
+│                  PROZESSPILOT BACKEND (Node/TS, EU-IONOS)            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐      │
 │  │ Customer-    │  │ Receipt-     │  │ Categorization-Service   │      │
 │  │ Profile-API  │  │ Service      │  │ (Claude API Wrapper +    │      │
@@ -367,7 +367,7 @@ Jede DB-Tabelle hat eine `tenant_id`-Spalte. Backend-Middleware setzt RLS (Row-L
 
 ### 9.7 DSGVO / Drittland-Transfer
 
-- **EU-Hosting** (Hetzner Falkenstein/Nürnberg) als Default
+- **EU-Hosting** (IONOS DE-Rechenzentrum) als Default
 - **Google Vision** EU-Region `europe-west3`, sonst Standardvertragsklauseln
 - **Anthropic Claude:** US-Region, SCCs gemäß DPA
 - **Discord Inc.:** US-Region, SCCs + DPA, im AVV als Subunternehmer genannt
@@ -395,7 +395,7 @@ Jede DB-Tabelle hat eine `tenant_id`-Spalte. Backend-Middleware setzt RLS (Row-L
 | `modules/M01..M15` | Detail-Spezifikationen pro Modul |
 | `legal/AGB_Endkunden.md` | SaaS-AGB für Endkundenvertrag (vom Anwalt zu finalisieren) |
 | `legal/AVV_Vorlage.md` | Auftragsverarbeitungsvertrag |
-| `legal/Subunternehmer.md` | Lebende Liste der Subunternehmer (Hetzner, Google, Anthropic, Discord, Twilio) |
+| `legal/Subunternehmer.md` | Lebende Liste der Subunternehmer (IONOS, Google, Anthropic, Discord, Twilio) |
 
 ---
 

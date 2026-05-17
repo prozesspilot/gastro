@@ -1,5 +1,5 @@
 {
-  "_comment": "Geteilte Claude-Code-Konfiguration für ProzessPilot-Repo. Wird via Git an alle Instanzen verteilt (Steve-Mac, Andreas-Mac, Hetzner-Server).",
+  "_comment": "Geteilte Claude-Code-Konfiguration für ProzessPilot-Repo. Wird via Git an alle Instanzen verteilt (Steve-Mac, Andreas-Mac, IONOS-Server).",
 
   "modelDefaults": {
     "primary": "claude-sonnet-4-6",

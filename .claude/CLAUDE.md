@@ -15,7 +15,7 @@ In diesem Projekt unterscheiden wir zwei Namen:
 | **ProzessPilot** | Firmenname + Marken-Brand für die Außen-Kommunikation. So heißt die Firma (Einzelunternehmen Steve Bernhardt) auf AGB, Rechnungen, Verträgen, Marketing-Website, im Sales-Pitch zum Wirt. |
 
 **Beispiel-Sätze:**
-- ✅ "Das Gastro-Backend läuft auf Hetzner."
+- ✅ "Das Gastro-Backend läuft auf IONOS."
 - ✅ "Die ProzessPilot-AGB sind im legal/-Ordner."
 - ✅ "Der Wirt sieht 'ProzessPilot' im Web-Chat-Widget."
 - ✅ "Das Discord-Team heißt 'Gastro Team'."
@@ -122,7 +122,7 @@ Lies diese Dokumente bei Bedarf:
 
 ### 5.4 DSGVO + EU-Hosting
 
-- Hetzner EU als Default
+- IONOS EU als Default
 - Google Vision API EU-Region (`europe-west3`)
 - Anthropic Claude: SCCs gemäß DPA
 - Discord Inc.: SCCs, im AVV als Subunternehmer genannt
@@ -221,7 +221,7 @@ Lies diese Dokumente bei Bedarf:
 
 - `steve/T0XX-<kurz>` für Steve's Tasks
 - `andreas/T0XX-<kurz>` für Andreas' Tasks
-- `server/T0XX-<kurz>` für Hetzner-Tasks
+- `server/T0XX-<kurz>` für IONOS-Tasks
 - `gemeinsam/T0XX-<kurz>` für Pair-Programming
 
 ### 7.2 Commit-Messages
@@ -245,7 +245,7 @@ Typen: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `style`
 4. `/finish-task` → PR auf GitHub
 5. Anderer Mensch: `/review-pr <pr-number>` → code-reviewer-Agent läuft
 6. Bei Approve + CI grün: Merge per Squash
-7. Auto-Deploy auf Hetzner
+7. Auto-Deploy auf IONOS
 
 ### 7.4 Wenn du etwas nicht weißt
 

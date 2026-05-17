@@ -233,7 +233,7 @@ Triggert direkten Download der aktuellen Version. Discord-Notification an Mitarb
 
 ### 18.1 Wozu
 
-Die Subunternehmer-Liste (Hetzner, Google Vision, Anthropic, Discord, SumUp, Twilio, Stripe, ...) ändert sich gelegentlich. Pflicht: Wirte bei Änderung **informieren**, weil im AVV vereinbart.
+Die Subunternehmer-Liste (IONOS, Google Vision, Anthropic, Discord, SumUp, Twilio, Stripe, ...) ändert sich gelegentlich. Pflicht: Wirte bei Änderung **informieren**, weil im AVV vereinbart.
 
 ### 18.2 Workflow
 

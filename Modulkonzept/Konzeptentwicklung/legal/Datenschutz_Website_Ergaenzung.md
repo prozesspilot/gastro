@@ -47,7 +47,7 @@ NEU: Aktuell ist die Bestellung eines Datenschutzbeauftragten gesetzlich
 ```
 ALT: [Name, Postadresse, E-Mail-Adresse des Hosters]
 
-NEU: Hetzner Online GmbH
+NEU: IONOS SE
      Industriestraße 25, 91710 Gunzenhausen, Deutschland
      E-Mail: info@hetzner.com
      Datenschutzerklärung: https://www.hetzner.com/de/rechtliches/datenschutz
@@ -124,7 +124,7 @@ Speicherdauer: Die von Ihnen im Kontaktformular eingegebenen Daten verbleiben
 bei uns, bis Sie uns zur Löschung auffordern oder der Zweck für die Daten-
 speicherung entfällt (z.B. nach abgeschlossener Bearbeitung Ihrer Anfrage).
 
-Empfänger: Hetzner Online GmbH (Hosting), Postmark (Transaktionsmail-Versand)
+Empfänger: IONOS SE (Hosting), Postmark (Transaktionsmail-Versand)
 ```
 
 ### 3.4 Newsletter (falls geplant)
@@ -203,7 +203,7 @@ einfache Hyperlinks ohne Tracking-Funktion.
 10. Content-Delivery-Network
 
 Aktuell wird kein externes CDN eingesetzt. Statische Inhalte (Bilder, Skripte,
-Stylesheets) werden direkt vom Hetzner-Server ausgeliefert.
+Stylesheets) werden direkt vom IONOS-Server ausgeliefert.
 
 Falls in Zukunft ein CDN eingesetzt wird (z.B. Cloudflare), wird die
 Datenschutzerklärung entsprechend ergänzt.

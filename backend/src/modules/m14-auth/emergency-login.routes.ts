@@ -20,8 +20,8 @@ import { z } from 'zod';
 import { config } from '../../core/config';
 import { performEmergencyLogin } from './emergency-login.service';
 import type { EmergencyLoginError } from './emergency-login.service';
-import { signM14EmergencyToken } from './m14-jwt';
-import { createAuthSession, logAuthEvent } from './users.repository';
+import { signM14EmergencyToken, verifyM14Token } from './m14-jwt';
+import { createAuthSession, getUserById, logAuthEvent } from './users.repository';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,40 @@ function toAuditEventType(error: EmergencyLoginError): string {
 // ── Fastify-Plugin ─────────────────────────────────────────────────────────
 
 export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * GET /auth/session
+   *
+   * Verifiziert die aktive pp_auth-Cookie-Session und gibt User-Daten zurück.
+   * Wird vom Frontend beim Mount aufgerufen, um M14-Cookie-Sessions wiederherzustellen.
+   */
+  app.get('/session', async (req: FastifyRequest, reply: FastifyReply) => {
+    const cookies = req.cookies as Record<string, string | undefined>;
+    const token = cookies['pp_auth'];
+    if (!token) {
+      return reply.code(401).send({ error: 'no_session', message: 'Nicht eingeloggt' });
+    }
+
+    const result = verifyM14Token(token);
+    if (!result.ok) {
+      return reply.code(401).send({ error: 'invalid_session', message: result.message });
+    }
+
+    const user = await getUserById(app.db, result.payload.sub);
+    if (!user || !user.active) {
+      return reply.code(401).send({ error: 'user_inactive', message: 'Account nicht aktiv' });
+    }
+
+    return reply.code(200).send({
+      ok: true,
+      user: {
+        id: user.id,
+        display_name: user.display_name,
+        role: user.role,
+        login_method: result.payload.login_method,
+      },
+    });
+  });
+
   /**
    * POST /auth/notfall/login
    *

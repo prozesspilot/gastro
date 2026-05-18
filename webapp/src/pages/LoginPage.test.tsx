@@ -1,5 +1,5 @@
 /**
- * M14 — Tests für LoginPage (Email + Password)
+ * M14 — Tests für LoginPage (Discord-OAuth-first + Notfall-Login)
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -11,12 +11,17 @@ import { server } from '../tests/msw/server';
 import { AuthProvider } from '../auth/AuthContext';
 import LoginPage from './LoginPage';
 
-const inFuture = Math.floor(Date.now() / 1000) + 600;
-
-function tokenFor(claims: Record<string, unknown>): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
-  return `${header}.${payload}.sig`;
+// M14-Session-Response Helper
+function makeM14Session(role: 'geschaeftsfuehrer' | 'mitarbeiter' = 'geschaeftsfuehrer') {
+  return {
+    ok: true,
+    user: {
+      id: 'usr-m14-001',
+      display_name: 'Steve Bernhardt',
+      role,
+      login_method: 'emergency' as const,
+    },
+  };
 }
 
 function renderLogin() {
@@ -26,113 +31,194 @@ function renderLogin() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<div>Dashboard</div>} />
-          <Route path="/change-password" element={<div>Change-Pwd</div>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
   );
 }
 
-describe('LoginPage', () => {
+describe('LoginPage M14', () => {
   beforeEach(() => {
-    sessionStorage.clear();
-    localStorage.clear();
-  });
-
-  it('zeigt ProzessPilot Heading + Email + Password', async () => {
-    renderLogin();
-    expect(await screen.findByRole('heading', { name: 'ProzessPilot' })).toBeInTheDocument();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/passwort/i)).toBeInTheDocument();
-  });
-
-  it('Login leitet zu Dashboard weiter', async () => {
+    // Default: keine aktive M14-Session
     server.use(
-      http.post('/api/v1/auth/login', () =>
-        HttpResponse.json({
-          ok: true,
-          data: {
-            access_token: tokenFor({ sub: 'usr_1', tenant_id: 't1', permissions: ['*'], preset: 'super_admin', exp: inFuture }),
-            user: {
-              id: 'usr_1', email: 'admin@test.de', display_name: 'Admin',
-              tenant_id: 't1', permissions: ['*'], preset: 'super_admin',
-              is_active: true, password_must_change: false, last_login_at: null, created_at: '',
-            },
-          },
-        }),
+      http.get('/api/v1/auth/session', () =>
+        HttpResponse.json({ error: 'no_session', message: 'Nicht eingeloggt' }, { status: 401 }),
       ),
     );
+  });
+
+  it('zeigt ProzessPilot Heading + Discord-Button', async () => {
+    renderLogin();
+    expect(await screen.findByRole('heading', { name: 'ProzessPilot' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /mit discord anmelden/i })).toBeInTheDocument();
+  });
+
+  it('zeigt Discord-Link mit korrektem href=/api/v1/auth/discord/login', async () => {
+    renderLogin();
+    const link = await screen.findByRole('link', { name: /mit discord anmelden/i });
+    expect(link).toHaveAttribute('href', '/api/v1/auth/discord/login');
+  });
+
+  it('Notfall-Login-Link ist sichtbar + expandiert Formular bei Klick', async () => {
     const user = userEvent.setup();
     renderLogin();
-    await user.type(await screen.findByLabelText(/email/i), 'admin@test.de');
-    await user.type(screen.getByLabelText(/passwort/i), 'SuperSecret123!');
-    await user.click(screen.getByRole('button', { name: /anmelden/i }));
+    const toggle = await screen.findByRole('button', { name: /notfall-login/i });
+    expect(toggle).toBeInTheDocument();
+    // Formular zunächst nicht sichtbar
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    // Klick expandiert das Formular
+    await user.click(toggle);
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
+  });
+
+  it('Notfall-Formular hat Email + Passwort + TOTP-Felder', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/passwort/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/totp-code/i)).toBeInTheDocument();
+  });
+
+  it('Notfall-Login-Submit → erfolgreicher Login → Redirect zu /', async () => {
+    // Beginn: keine aktive Session (damit Login-Page nicht sofort redirectet)
+    // Nach erfolgreichem POST: session gibt gültigen User zurück
+    let sessionCalled = 0;
+    server.use(
+      http.post('/api/v1/auth/notfall/login', () =>
+        HttpResponse.json({ ok: true, display_name: 'Steve', role: 'geschaeftsfuehrer', expires_in: 14400 }),
+      ),
+      http.get('/api/v1/auth/session', () => {
+        sessionCalled += 1;
+        // Erster Aufruf (beim Mount): keine Session → 401
+        // Zweite und folgende Aufrufe (nach Login): gültige Session
+        if (sessionCalled <= 1) {
+          return HttpResponse.json({ error: 'no_session', message: 'Nicht eingeloggt' }, { status: 401 });
+        }
+        return HttpResponse.json(makeM14Session());
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    await user.type(await screen.findByLabelText(/email/i), 'steve@prozesspilot.net');
+    await user.type(screen.getByLabelText(/passwort/i), 'SecurePass123!');
+    await user.type(screen.getByLabelText(/totp-code/i), '123456');
+    await user.click(screen.getByRole('button', { name: /notfall-anmeldung/i }));
+
     await waitFor(() => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
   });
 
-  it('Falsche Credentials → generische Fehlermeldung', async () => {
+  it('Notfall-Login → invalid_credentials → Fehlermeldung', async () => {
     server.use(
-      http.post('/api/v1/auth/login', () =>
+      http.post('/api/v1/auth/notfall/login', () =>
         HttpResponse.json(
-          { ok: false, error: { code: 'INVALID_CREDENTIALS', message: 'fail' } },
+          { error: 'invalid_credentials', message: 'Anmeldedaten ungültig.' },
           { status: 401 },
         ),
       ),
     );
+
     const user = userEvent.setup();
     renderLogin();
-    await user.type(await screen.findByLabelText(/email/i), 'foo@bar.de');
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    await user.type(await screen.findByLabelText(/email/i), 'wrong@test.de');
     await user.type(screen.getByLabelText(/passwort/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /anmelden/i }));
+    await user.type(screen.getByLabelText(/totp-code/i), '000000');
+    await user.click(screen.getByRole('button', { name: /notfall-anmeldung/i }));
+
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/login fehlgeschlagen/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(/zugangsdaten ungültig/i);
     });
   });
 
-  it('Bei password_must_change → Redirect /change-password', async () => {
+  it('Notfall-Login → totp_invalid → spezifische TOTP-Fehlermeldung', async () => {
     server.use(
-      http.post('/api/v1/auth/login', () =>
-        HttpResponse.json({
-          ok: true,
-          data: {
-            access_token: tokenFor({ sub: 'usr_2', tenant_id: 't1', permissions: ['receipts.read'], preset: 'operator', exp: inFuture }),
-            user: {
-              id: 'usr_2', email: 'neu@test.de', display_name: 'Neu',
-              tenant_id: 't1', permissions: ['receipts.read'], preset: 'operator',
-              is_active: true, password_must_change: true, last_login_at: null, created_at: '',
-            },
-          },
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderLogin();
-    await user.type(await screen.findByLabelText(/email/i), 'neu@test.de');
-    await user.type(screen.getByLabelText(/passwort/i), 'temp-passwort-XY');
-    await user.click(screen.getByRole('button', { name: /anmelden/i }));
-    await waitFor(() => {
-      expect(screen.getByText('Change-Pwd')).toBeInTheDocument();
-    });
-  });
-
-  it('Account locked → spezifische Fehlermeldung', async () => {
-    server.use(
-      http.post('/api/v1/auth/login', () =>
+      http.post('/api/v1/auth/notfall/login', () =>
         HttpResponse.json(
-          { ok: false, error: { code: 'ACCOUNT_LOCKED', message: 'locked' } },
-          { status: 423 },
+          { error: 'totp_invalid', message: 'Der eingegebene Code ist ungültig.' },
+          { status: 401 },
         ),
       ),
     );
+
     const user = userEvent.setup();
     renderLogin();
-    await user.type(await screen.findByLabelText(/email/i), 'a@b.de');
-    await user.type(screen.getByLabelText(/passwort/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /anmelden/i }));
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    await user.type(await screen.findByLabelText(/email/i), 'steve@prozesspilot.net');
+    await user.type(screen.getByLabelText(/passwort/i), 'SecurePass123!');
+    await user.type(screen.getByLabelText(/totp-code/i), '999999');
+    await user.click(screen.getByRole('button', { name: /notfall-anmeldung/i }));
+
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/gesperrt/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(/totp-code ungültig/i);
+    });
+  });
+
+  it('Notfall-Login → rate_limit → Rate-Limit-Fehlermeldung', async () => {
+    server.use(
+      http.post('/api/v1/auth/notfall/login', () =>
+        HttpResponse.json(
+          { error: 'rate_limit_ip', message: 'Zu viele Fehlversuche.' },
+          { status: 429 },
+        ),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    await user.type(await screen.findByLabelText(/email/i), 'steve@prozesspilot.net');
+    await user.type(screen.getByLabelText(/passwort/i), 'SecurePass123!');
+    await user.type(screen.getByLabelText(/totp-code/i), '123456');
+    await user.click(screen.getByRole('button', { name: /notfall-anmeldung/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/zu viele versuche/i);
+    });
+  });
+
+  it('Loading-State während Submit', async () => {
+    // Hängende Anfrage um Loading-State zu prüfen
+    server.use(
+      http.post('/api/v1/auth/notfall/login', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return HttpResponse.json({ ok: true }, { status: 200 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(await screen.findByRole('button', { name: /notfall-login/i }));
+    await user.type(await screen.findByLabelText(/email/i), 'steve@prozesspilot.net');
+    await user.type(screen.getByLabelText(/passwort/i), 'SecurePass123!');
+    await user.type(screen.getByLabelText(/totp-code/i), '123456');
+
+    const submitBtn = screen.getByRole('button', { name: /notfall-anmeldung/i });
+    await user.click(submitBtn);
+
+    // Button zeigt Loading-Text
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /wird angemeldet/i })).toBeInTheDocument();
+    });
+  });
+
+  it('Bereits eingeloggt (M14-Session) → Redirect zu /', async () => {
+    // Aktive Session simulieren
+    server.use(
+      http.get('/api/v1/auth/session', () =>
+        HttpResponse.json(makeM14Session()),
+      ),
+    );
+
+    renderLogin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
   });
 });

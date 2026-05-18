@@ -206,17 +206,23 @@ export default function BelegeDetailPage() {
         >
           {downloadUrl ? (
             isPdfMime(beleg.file_mime_type) ? (
+              // SECURITY: sandbox="" verhindert JS-Ausführung in PDF-Iframes (XSS-Vektor).
+              // referrerPolicy="no-referrer" blockt URL-Leak an PDF-enthaltene externe Ressourcen.
               <iframe
                 src={downloadUrl}
-                title={`Beleg ${beleg.id}`}
-                style={{ width: '100%', height: 480, border: 'none' }}
+                sandbox=""
+                referrerPolicy="no-referrer"
+                title={`PDF-Preview von ${beleg.supplier_name ?? 'Beleg'}`}
+                style={{ width: '100%', height: 480, border: '1px solid var(--border)', borderRadius: 8 }}
                 aria-label="PDF-Vorschau"
                 data-testid="pdf-preview"
               />
             ) : (
+              // SECURITY: referrerPolicy="no-referrer" verhindert URL-Leak bei Bild-Requests.
               <img
                 src={downloadUrl}
-                alt={`Beleg ${beleg.id}`}
+                alt={`Beleg ${beleg.supplier_name ?? 'ohne Name'}`}
+                referrerPolicy="no-referrer"
                 style={{ maxWidth: '100%', maxHeight: 480, objectFit: 'contain', display: 'block' }}
                 data-testid="image-preview"
               />

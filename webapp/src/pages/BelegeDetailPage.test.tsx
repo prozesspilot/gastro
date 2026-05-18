@@ -226,6 +226,51 @@ describe('BelegeDetailPage', () => {
     });
   });
 
+  it('iframe für PDF hat sandbox="" und no-referrer (S1)', async () => {
+    const beleg = makeBeleg({ file_mime_type: 'application/pdf' });
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg,
+          download_url:        'http://localhost/doc.pdf',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+
+    const { container } = renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pdf-preview')).toBeInTheDocument();
+    });
+
+    const iframe = container.querySelector('iframe');
+    expect(iframe).toHaveAttribute('sandbox', '');
+    expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
+  it('img für Bilder hat referrerPolicy="no-referrer" (S2)', async () => {
+    const beleg = makeBeleg({ file_mime_type: 'image/jpeg' });
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg,
+          download_url:        'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+
+    const { container } = renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('image-preview')).toBeInTheDocument();
+    });
+
+    const img = container.querySelector('img[data-testid="image-preview"]');
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
   it('zeigt Loading-Skeleton während fetch', async () => {
     server.use(
       http.get(`${BASE}/belege/:id`, async () => {

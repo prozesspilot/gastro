@@ -242,4 +242,148 @@ describe('BelegeUploadPage', () => {
 
     expect(screen.queryByText('skript.exe')).not.toBeInTheDocument();
   });
+
+  it('M2: blockt mehr als MAX_FILES (21 Dateien) und zeigt Warnung', async () => {
+    renderPage();
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const files = Array.from({ length: 21 }, (_, i) =>
+      makeFile(`f${i}.jpg`, 'image/jpeg'),
+    );
+
+    await act(async () => {
+      simulateFileChange(input, files);
+    });
+
+    await waitFor(() => {
+      // Maximal 20 Datei-Rows in der Liste
+      const rows = screen.queryAllByTestId('file-row');
+      expect(rows.length).toBeLessThanOrEqual(20);
+    });
+
+    // Toast mit Warnung über übersprungene Datei
+    expect(await screen.findByText(/maximum.*erreicht/i)).toBeInTheDocument();
+  });
+
+  it('M5: zeigt Fehlerstatus bei Network-Error beim Upload', async () => {
+    const { http: mswHttp, HttpResponse: MswHttpResponse } = await import('msw');
+    server.use(
+      mswHttp.post(`${BASE}/belege/upload`, () => MswHttpResponse.error()),
+    );
+
+    renderPage();
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = makeFile('fehler.jpg', 'image/jpeg');
+
+    await act(async () => {
+      simulateFileChange(input, [file]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('fehler.jpg')).toBeInTheDocument();
+    });
+
+    const uploadBtn = screen.getByRole('button', { name: /1 beleg hochladen/i });
+    await act(async () => {
+      fireEvent.click(uploadBtn);
+    });
+
+    await waitFor(() => {
+      // Fehlerstatus sichtbar in der FileRow
+      const errorLabels = screen.queryAllByText('Fehler');
+      expect(errorLabels.length).toBeGreaterThan(0);
+    }, { timeout: 5000 });
+  });
+
+  it('M5: zeigt Fehlerstatus bei 502 vom Backend', async () => {
+    server.use(
+      http.post(`${BASE}/belege/upload`, () =>
+        HttpResponse.json(
+          { error: 'storage_error', message: 'Storage failed' },
+          { status: 502 },
+        ),
+      ),
+    );
+
+    renderPage();
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = makeFile('server-fehler.jpg', 'image/jpeg');
+
+    await act(async () => {
+      simulateFileChange(input, [file]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('server-fehler.jpg')).toBeInTheDocument();
+    });
+
+    const uploadBtn = screen.getByRole('button', { name: /1 beleg hochladen/i });
+    await act(async () => {
+      fireEvent.click(uploadBtn);
+    });
+
+    await waitFor(() => {
+      const errorLabels = screen.queryAllByText('Fehler');
+      expect(errorLabels.length).toBeGreaterThan(0);
+    }, { timeout: 5000 });
+  });
+
+  it('M5: Drag&Drop-Event akzeptiert valide Datei', async () => {
+    renderPage();
+    const dropZone = screen.getByRole('button', { name: /dateien hier ablegen/i });
+    const file = makeFile('beleg-drop.jpg', 'image/jpeg');
+
+    await act(async () => {
+      fireEvent.dragEnter(dropZone, {
+        dataTransfer: { files: [file], items: [{ kind: 'file', type: 'image/jpeg' }] },
+      });
+      fireEvent.drop(dropZone, {
+        dataTransfer: { files: [file], items: [{ kind: 'file', type: 'image/jpeg' }] },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('beleg-drop.jpg')).toBeInTheDocument();
+    });
+  });
+
+  it('M5: "Fehler erneut versuchen"-Button setzt alle Fehler-Dateien zurück auf queued', async () => {
+    server.use(
+      http.post(`${BASE}/belege/upload`, () =>
+        HttpResponse.json({ error: 'fail' }, { status: 500 }),
+      ),
+    );
+
+    renderPage();
+    const input = screen.getByTestId('file-input') as HTMLInputElement;
+    const file = makeFile('retry.jpg', 'image/jpeg');
+
+    await act(async () => {
+      simulateFileChange(input, [file]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('retry.jpg')).toBeInTheDocument();
+    });
+
+    const uploadBtn = screen.getByRole('button', { name: /1 beleg hochladen/i });
+    await act(async () => {
+      fireEvent.click(uploadBtn);
+    });
+
+    // Warten bis Fehlerstatus erscheint
+    await waitFor(() => {
+      expect(screen.queryAllByText('Fehler').length).toBeGreaterThan(0);
+    }, { timeout: 5000 });
+
+    // "Fehler erneut versuchen" klicken
+    const retryBtn = screen.getByRole('button', { name: /fehler erneut versuchen/i });
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    // Upload-Button zeigt wieder 1 Beleg (status zurück auf queued)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /1 beleg hochladen/i })).toBeInTheDocument();
+    });
+  });
 });

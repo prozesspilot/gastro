@@ -7,20 +7,21 @@
  * Unterscheidet sich von UploadPage.tsx (alte receipts-API) — NICHT löschen.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastProvider';
 import { uploadBeleg, type UploadResponse } from '../api/belege';
 
 // ── Konstanten ────────────────────────────────────────────────────────────────
 
+// DECISION: image/heif entfernt — Backend akzeptiert nur image/heic, nicht heif.
+// Frontend muss Backend-Liste spiegeln (T006 B3).
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/heic',
-  'image/heif',
   'application/pdf',
-];
+] as const;
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_FILES = 20;
@@ -56,14 +57,24 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * Prüft ob File-Type und -Größe erlaubt sind.
+ *
+ * DEFENSE-IN-DEPTH:
+ * - Client-Check ist NICHT autoritativ — Browser kann `file.type` leer lassen
+ *   oder gefälschten MIME-Type liefern (bei Drag&Drop verbreitet).
+ * - Server MUSS Magic-Bytes prüfen (siehe T006 B3 detectMimeFromBytes).
+ * - Hier nur UX-Hinweis vor dem Upload, kein Security-Bouncer.
+ */
 function validateFile(file: File): string | null {
-  if (!ALLOWED_MIME_TYPES.includes(file.type) && file.type !== '') {
+  if (!ALLOWED_MIME_TYPES.includes(file.type as typeof ALLOWED_MIME_TYPES[number]) && file.type !== '') {
     return `Ungültiger Dateityp: ${file.type || 'unbekannt'}`;
   }
   // Fallback-Check über Dateiendung wenn MIME leer (z. B. HEIC in manchen Browsern)
   if (file.type === '') {
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!['jpg', 'jpeg', 'png', 'heic', 'heif', 'pdf'].includes(ext ?? '')) {
+    // heif absichtlich nicht erlaubt — Backend akzeptiert nur heic
+    if (!['jpg', 'jpeg', 'png', 'heic', 'pdf'].includes(ext ?? '')) {
       return `Nicht erlaubter Dateityp (.${ext ?? '?'})`;
     }
   }
@@ -84,54 +95,88 @@ export default function BelegeUploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  // M1: filesRef parallel zum State führen, damit Unmount-Cleanup aktuelle Liste kennt
+  const filesRef = useRef<UploadFile[]>([]);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  // M1: Unmount-Cleanup — alle noch vorhandenen Blob-URLs revoken
+  useEffect(() => {
+    return () => {
+      filesRef.current.forEach((f) => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
+    };
+  }, []); // bewusst leere Deps — nur bei Unmount ausführen
+
   // ── Datei-Hinzufügen ──────────────────────────────────────────────────────
 
+  // M2: Limit-Check innerhalb setFiles-Callback, damit kein Race bei schnellen Doppel-Drops
   const addFiles = useCallback((rawFiles: FileList | File[]) => {
     const incoming = Array.from(rawFiles);
-    const accepted: UploadFile[] = [];
     const rejected: string[] = [];
 
-    for (const file of incoming) {
-      if (files.length + accepted.length >= MAX_FILES) {
-        rejected.push(`Limit ${MAX_FILES} Dateien erreicht — "${file.name}" übersprungen`);
-        continue;
+    setFiles((prev) => {
+      const remainingSlots = MAX_FILES - prev.length;
+      if (remainingSlots <= 0) {
+        toast('warning', `Maximum ${MAX_FILES} Dateien erreicht.`);
+        return prev;
       }
-      const err = validateFile(file);
-      if (err) {
-        rejected.push(`"${file.name}": ${err}`);
-        continue;
-      }
-      const previewUrl = isImageMime(file.type) ? URL.createObjectURL(file) : undefined;
-      accepted.push({
-        id: generateId(),
-        file,
-        status: 'queued',
-        progress: 0,
-        previewUrl,
-      });
-    }
 
+      const accepted: UploadFile[] = [];
+      const tooMany: File[] = [];
+
+      for (const file of incoming) {
+        const err = validateFile(file);
+        if (err) {
+          rejected.push(`"${file.name}": ${err}`);
+          continue;
+        }
+        if (accepted.length >= remainingSlots) {
+          tooMany.push(file);
+          continue;
+        }
+        accepted.push({
+          id: generateId(),
+          file,
+          status: 'queued',
+          progress: 0,
+          previewUrl: isImageMime(file.type) ? URL.createObjectURL(file) : undefined,
+        });
+      }
+
+      if (tooMany.length > 0) {
+        toast('warning', `${tooMany.length} Datei(en) übersprungen — Maximum ${MAX_FILES} erreicht.`);
+      }
+
+      return accepted.length > 0 ? [...prev, ...accepted] : prev;
+    });
+
+    // Validierungsfehler als Toast nach dem State-Update ausgeben
     if (rejected.length > 0) {
-      toast('warning', rejected.join(' | '));
+      // Kurz verzögert damit State-Update + Toast nicht kollidieren
+      setTimeout(() => toast('warning', rejected.join(' | ')), 0);
     }
-    if (accepted.length > 0) {
-      setFiles((prev) => [...prev, ...accepted]);
-    }
-  }, [files.length, toast]);
+  }, [toast]);
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────
+
+  // MINOR: Counter-basierter DragLeave verhindert Flackern wenn Maus über Child-Elemente fährt
+  const dragCounter = useRef(0);
 
   function handleDragEnter(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
+    dragCounter.current++;
     setIsDragging(true);
   }
 
   function handleDragLeave(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    // Nur wenn Maus Zone wirklich verlässt (nicht auf Child)
-    if (e.currentTarget === e.target) {
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
       setIsDragging(false);
     }
   }
@@ -144,6 +189,7 @@ export default function BelegeUploadPage() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
+    dragCounter.current = 0;
     setIsDragging(false);
     if (e.dataTransfer.files.length > 0) {
       addFiles(e.dataTransfer.files);
@@ -296,7 +342,7 @@ export default function BelegeUploadPage() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/heic,image/heif,application/pdf"
+          accept="image/jpeg,image/png,image/heic,application/pdf"
           onChange={handlePickerChange}
           style={{ display: 'none' }}
           aria-label="Dateiauswahl"
@@ -391,7 +437,7 @@ export default function BelegeUploadPage() {
 
 // ── FileRow-Unterkomponente ───────────────────────────────────────────────────
 
-function FileRow({
+const FileRow = memo(function FileRow({
   uf,
   onRemove,
   disabled,
@@ -530,4 +576,4 @@ function FileRow({
       </button>
     </div>
   );
-}
+});

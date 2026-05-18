@@ -14,15 +14,30 @@ import { Pool } from 'pg';
 import { config } from '../config';
 import { logger } from '../logger';
 
-// Pfad relativ zu dist/core/db/migrate.js → ../../../../migrations
-// Bei tsx (kein Build): __dirname ist src/core/db → ../../../migrations
-const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', '..', 'migrations');
+// Pfad relativ zu backend/src/core/db/migrate.ts → backend/migrations
+// (Spec T011: Migrations leben unter `backend/migrations/`.)
+// Bei tsx läuft __dirname auf backend/src/core/db → drei Ebenen hoch nach backend/,
+// dann /migrations. Bei tsc-Build (dist/core/db/migrate.js) gilt die gleiche
+// Relation, weil dist/ direkt unter backend/ liegt.
+const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', 'migrations');
+
+// Beliebiger, projektweit eindeutiger 64-Bit-Integer für pg_advisory_lock.
+// "GASTRO" als ASCII auf bigint gemapped: 0x47415354524F00 = 20094489948651264.
+// Dieser Lock serialisiert konkurrierende Migrations-Runs (z. B. zwei
+// gleichzeitig hochfahrende Backend-Pods beim Auto-Deploy).
+const MIGRATION_ADVISORY_LOCK = BigInt('20094489948651264');
 
 async function migrate(): Promise<void> {
   const pool = new Pool({ connectionString: config.DATABASE_URL });
   const client = await pool.connect();
 
   try {
+    // Cluster-weites Lock auf dieser Connection — falls bereits ein anderer
+    // Runner aktiv ist, blockiert pg_advisory_lock() bis dieser fertig ist.
+    logger.info('Versuche, Migrations-Advisory-Lock zu erwerben …');
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_ADVISORY_LOCK.toString()]);
+    logger.info('Migrations-Lock erworben.');
+
     // Migrations-Tracking-Tabelle anlegen (idempotent)
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,7 +55,11 @@ async function migrate(): Promise<void> {
     // Alle SQL-Dateien einlesen und sortieren
     let files: string[];
     try {
-      files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
+      // `.sql`-Dateien sortiert; Files mit `_`-Prefix sind reservierte Helper
+      // (z. B. `_rollback.sql`, `_helpers.sql`) und keine Migrationen.
+      files = (await readdir(MIGRATIONS_DIR))
+        .filter((f) => f.endsWith('.sql') && !f.startsWith('_'))
+        .sort();
     } catch {
       logger.error({ dir: MIGRATIONS_DIR }, 'Migrations-Verzeichnis nicht gefunden');
       process.exit(1);
@@ -76,6 +95,13 @@ async function migrate(): Promise<void> {
 
     logger.info({ count: pending.length }, 'Alle Migrationen erfolgreich angewendet.');
   } finally {
+    // Lock freigeben, falls erworben. pg_advisory_unlock liefert false, wenn
+    // der Lock nicht gehalten wurde — kein Fehler.
+    try {
+      await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK.toString()]);
+    } catch {
+      // Connection bereits dead — ignorieren, der Lock wird mit Session-End freigegeben.
+    }
     client.release();
     await pool.end();
   }

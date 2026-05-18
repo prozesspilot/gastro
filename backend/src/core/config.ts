@@ -77,6 +77,11 @@ const envSchema = z.object({
   INITIAL_SUPER_ADMIN_EMAIL: z.string().default(''),
   INITIAL_SUPER_ADMIN_PASSWORD: z.string().default(''),
 
+  // ── Webapp-URL ──────────────────────────────────────────────────────────
+  // Basis-URL der Mitarbeiter-Webapp (admin.prozesspilot.net). Wird für
+  // OAuth-Redirects genutzt (z.B. SumUp-Callback → Webapp-Tenant-Seite).
+  WEBAPP_URL: z.string().default('http://localhost:5173'),
+
   // ── M15: SumUp OAuth 2.0 ────────────────────────────────────────────────
   // SumUp Developer Portal → Apps → ProzessPilot POS-Connector
   // Setup: https://developer.sumup.com (App registrieren, Redirect-URI eintragen)
@@ -123,6 +128,20 @@ function loadConfig(): Config {
     console.error('FATAL: JWT_SECRET fehlt oder kürzer als 32 Zeichen (M14 Spec §7)');
     process.exit(1);
   }
+  // pgcrypto-Key ist in Production Pflicht — Discord-Tokens, TOTP-Secrets,
+  // SumUp-Tokens würden sonst unverschlüsselt gespeichert.
+  if (cfg.NODE_ENV === 'production' && !cfg.PP_PGCRYPTO_KEY) {
+    console.error(
+      'FATAL: PP_PGCRYPTO_KEY fehlt in Production — Token-Encryption inaktiv (Discord, TOTP, SumUp)',
+    );
+    process.exit(1);
+  }
+
+  // WEBAPP_URL sollte in Production HTTPS nutzen.
+  if (cfg.NODE_ENV === 'production' && !cfg.WEBAPP_URL.startsWith('https://')) {
+    console.warn('WARNUNG: WEBAPP_URL in Production sollte mit https:// beginnen');
+  }
+
   // M15 SumUp-OAuth: Warnung wenn Credentials in Production leer sind.
   if (cfg.NODE_ENV === 'production') {
     if (!cfg.SUMUP_CLIENT_ID || !cfg.SUMUP_CLIENT_SECRET) {

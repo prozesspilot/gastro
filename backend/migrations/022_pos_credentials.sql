@@ -6,9 +6,8 @@
 --
 -- Security:
 --   - Tokens werden via pgcrypto (pgp_sym_encrypt/AES) verschlüsselt gespeichert
---   - RLS aktiviert — Policy erlaubt Zugriff nur für is_rls_bypassed() (App-Layer
---     setzt tenant_id nie als GUC für diesen Tabellen-Typ; Zugriff exklusiv
---     über gastro_owner / SECURITY DEFINER Funktionen)
+--   - RLS deaktiviert / keine Policy — App-Code nutzt expliziten WHERE tenant_id-Filter.
+--     RLS-Härtung mit GUC-Pattern folgt in M14-Multi-Tenant-Story T020.
 --   - UNIQUE (tenant_id, pos_system) — ein POS-System pro Tenant
 --
 -- Spec-Referenz: Modulkonzept/Konzeptentwicklung/modules/M15_Kassensystem_Connector.md §3.1
@@ -37,6 +36,10 @@ CREATE TABLE pos_credentials (
   -- Status: false = manuell deaktiviert oder Token-Refresh fehlgeschlagen
   active                    BOOLEAN       NOT NULL DEFAULT true,
 
+  -- Grund für Deaktivierung (z.B. 'refresh_failed', 'manual_disconnect', 'token_revoked')
+  -- Wird bei Reaktivierung via UPSERT auf NULL zurückgesetzt.
+  inactive_reason           TEXT,
+
   -- Zeitstempel
   created_at                TIMESTAMPTZ   NOT NULL DEFAULT now(),
   updated_at                TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -51,19 +54,6 @@ CREATE TRIGGER pos_credentials_set_updated_at
 BEFORE UPDATE ON pos_credentials
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- Index für Tenant-Lookups (häufigste Query: WHERE tenant_id = $1)
-CREATE INDEX idx_pos_credentials_tenant ON pos_credentials (tenant_id);
-
--- RLS aktivieren
--- DECISION: Policy erlaubt Zugriff nur über is_rls_bypassed() (gastro_owner-Rolle).
--- Die Routen-Ebene schützt via JWT-Auth; direkte RLS-Tenant-Isolation wäre möglich,
--- aber wir folgen dem Muster der anderen Credential-Tabellen (users/discord-Tokens):
--- App-Zugriff läuft immer mit explizitem Tenant-Filter in der WHERE-Clause.
--- Zusätzlich: current_setting('app.tenant_id', true) für zukünftige RLS-Abfragen.
-ALTER TABLE pos_credentials ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY pos_credentials_tenant_isolation ON pos_credentials
-  USING (
-    is_rls_bypassed()
-    OR tenant_id = current_setting('app.tenant_id', true)::uuid
-  );
+-- DECISION: Kein separater idx_pos_credentials_tenant — der UNIQUE-Index auf
+-- (tenant_id, pos_system) deckt alle Tenant-Lookups bereits ab.
+-- Ein zusätzlicher Index wäre redundant und würde nur Write-Overhead erzeugen.

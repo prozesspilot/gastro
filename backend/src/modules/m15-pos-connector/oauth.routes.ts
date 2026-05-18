@@ -32,6 +32,14 @@ import {
   fetchSumUpUserInfo,
 } from './sumup.service';
 
+// ── Interne Types ──────────────────────────────────────────────────────────
+
+/** Im Redis-State gespeichertes JSON-Objekt (CSRF-Schutz + Audit-Trail). */
+interface OAuthState {
+  tenant_id: string;
+  staff_user_id: string;
+}
+
 // ── Konstanten ─────────────────────────────────────────────────────────────
 
 const STATE_KEY_PREFIX = 'sumup:oauth:state:';
@@ -99,6 +107,14 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Role-Check: nur geschaeftsfuehrer + support dürfen POS-Verbindungen managen
+      if (staff.role !== 'geschaeftsfuehrer' && staff.role !== 'support') {
+        return reply.code(403).send({
+          error: 'forbidden',
+          message: 'Rolle nicht berechtigt für POS-Mgmt',
+        });
+      }
+
       // Query-Validierung
       const parseResult = StartQuerySchema.safeParse(req.query);
       if (!parseResult.success) {
@@ -110,6 +126,15 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
 
       const { tenant_id } = parseResult.data;
 
+      // Tenant-Existenz prüfen (verhindert Cross-Tenant-Spoofing)
+      const tenantCheck = await app.db.query(
+        'SELECT id FROM tenants WHERE id = $1 AND deleted_at IS NULL',
+        [tenant_id],
+      );
+      if (tenantCheck.rows.length === 0) {
+        return reply.code(404).send({ error: 'tenant_not_found' });
+      }
+
       // CSRF-State generieren (32 Bytes → 43 Base64URL-Zeichen)
       const stateBytes = randomBytes(32);
       const state = stateBytes
@@ -118,8 +143,15 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
         .replace(/\//g, '_')
         .replace(/=/g, '');
 
-      // State → tenant_id Mapping in Redis (atomar, TTL 5 Min)
-      await app.redis.set(`${STATE_KEY_PREFIX}${state}`, tenant_id, 'EX', STATE_TTL_SECONDS);
+      // State → {tenant_id, staff_user_id} Mapping in Redis (atomar, TTL 5 Min)
+      // DECISION: JSON-Payload statt reiner tenant_id — ermöglicht staff_user_id im Audit-Log.
+      const statePayload: OAuthState = { tenant_id, staff_user_id: staff.userId };
+      await app.redis.set(
+        `${STATE_KEY_PREFIX}${state}`,
+        JSON.stringify(statePayload),
+        'EX',
+        STATE_TTL_SECONDS,
+      );
 
       const authUrl = buildSumUpAuthUrl(state);
       return reply.redirect(authUrl, 302);
@@ -165,13 +197,26 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
       const stateKey = `${STATE_KEY_PREFIX}${query.state}`;
       // DECISION: GETDEL ist atomar — verhindert Race-Condition bei parallelen Callbacks.
       // Analog zur Discord-OAuth-Implementierung in auth.routes.ts.
-      const tenantId = await app.redis.getdel(stateKey);
-      if (!tenantId) {
+      const stateRaw = await app.redis.getdel(stateKey);
+      if (!stateRaw) {
         return reply.code(400).send({
           error: 'invalid_state',
           message: 'State ungültig oder abgelaufen. Bitte erneut versuchen.',
         });
       }
+
+      // State-Payload deserialisieren (JSON mit tenant_id + staff_user_id)
+      let statePayload: OAuthState;
+      try {
+        statePayload = JSON.parse(stateRaw) as OAuthState;
+      } catch {
+        return reply.code(400).send({
+          error: 'invalid_state',
+          message: 'State-Format ungültig.',
+        });
+      }
+      const tenantId = statePayload.tenant_id;
+      const staffUserId = statePayload.staff_user_id ?? null;
 
       // ── 4. Code gegen Tokens tauschen ────────────────────────────────
       let tokens: Awaited<ReturnType<typeof exchangeCodeForTokens>>;
@@ -219,24 +264,27 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // ── 7. Audit-Log ─────────────────────────────────────────────────
-      // Nur die ersten 6 Zeichen der account_id loggen (kein vollständiges PII)
+      // Nur die ersten 4 Zeichen der account_id loggen (kein vollständiges PII).
+      // staffUserId aus State-Payload: ermöglicht Zuordnung wer den Flow gestartet hat.
       await logAuthEvent(app.db, {
-        userId: null, // kein Staff-User-Context im Callback (öffentlicher Endpoint)
+        userId: staffUserId, // aus OAuth-State — Staff der den Flow initiiert hat
         eventType: 'pos_connected',
         ipAddress: req.ip ?? null,
         userAgent: req.headers['user-agent'] ?? null,
         metadata: {
           tenant_id: tenantId,
           pos_system: 'sumup_lite',
-          pos_account_id_prefix: posAccountId.slice(0, 6),
+          pos_account_id_prefix: posAccountId.slice(0, 4),
         },
       });
 
       // ── 8. Redirect zu Mitarbeiter-Webapp ─────────────────────────────
-      // DECISION: Frontend-URL nicht hardcoded — nutze SUMUP_REDIRECT_URI als Basis.
-      // Einfachste sichere Lösung: Redirect zur internen Bestätigungs-Seite.
-      // TODO T005: Webapp-URL aus Config (z.B. WEBAPP_URL env) konfigurierbar machen.
-      const frontendUrl = `https://admin.prozesspilot.net/tenants/${tenantId}?pos_connected=sumup`;
+      // DECISION: WEBAPP_URL aus Config (M4 Review-Finding) statt hardcodierter URL.
+      // Defense-in-depth: URL mit new URL() validieren — fängt fehlerhafte WEBAPP_URL-Config.
+      const frontendUrl = new URL(
+        `/tenants/${tenantId}?pos_connected=sumup`,
+        config.WEBAPP_URL,
+      ).toString();
       return reply.redirect(frontendUrl, 302);
     },
   );
@@ -263,6 +311,14 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Role-Check: nur geschaeftsfuehrer + support dürfen POS-Verbindungen managen
+      if (staff.role !== 'geschaeftsfuehrer' && staff.role !== 'support') {
+        return reply.code(403).send({
+          error: 'forbidden',
+          message: 'Rolle nicht berechtigt für POS-Mgmt',
+        });
+      }
+
       // Params-Validierung
       const parseResult = DisconnectParamsSchema.safeParse(req.params);
       if (!parseResult.success) {
@@ -273,6 +329,15 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { tenantId } = parseResult.data;
+
+      // Tenant-Existenz prüfen (verhindert Cross-Tenant-Spoofing)
+      const tenantCheck = await app.db.query(
+        'SELECT id FROM tenants WHERE id = $1 AND deleted_at IS NULL',
+        [tenantId],
+      );
+      if (tenantCheck.rows.length === 0) {
+        return reply.code(404).send({ error: 'tenant_not_found' });
+      }
 
       // Audit-Log VOR dem Delete (damit tenant_id noch bekannt ist)
       await logAuthEvent(app.db, {

@@ -34,6 +34,8 @@ export interface DbPosCredentials {
   token_expires_at: Date;
   scopes: string[] | null;
   active: boolean;
+  /** Grund für Deaktivierung (z.B. 'refresh_failed', 'manual_disconnect'). NULL wenn active=true. */
+  inactive_reason: string | null;
   created_at: Date;
   updated_at: Date;
   last_used_at: Date | null;
@@ -89,6 +91,7 @@ export async function upsertPosCredentials(
         token_expires_at,
         scopes,
         active,
+        inactive_reason,
         last_used_at
       ) VALUES (
         $1, $2, $3,
@@ -97,16 +100,18 @@ export async function upsertPosCredentials(
         $6::timestamptz,
         $8::text[],
         true,
+        NULL,
         now()
       )
       ON CONFLICT (tenant_id, pos_system) DO UPDATE SET
         pos_account_id              = EXCLUDED.pos_account_id,
-        access_token_encrypted      = EXCLUDED.access_token_encrypted,
-        refresh_token_encrypted     = EXCLUDED.refresh_token_encrypted,
+        access_token_encrypted      = pgp_sym_encrypt($4::text, $7::text),
+        refresh_token_encrypted     = pgp_sym_encrypt($5::text, $7::text),
         token_expires_at            = EXCLUDED.token_expires_at,
         scopes                      = EXCLUDED.scopes,
         active                      = true,
-        last_used_at                = now(),
+        inactive_reason             = NULL,
+        last_used_at                = NULL,
         updated_at                  = now()
       RETURNING id
     `;
@@ -132,6 +137,7 @@ export async function upsertPosCredentials(
         token_expires_at,
         scopes,
         active,
+        inactive_reason,
         last_used_at
       ) VALUES (
         $1, $2, $3,
@@ -140,14 +146,18 @@ export async function upsertPosCredentials(
         $4::timestamptz,
         $5::text[],
         true,
+        NULL,
         now()
       )
       ON CONFLICT (tenant_id, pos_system) DO UPDATE SET
         pos_account_id              = EXCLUDED.pos_account_id,
+        access_token_encrypted      = ''::bytea,
+        refresh_token_encrypted     = ''::bytea,
         token_expires_at            = EXCLUDED.token_expires_at,
         scopes                      = EXCLUDED.scopes,
         active                      = true,
-        last_used_at                = now(),
+        inactive_reason             = NULL,
+        last_used_at                = NULL,
         updated_at                  = now()
       RETURNING id
     `;
@@ -189,6 +199,7 @@ export async function getPosCredentials(
         token_expires_at,
         scopes,
         active,
+        inactive_reason,
         created_at,
         updated_at,
         last_used_at
@@ -210,6 +221,7 @@ export async function getPosCredentials(
         token_expires_at,
         scopes,
         active,
+        inactive_reason,
         created_at,
         updated_at,
         last_used_at
@@ -234,6 +246,7 @@ export async function getPosCredentials(
     token_expires_at: new Date(row.token_expires_at as string),
     scopes: row.scopes as string[] | null,
     active: row.active as boolean,
+    inactive_reason: (row.inactive_reason as string | null) ?? null,
     created_at: new Date(row.created_at as string),
     updated_at: new Date(row.updated_at as string),
     last_used_at: row.last_used_at ? new Date(row.last_used_at as string) : null,
@@ -280,10 +293,11 @@ export async function markPosInactive(pool: Pool, id: string, reason: string): P
   try {
     await pool.query(
       `UPDATE pos_credentials SET
-         active     = false,
-         updated_at = now()
+         active          = false,
+         inactive_reason = $2,
+         updated_at      = now()
        WHERE id = $1`,
-      [id],
+      [id, reason],
     );
   } catch (err) {
     // Fehler beim Markieren nicht werfen — würde den eigentlichen Fehler-Flow unterbrechen

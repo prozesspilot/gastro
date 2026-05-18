@@ -16,6 +16,7 @@ import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from '../../core/config';
+import { signM14Token } from '../../modules/m14-auth/m14-jwt';
 import { getSumUpAccessToken } from '../../modules/m15-pos-connector/pos-token-helper';
 import {
   getPosCredentials,
@@ -237,10 +238,9 @@ describe('getSumUpAccessToken', () => {
   }
 
   it('gibt null zurück wenn keine Credentials vorhanden', async () => {
-    // getPosCredentials gibt null zurück
-    vi.spyOn({ getPosCredentials }, 'getPosCredentials').mockResolvedValueOnce(null);
-
-    // Direkter Mock über das Repository
+    // Kein Spy nötig: Pool-Mock liefert { rows: [] } → getPosCredentials gibt null zurück →
+    // getSumUpAccessToken gibt null zurück. Der Spy auf ein lokales Objekt wäre ohnehin
+    // ein toter Spy (greift nicht in das importierte Modul ein).
     const pool = makePool(() => ({ rows: [], rowCount: 0 }));
     const result = await getSumUpAccessToken(pool, 'tenant-uuid-1');
     expect(result).toBeNull();
@@ -260,6 +260,7 @@ describe('getSumUpAccessToken', () => {
       active: false, // inactive!
       created_at: new Date(),
       updated_at: new Date(),
+      inactive_reason: null,
       last_used_at: null,
     };
 
@@ -286,6 +287,7 @@ describe('getSumUpAccessToken', () => {
       active: true,
       created_at: new Date(),
       updated_at: new Date(),
+      inactive_reason: null,
       last_used_at: null,
     };
 
@@ -312,6 +314,7 @@ describe('getSumUpAccessToken', () => {
       active: true,
       created_at: new Date(),
       updated_at: new Date(),
+      inactive_reason: null,
       last_used_at: null,
     };
 
@@ -344,6 +347,7 @@ describe('getSumUpAccessToken', () => {
       active: true,
       created_at: new Date(),
       updated_at: new Date(),
+      inactive_reason: null,
       last_used_at: null,
     };
 
@@ -442,9 +446,11 @@ describe('Route GET /m15/oauth/sumup/callback', () => {
   it('führt Happy-Path durch: State OK → Tokens → UserInfo → DB-Insert → Redirect', async () => {
     const { app, mockRedis } = await buildTestApp();
 
-    // Redis gibt tenant_id zurück
+    // Redis gibt State-JSON zurück (nach B1-Fix: JSON statt reiner tenant_id)
     const tenantId = '550e8400-e29b-41d4-a716-446655440000';
-    (mockRedis.getdel as ReturnType<typeof vi.fn>).mockResolvedValueOnce(tenantId);
+    (mockRedis.getdel as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      JSON.stringify({ tenant_id: tenantId, staff_user_id: 'staff-uuid-1' }),
+    );
 
     // fetch: Token-Exchange
     vi.spyOn(global, 'fetch')
@@ -491,7 +497,9 @@ describe('Route GET /m15/oauth/sumup/callback', () => {
     const { app, mockRedis } = await buildTestApp();
 
     const tenantId = '550e8400-e29b-41d4-a716-446655440001';
-    (mockRedis.getdel as ReturnType<typeof vi.fn>).mockResolvedValueOnce(tenantId);
+    (mockRedis.getdel as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      JSON.stringify({ tenant_id: tenantId, staff_user_id: 'staff-uuid-2' }),
+    );
 
     // Token-Exchange schlägt fehl
     mockFetchError(400, '{"error":"invalid_grant"}');
@@ -549,5 +557,355 @@ describe('upsertPosCredentials — Encryption-Pattern', () => {
     const firstCall = querySpy.mock.calls[0] as unknown as [string, ...unknown[]];
     expect(firstCall[0]).toContain("''::bytea");
     expect(firstCall[0]).not.toContain('pgp_sym_encrypt');
+  });
+});
+
+// ── 8. Route GET /m15/oauth/sumup/start ──────────────────────────────────
+
+describe('Route GET /m15/oauth/sumup/start', () => {
+  async function buildStartApp() {
+    const app = Fastify({ logger: false });
+
+    const mockPool = {
+      query: vi.fn(async () => ({ rows: [{ id: 'tenant-uuid' }], rowCount: 1 })),
+    } as unknown as Pool;
+
+    const mockRedis = {
+      set: vi.fn(async () => 'OK'),
+      get: vi.fn(),
+      getdel: vi.fn(),
+      del: vi.fn(),
+      disconnect: vi.fn(),
+    } as unknown as InstanceType<typeof Redis>;
+
+    app.decorate('db', mockPool);
+    app.decorate('redis', mockRedis);
+    await app.register(fastifyCookie);
+
+    const { sumupOauthRoutes } = await import('../../modules/m15-pos-connector/oauth.routes');
+    await app.register(sumupOauthRoutes, { prefix: '/api/v1' });
+
+    return { app, mockPool, mockRedis };
+  }
+
+  it('gibt 401 zurück ohne Cookie', async () => {
+    const { app } = await buildStartApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=550e8400-e29b-41d4-a716-446655440000',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('unauthorized');
+  });
+
+  it('gibt 403 zurück bei Rolle mitarbeiter', async () => {
+    const { app } = await buildStartApp();
+
+    const token = signM14Token({
+      userId: 'user-uuid-1',
+      discordId: 'discord-123',
+      role: 'mitarbeiter',
+      displayName: 'Max Mustermann',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('forbidden');
+  });
+
+  it('gibt 400 zurück bei ungültiger tenant_id (kein UUID)', async () => {
+    const { app } = await buildStartApp();
+
+    const token = signM14Token({
+      userId: 'user-uuid-1',
+      discordId: 'discord-123',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=kein-uuid',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('invalid_request');
+  });
+
+  it('gibt 404 zurück wenn Tenant nicht existiert', async () => {
+    const { app, mockPool } = await buildStartApp();
+
+    // Tenant-Query gibt keine Ergebnisse zurück
+    (mockPool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    });
+
+    const token = signM14Token({
+      userId: 'user-uuid-1',
+      discordId: 'discord-123',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('tenant_not_found');
+  });
+
+  it('gibt 302 Redirect zu SumUp zurück und speichert State in Redis', async () => {
+    const { app, mockRedis } = await buildStartApp();
+
+    const token = signM14Token({
+      userId: 'user-uuid-gf',
+      discordId: 'discord-456',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toContain('sumup.com');
+    expect(response.headers.location).toContain('state=');
+
+    // Redis-Set wurde aufgerufen (State-Speicherung)
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      expect.stringContaining('sumup:oauth:state:'),
+      expect.stringContaining('"tenant_id"'),
+      'EX',
+      300,
+    );
+  });
+
+  it('State-JSON enthält tenant_id und staff_user_id', async () => {
+    const { app, mockRedis } = await buildStartApp();
+    const staffUserId = 'user-uuid-gf-2';
+
+    const token = signM14Token({
+      userId: staffUserId,
+      discordId: 'discord-789',
+      role: 'support',
+      displayName: 'Support',
+    });
+
+    await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/start?tenant_id=550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    // State-Payload prüfen
+    const setCall = (mockRedis.set as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    const stateJson = setCall[1] as string;
+    const statePayload = JSON.parse(stateJson) as { tenant_id: string; staff_user_id: string };
+    expect(statePayload.tenant_id).toBe('550e8400-e29b-41d4-a716-446655440000');
+    expect(statePayload.staff_user_id).toBe(staffUserId);
+  });
+});
+
+// ── 9. Route POST /m15/sumup/disconnect/:tenantId ────────────────────────
+
+describe('Route POST /m15/sumup/disconnect/:tenantId', () => {
+  async function buildDisconnectApp() {
+    const app = Fastify({ logger: false });
+
+    const mockPool = {
+      query: vi.fn(async () => ({ rows: [{ id: 'cred-id' }], rowCount: 1 })),
+    } as unknown as Pool;
+
+    const mockRedis = {
+      set: vi.fn(),
+      get: vi.fn(),
+      getdel: vi.fn(),
+      del: vi.fn(),
+      disconnect: vi.fn(),
+    } as unknown as InstanceType<typeof Redis>;
+
+    app.decorate('db', mockPool);
+    app.decorate('redis', mockRedis);
+    await app.register(fastifyCookie);
+
+    const { sumupOauthRoutes } = await import('../../modules/m15-pos-connector/oauth.routes');
+    await app.register(sumupOauthRoutes, { prefix: '/api/v1' });
+
+    return { app, mockPool, mockRedis };
+  }
+
+  it('gibt 401 zurück ohne Cookie', async () => {
+    const { app } = await buildDisconnectApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/550e8400-e29b-41d4-a716-446655440000',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('gibt 403 zurück bei Rolle mitarbeiter', async () => {
+    const { app } = await buildDisconnectApp();
+
+    const token = signM14Token({
+      userId: 'user-1',
+      discordId: 'discord-1',
+      role: 'mitarbeiter',
+      displayName: 'Mitarbeiter',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('forbidden');
+  });
+
+  it('gibt 400 zurück bei ungültiger tenantId (kein UUID)', async () => {
+    const { app } = await buildDisconnectApp();
+
+    const token = signM14Token({
+      userId: 'user-1',
+      discordId: 'discord-1',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/kein-uuid',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('gibt 404 zurück wenn Tenant nicht existiert', async () => {
+    const { app, mockPool } = await buildDisconnectApp();
+
+    // Tenant-Query gibt keine Ergebnisse zurück
+    (mockPool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [],
+      rowCount: 0,
+    });
+
+    const token = signM14Token({
+      userId: 'user-1',
+      discordId: 'discord-1',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('tenant_not_found');
+  });
+
+  it('gibt 200 zurück bei erfolgreichem Disconnect und Audit-Log wird VOR Delete geschrieben', async () => {
+    const { app, mockPool } = await buildDisconnectApp();
+
+    // Calls: 1) Tenant-Check → exists, 2) logAuthEvent (audit), 3) deletePosCredentials
+    const callOrder: string[] = [];
+    (mockPool.query as ReturnType<typeof vi.fn>).mockImplementation(async (sql: string) => {
+      if ((sql as string).includes('tenants')) {
+        callOrder.push('tenant_check');
+        return { rows: [{ id: 'tenant-id' }], rowCount: 1 };
+      }
+      if ((sql as string).includes('auth_audit_log')) {
+        callOrder.push('audit_log');
+        return { rows: [], rowCount: 0 };
+      }
+      if ((sql as string).includes('DELETE')) {
+        callOrder.push('delete');
+        return { rows: [{ id: 'cred-id' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const token = signM14Token({
+      userId: 'user-gf',
+      discordId: 'discord-gf',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { ok: boolean };
+    expect(body.ok).toBe(true);
+
+    // Audit-Log muss VOR Delete stehen
+    const auditIdx = callOrder.indexOf('audit_log');
+    const deleteIdx = callOrder.indexOf('delete');
+    expect(auditIdx).toBeGreaterThan(-1);
+    expect(deleteIdx).toBeGreaterThan(-1);
+    expect(auditIdx).toBeLessThan(deleteIdx);
+  });
+
+  it('gibt 404 zurück wenn keine Credentials vorhanden', async () => {
+    const { app, mockPool } = await buildDisconnectApp();
+
+    (mockPool.query as ReturnType<typeof vi.fn>).mockImplementation(async (sql: string) => {
+      if ((sql as string).includes('tenants')) {
+        return { rows: [{ id: 'tenant-id' }], rowCount: 1 };
+      }
+      if ((sql as string).includes('DELETE')) {
+        // Keine Credentials vorhanden
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const token = signM14Token({
+      userId: 'user-gf',
+      discordId: 'discord-gf',
+      role: 'geschaeftsfuehrer',
+      displayName: 'Chef',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/m15/sumup/disconnect/550e8400-e29b-41d4-a716-446655440000',
+      cookies: { pp_auth: token },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { error: string };
+    expect(body.error).toBe('not_found');
   });
 });

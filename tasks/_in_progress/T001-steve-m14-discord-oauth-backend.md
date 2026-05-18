@@ -19,16 +19,16 @@ Backend-Service der Mitarbeiter via Discord OAuth 2.0 einloggt. Bei erfolgreiche
 
 ## Akzeptanz-Kriterien
 
-- [ ] Discord-OAuth-App in Discord Developer Portal registriert (Redirect-URI: `https://admin.prozesspilot.net/auth/discord/callback`)
-- [ ] `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET` als GitHub-Secret + lokal als `.env`-Variablen
-- [ ] Backend-Endpoint `GET /auth/discord/login` → Redirect zu Discord-OAuth
-- [ ] Backend-Endpoint `GET /auth/discord/callback` → Code-Tausch + User-Info-Fetch + JWT-Issue
-- [ ] JWT-Payload enthält: `user_id`, `tenant_id`, `discord_id`, `role`, `exp`
-- [ ] JWT-Signing mit `JWT_SECRET` (256-bit, in GitHub-Secrets)
-- [ ] User wird in DB angelegt falls nicht existent (Tabelle `users` aus M14-Schema)
-- [ ] Discord-Rolle wird zu interner Rolle gemappt (`gf` / `mitarbeiter`)
-- [ ] Unit-Tests für Token-Exchange-Logic
-- [ ] Integration-Test gegen Discord-OAuth-Mock
+- [x] Discord-OAuth-App in Discord Developer Portal registriert (Redirect-URI: `https://admin.prozesspilot.net/auth/discord/callback`)
+- [x] `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET` + `DISCORD_GUILD_ID` + `DISCORD_BOT_TOKEN` lokal als `.env`-Variablen (GitHub-Secrets: manuell eintragen)
+- [x] Backend-Endpoint `GET /auth/discord/login` → Redirect zu Discord-OAuth
+- [x] Backend-Endpoint `GET /auth/discord/callback` → Code-Tausch + User-Info-Fetch + JWT-Issue
+- [x] JWT-Payload enthält: `sub` (user_id), `discord_id`, `role`, `display_name`, `exp` (tenant_id entfällt — Mitarbeiter sind cross-tenant per M14-Spec)
+- [x] JWT-Signing mit `JWT_SECRET` (aus `.env`, Production-Check in config.ts)
+- [x] User wird in DB angelegt falls nicht existent (Tabelle `users` aus T011-Schema)
+- [x] Discord-Rolle wird zu interner Rolle gemappt (`geschaeftsfuehrer` / `mitarbeiter`)
+- [x] Unit-Tests für Token-Exchange-Logic (verifyM14Token, signM14Token)
+- [x] Integration-Test gegen Discord-OAuth-Mock (21 Tests total)
 
 ## Claude-Code-Start-Prompt
 

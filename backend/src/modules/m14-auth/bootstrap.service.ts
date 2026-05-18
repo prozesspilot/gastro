@@ -69,6 +69,16 @@ export interface BootstrapResult {
 export async function runBootstrap(pool: Pool, input: BootstrapInput): Promise<BootstrapResult> {
   const { discordUsername, displayName, emergencyEmail, password, force } = input;
 
+  // ── 0. Production-Guard: PP_PGCRYPTO_KEY ist in Production Pflicht ─────────
+  // DECISION: Wenn der Key in Production fehlt, würde TOTP unverschlüsselt gespeichert
+  // werden — der Account ist faktisch tot (Notfall-Login schlägt mit no_emergency_setup
+  // fehl). Hard-Stop verhindert das "stille" Anlegen eines unbrauchbaren Admins.
+  if (config.NODE_ENV === 'production' && !config.PP_PGCRYPTO_KEY) {
+    throw new Error(
+      'PP_PGCRYPTO_KEY ist in Production Pflicht — TOTP-Secret würde unverschlüsselt gespeichert. Bootstrap abgebrochen.',
+    );
+  }
+
   // ── 1. Krypto-Material generieren (außerhalb Tx — rechenintensiv) ──────────
   const totpSecret = new OTPAuth.Secret({ size: 20 });
   const totp = new OTPAuth.TOTP({

@@ -14,8 +14,21 @@
  */
 
 import * as argon2 from 'argon2';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { config } from '../../core/config';
 import { runBootstrap } from '../../modules/m14-auth/bootstrap.service';
+
+// ── Config-Test-Helper ────────────────────────────────────────────────────────
+// Erlaubt einzelne config-Felder pro Test zu überschreiben (z.B. PP_PGCRYPTO_KEY).
+// config ist nicht frozen, daher direkte Mutation OK.
+
+const ORIGINAL_PGCRYPTO_KEY = config.PP_PGCRYPTO_KEY;
+const ORIGINAL_NODE_ENV = config.NODE_ENV;
+
+afterEach(() => {
+  (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = ORIGINAL_PGCRYPTO_KEY;
+  (config as { NODE_ENV: string }).NODE_ENV = ORIGINAL_NODE_ENV;
+});
 
 // ── Pool-Mock-Helfer ──────────────────────────────────────────────────────────
 
@@ -184,7 +197,8 @@ describe('runBootstrap — Idempotenz', () => {
   it('wirft Error wenn users-Tabelle nicht leer und force=false', async () => {
     const { pool } = makePool({ userCount: 1, emailExists: false });
 
-    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow(/bereits.*User/i);
+    // Distinkter Regex: count-check Message lautet "Es existieren bereits N User"
+    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow(/bereits \d+ User/i);
   });
 
   it('führt ROLLBACK bei Abbruch durch count-Check aus', async () => {
@@ -214,7 +228,10 @@ describe('runBootstrap — Email-Duplikat', () => {
   it('wirft Error bei doppelter Email (CITEXT-check)', async () => {
     const { pool } = makePool({ userCount: 0, emailExists: true });
 
-    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow(/bereits.*User/i);
+    // Distinkter Regex: Email-Dup-Message lautet "Email "X" ist bereits ... zugeordnet"
+    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow(
+      /Email.*bereits.*zugeordnet/i,
+    );
   });
 
   it('führt ROLLBACK bei Email-Duplikat aus', async () => {
@@ -251,5 +268,141 @@ describe('runBootstrap — DB-Fehler', () => {
     const err = await runBootstrap(pool as never, BASE_INPUT).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toBe('DB connection lost');
+  });
+
+  it('ruft client.release() auch bei Fehler auf (kein Pool-Leak)', async () => {
+    const { pool, client } = makePool({
+      userCount: 0,
+      emailExists: false,
+      insertShouldFail: true,
+    });
+
+    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow();
+    expect(client.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── 6. N1: Production-Guard für PP_PGCRYPTO_KEY ───────────────────────────────
+
+describe('runBootstrap — N1 Production-Guard', () => {
+  it('wirft Error in production wenn PP_PGCRYPTO_KEY leer ist', async () => {
+    (config as { NODE_ENV: string }).NODE_ENV = 'production';
+    (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = '';
+
+    const { pool } = makePool({ userCount: 0, emailExists: false });
+
+    await expect(runBootstrap(pool as never, BASE_INPUT)).rejects.toThrow(
+      /PP_PGCRYPTO_KEY.*Production.*Pflicht/i,
+    );
+  });
+
+  it('lässt Bootstrap in production zu wenn PP_PGCRYPTO_KEY gesetzt ist', async () => {
+    (config as { NODE_ENV: string }).NODE_ENV = 'production';
+    (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = 'test-production-key';
+
+    const { pool } = makePool({ userCount: 0, emailExists: false });
+
+    const result = await runBootstrap(pool as never, BASE_INPUT);
+    expect(result.userId).toBe('new-user-uuid-001');
+  });
+
+  it('lässt Bootstrap in development zu auch wenn PP_PGCRYPTO_KEY leer ist (Warnung im CLI)', async () => {
+    (config as { NODE_ENV: string }).NODE_ENV = 'development';
+    (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = '';
+
+    const { pool } = makePool({ userCount: 0, emailExists: false });
+
+    const result = await runBootstrap(pool as never, BASE_INPUT);
+    expect(result.userId).toBe('new-user-uuid-001');
+  });
+});
+
+// ── 7. N3: PGCRYPTO-Branch — beide INSERT-Pfade differenzieren ────────────────
+
+describe('runBootstrap — N3 PGCRYPTO-Branch', () => {
+  it('nutzt pgp_sym_encrypt im INSERT wenn PP_PGCRYPTO_KEY gesetzt', async () => {
+    (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = 'test-key-abc-123';
+
+    const { pool, client } = makePool({ userCount: 0, emailExists: false });
+
+    await runBootstrap(pool as never, BASE_INPUT);
+
+    const insertCall = client.query.mock.calls.find((args) =>
+      /INSERT INTO users/i.test(args[0] as string),
+    );
+    expect(insertCall).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: insertCall ist durch expect().toBeDefined() gesichert
+    const sql = insertCall![0] as string;
+    expect(sql).toMatch(/pgp_sym_encrypt/i);
+    // biome-ignore lint/style/noNonNullAssertion: insertCall ist durch expect().toBeDefined() gesichert
+    const params = insertCall![1] as string[];
+    // $6 muss der Verschlüsselungs-Key sein
+    expect(params[5]).toBe('test-key-abc-123');
+  });
+
+  it('nutzt empty BYTEA im INSERT wenn PP_PGCRYPTO_KEY leer (Dev/Test)', async () => {
+    (config as { PP_PGCRYPTO_KEY: string }).PP_PGCRYPTO_KEY = '';
+
+    const { pool, client } = makePool({ userCount: 0, emailExists: false });
+
+    await runBootstrap(pool as never, BASE_INPUT);
+
+    const insertCall = client.query.mock.calls.find((args) =>
+      /INSERT INTO users/i.test(args[0] as string),
+    );
+    expect(insertCall).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: insertCall ist durch expect().toBeDefined() gesichert
+    const sql = insertCall![0] as string;
+    expect(sql).toMatch(/''::bytea/i);
+    expect(sql).not.toMatch(/pgp_sym_encrypt/i);
+  });
+});
+
+// ── 8. N3: Audit-Log-Parameter (eventType + email_hash + has_discord_username) ─
+
+describe('runBootstrap — N3 Audit-Log-Parameter', () => {
+  it('schreibt korrekten eventType + Metadata-Felder', async () => {
+    const { pool } = makePool({ userCount: 0, emailExists: false });
+
+    await runBootstrap(pool as never, BASE_INPUT);
+
+    // logAuthEvent ruft pool.query('SELECT insert_auth_audit_log(...)') auf
+    const auditCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find((args) =>
+      /insert_auth_audit_log/i.test(args[0] as string),
+    );
+    expect(auditCall).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: auditCall ist durch expect().toBeDefined() gesichert
+    const params = auditCall![1] as unknown[];
+    // Reihenfolge laut insert_auth_audit_log($1::uuid, $2::text, $3::text, $4::text, $5::jsonb):
+    //   $1 = userId, $2 = eventType, $3 = ipAddress, $4 = userAgent, $5 = metadata (JSON-String)
+    expect(params[0]).toBe('new-user-uuid-001'); // userId
+    expect(params[1]).toBe('bootstrap_admin_created'); // eventType
+    expect(params[2]).toBeNull(); // ipAddress (CLI hat keine IP)
+    expect(params[3]).toBe('bootstrap-admin-cli'); // userAgent
+
+    // Metadata als JSON-String prüfen
+    const metadataStr = params[4] as string;
+    const metadata = JSON.parse(metadataStr);
+    expect(metadata.role).toBe('geschaeftsfuehrer');
+    expect(metadata.has_discord_username).toBe(true);
+    expect(metadata.display_name).toBe('Steve Test');
+    // email_hash muss 16-Hex (SHA256-Prefix) sein — KEIN Klartext-Email
+    expect(metadata.email_hash).toMatch(/^[a-f0-9]{16}$/);
+    expect(metadata.email_hash).not.toContain('@');
+    expect(metadataStr).not.toContain(BASE_INPUT.emergencyEmail);
+  });
+
+  it('setzt has_discord_username=false wenn discordUsername null', async () => {
+    const { pool } = makePool({ userCount: 0, emailExists: false });
+
+    await runBootstrap(pool as never, { ...BASE_INPUT, discordUsername: null });
+
+    const auditCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find((args) =>
+      /insert_auth_audit_log/i.test(args[0] as string),
+    );
+    // biome-ignore lint/style/noNonNullAssertion: auditCall ist durch expect-find gesichert
+    const params = auditCall![1] as unknown[];
+    const metadata = JSON.parse(params[4] as string);
+    expect(metadata.has_discord_username).toBe(false);
   });
 });

@@ -264,6 +264,48 @@ export const statsHandlers = [
   ),
 ];
 
+// ── T014: Belege ──────────────────────────────────────────────────────────
+
+/** Beispiel-Beleg für Test-Assertions */
+export const MOCK_BELEG = {
+  id:               'b-001',
+  status:           'received' as const,
+  source_channel:   'manual_upload' as const,
+  received_at:      '2026-05-18T10:00:00Z',
+  file_object_key:  'tenant-001/2026/05/b-001.jpg',
+  file_mime_type:   'image/jpeg',
+  file_size_bytes:  204800,
+  supplier_name:    'Lieferant GmbH',
+  document_date:    '2026-05-17',
+  total_gross:      119.0,
+  currency:         'EUR',
+  category:         'wareneinkauf_food',
+};
+
+export const belegeHandlers = [
+  http.post(`${BASE}/belege/upload`, () =>
+    HttpResponse.json(
+      { beleg_id: 'b-001', storage_key: 'tenant-001/2026/05/b-001.jpg', status: 'received' },
+      { status: 201 },
+    ),
+  ),
+
+  http.get(`${BASE}/belege`, () =>
+    HttpResponse.json({
+      belege:     [],
+      pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
+    }),
+  ),
+
+  http.get(`${BASE}/belege/:id`, ({ params }) =>
+    HttpResponse.json({
+      beleg:               { ...MOCK_BELEG, id: String(params['id']) },
+      download_url:        'http://localhost/test-preview.jpg',
+      download_expires_at: '2026-05-18T11:00:00Z',
+    }),
+  ),
+];
+
 // ── M14: Auth ─────────────────────────────────────────────────────────────
 // Default: /auth/refresh schlägt fehl (Cold-Start) → nicht eingeloggt.
 // Tests, die einen eingeloggten User brauchen, überschreiben das per server.use().
@@ -294,4 +336,5 @@ export const handlers = [
   ...advisorHandlers,
   ...pluginHandlers,
   ...statsHandlers,
+  ...belegeHandlers,
 ];

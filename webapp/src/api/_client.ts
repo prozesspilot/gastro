@@ -11,11 +11,20 @@ const BASE = '/api/v1';
 const TENANT_KEY = 'pp_tenant_id';
 
 export function getActiveTenantId(): string | null {
-  return localStorage.getItem(TENANT_KEY);
+  try {
+    return localStorage.getItem(TENANT_KEY);
+  } catch {
+    // localStorage nicht verfügbar (z. B. in JSDOM-Tests ohne --localstorage-file)
+    return null;
+  }
 }
 
 export function setActiveTenantId(id: string): void {
-  localStorage.setItem(TENANT_KEY, id);
+  try {
+    localStorage.setItem(TENANT_KEY, id);
+  } catch {
+    // localStorage nicht verfügbar — ignorieren
+  }
 }
 
 export class ApiError extends Error {

@@ -48,6 +48,29 @@ Pre-Reboot-Migrations gegen das neue Konzept-Datenmodell abgleichen. Fehlende Ta
 
 **Lint/Type-Check:** Meine Files passieren `biome check` + `tsc --noEmit` clean. Pre-Reboot-Code (67 vorhandene Lint-Fehler) ist außerhalb des T011-Scopes.
 
+## Review-Fixes Nachgezogen (2026-05-18)
+
+Code-Review meldete 6 Blocker + Schwerwiegende. Auf demselben Branch nachgezogen:
+
+- **B5 — `is_rls_bypassed()` mit Rollen-Check**: Bypass funktioniert jetzt NUR für Superuser oder Rolle `gastro_owner`. Eine kompromittierte App-Session kann `SET app.bypass_rls='on'` zwar absetzen, die Funktion liefert aber trotzdem `false` → RLS bleibt wirksam.
+- **B6 — Audit-Bypass entkoppelt**: Neuer Helper `is_audit_maintenance()` mit eigener GUC `app.audit_maintenance`. Audit-Trigger nutzt diese statt `is_rls_bypassed`, damit ein versehentlicher RLS-Bypass NICHT die Append-Only-Garantie aushebelt.
+- **B3 — `auth_audit_log` gehärtet**: RLS + FORCE aktiviert, Policy (Geschäftsführer ODER eigener User), Append-Only-Trigger mit dem gleichen Pattern wie `audit_log`. Neuer Helper `current_user_id()`.
+- **B1 — Seed `BEGIN` vor `SET LOCAL`**: Reihenfolge korrigiert, sonst war das Setting wirkungslos.
+- **B2 — Test-Pattern `set_config(..., true)`**: Tests verwenden jetzt das Production-Pattern statt `SET ... ` (das den Pool leakt). SCHEMA.md § 2 hat eine fette Warnung.
+- **B4 — Backend-Startup-Check**: `backend/src/core/db/role-check.ts` + Wiring in `server.ts`. In Production crasht der Start mit klarer Fehlermeldung wenn DB-Rolle Superuser oder BYPASSRLS. Plus `backend/scripts/setup-app-role.sql` als idempotentes Template für `gastro_app`-Setup.
+- **S1 — `tenants`-Policy**: `current_tenant_id() IS NULL`-Klausel entfernt. Vergessene Middleware → 0 Rows, nicht "alle".
+- **S3 — `modules_enabled` CHECK**: Validation gegen Module-Whitelist M01–M15 via `valid_module_ids()` (IMMUTABLE Function, weil Postgres keine Subqueries in CHECK erlaubt).
+- **S4 — `pg_advisory_lock`**: Migrate-Runner serialisiert konkurrierende Migrations-Runs (z. B. parallele Auto-Deploy-Pods).
+- **S6 — `file_sha256`-Konvention**: Architektur-Doku verlangte `SHA256(file_bytes + tenant_id)`; klargestellt im Code-Kommentar, dass `(tenant_id, file_sha256)` als UNIQUE-Constraint funktional äquivalent ist.
+
+**Tests:** Auf 9 erweitert (von 5). Neue Tests:
+- B5: App-Rolle kann `is_rls_bypassed()` nicht aktivieren
+- B3: `auth_audit_log` append-only
+- S3: `modules_enabled` CHECK lehnt ungültige IDs ab
+- S1: `tenants` ohne Tenant-Context liefert 0 Rows
+
+Alle 9 Tests grün. Fresh-DB-Test wieder verifiziert.
+
 ## Claude-Code-Start-Prompt
 
 ```

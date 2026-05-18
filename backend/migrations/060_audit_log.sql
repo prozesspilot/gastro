@@ -53,14 +53,19 @@ CREATE POLICY audit_log_tenant_insert ON audit_log
   FOR INSERT
   WITH CHECK (is_rls_bypassed() OR tenant_id = current_tenant_id());
 
--- Immutabilität: UPDATE / DELETE wird blockiert (außer wenn bypass_rls=on,
--- für Wartungs-Skripte und DSGVO-Erasure mit triftigem Grund).
+-- Immutabilität: UPDATE/DELETE wird blockiert. Bypass nur für audit-Maintenance-
+-- Sessions (DSGVO-Erasure, gerichtlich angeordnete Korrekturen) — die müssen
+-- ZWEI getrennte GUCs setzen:
+--     SET LOCAL app.bypass_rls         = 'on';   -- für RLS-Policy-Bypass
+--     SET LOCAL app.audit_maintenance  = 'on';   -- zusätzlich für diesen Trigger
+-- Damit kann ein versehentlich vergessener RLS-Bypass-Reset NICHT zur
+-- audit-Mutation führen.
 CREATE OR REPLACE FUNCTION audit_log_block_mutations()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF is_rls_bypassed() THEN
+  IF is_audit_maintenance() THEN
     RETURN COALESCE(NEW, OLD);
   END IF;
   RAISE EXCEPTION 'audit_log is append-only (entity=%, id=%)',

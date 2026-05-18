@@ -86,6 +86,15 @@ CREATE INDEX idx_auth_sessions_active ON auth_sessions (user_id) WHERE revoked_a
 
 -- ---------------------------------------------------------------------------
 -- auth_audit_log — alle Auth-Events (Login, Logout, Failed, Emergency, ...)
+--
+-- Sicherheits-Modell:
+--   - SELECT: Geschäftsführer dürfen alles sehen; jeder User darf seine
+--             eigenen Events sehen. Reicht aus, weil andere Mitarbeiter-Rollen
+--             keine fremden Login-IPs/User-Agents brauchen (Stalking-Schutz).
+--   - INSERT: nur via Bypass (Auth-Backend nutzt Owner-Connection für
+--             Auth-Audit, weil failed-Login-Events u. U. ohne authentifizierten
+--             User-Context entstehen).
+--   - UPDATE/DELETE: per Trigger geblockt — Append-Only wie audit_log.
 -- ---------------------------------------------------------------------------
 CREATE TABLE auth_audit_log (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,3 +108,44 @@ CREATE TABLE auth_audit_log (
 
 CREATE INDEX idx_auth_audit_user ON auth_audit_log (user_id, created_at DESC);
 CREATE INDEX idx_auth_audit_event ON auth_audit_log (event_type, created_at DESC);
+
+ALTER TABLE auth_audit_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_audit_log FORCE ROW LEVEL SECURITY;
+
+-- Lesen: bypass ODER eigene Events ODER Rolle 'geschaeftsfuehrer'
+-- (Rolle wird vom Backend per `set_config('app.user_role', 'geschaeftsfuehrer', true)` gesetzt)
+CREATE POLICY auth_audit_log_select ON auth_audit_log
+  FOR SELECT
+  USING (
+    is_rls_bypassed()
+    OR (user_id IS NOT NULL AND user_id = current_user_id())
+    OR coalesce(current_setting('app.user_role', true), '') = 'geschaeftsfuehrer'
+  );
+
+-- Schreiben: nur über Bypass (Backend nutzt Owner-Connection für Auth-Audit)
+CREATE POLICY auth_audit_log_insert ON auth_audit_log
+  FOR INSERT
+  WITH CHECK (is_rls_bypassed());
+
+-- Append-Only via Trigger (gleiches Pattern wie audit_log).
+CREATE OR REPLACE FUNCTION auth_audit_log_block_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF is_audit_maintenance() THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+  RAISE EXCEPTION 'auth_audit_log is append-only (event=%, user_id=%)',
+    COALESCE(NEW.event_type, OLD.event_type),
+    COALESCE(NEW.user_id::text, OLD.user_id::text);
+END;
+$$;
+
+CREATE TRIGGER auth_audit_log_no_update
+BEFORE UPDATE ON auth_audit_log
+FOR EACH ROW EXECUTE FUNCTION auth_audit_log_block_mutations();
+
+CREATE TRIGGER auth_audit_log_no_delete
+BEFORE DELETE ON auth_audit_log
+FOR EACH ROW EXECUTE FUNCTION auth_audit_log_block_mutations();

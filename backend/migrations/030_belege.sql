@@ -39,7 +39,10 @@ CREATE TABLE belege (
   file_object_key     TEXT NOT NULL,                           -- s3://bucket/<tenant>/originals/...
   file_mime_type      VARCHAR(80) NOT NULL,
   file_size_bytes     BIGINT NOT NULL,
-  file_sha256         CHAR(64) NOT NULL,                       -- SHA-256 hex(file_bytes) für Dedup
+  -- SHA-256 hex(file_bytes). UNIQUE-Constraint unten ist (tenant_id, file_sha256),
+  -- daher reicht der reine Bytes-Hash für tenant-lokale Idempotenz — kein
+  -- zusätzliches Tenant-Mixing nötig (vgl. Architektur-Hauptdoku § 9.1).
+  file_sha256         CHAR(64) NOT NULL,
 
   -- Vollständiges Receipt-JSON (extraction.fields, categorization, validation,
   -- archive, exports, audit) — siehe 01_Datenmodell_Events.md § 2.1

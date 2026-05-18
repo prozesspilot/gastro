@@ -25,8 +25,11 @@ async function seed(): Promise<void> {
   const client = await pool.connect();
 
   try {
-    await client.query("SET LOCAL app.bypass_rls = 'on'");
+    // WICHTIG: SET LOCAL gilt nur innerhalb einer aktiven Transaktion.
+    // Reihenfolge: erst BEGIN, dann SET LOCAL — sonst verwirft Postgres das
+    // Setting sofort und die Inserts laufen ohne Bypass in RLS-Errors.
     await client.query('BEGIN');
+    await client.query("SET LOCAL app.bypass_rls = 'on'");
 
     // ---------------------------------------------------------------------
     // 1. Test-Tenant

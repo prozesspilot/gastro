@@ -44,14 +44,16 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX idx_tenants_deletion_status ON tenants (deletion_status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_tenants_package ON tenants (package);
 
--- RLS: tenants selbst wird von Mitarbeiter-Webapp gelesen (cross-tenant).
--- Wir machen es Row-Level-Security-fähig, lassen die Policy aber permissiv für
--- Bypass-Sessions. Tenant-bezogene Tabellen unten erzwingen Isolation.
+-- RLS: tenants selbst wird von der Mitarbeiter-Webapp cross-tenant gelesen.
+-- Cross-tenant-Zugriff läuft IMMER über is_rls_bypassed() (Owner-Connection),
+-- single-tenant-Zugriff matchet current_tenant_id(). KEINE permissive Fallback-
+-- Klausel wenn current_tenant_id IS NULL — sonst öffnet eine vergessene
+-- Backend-Middleware versehentlich die ganze Tabelle.
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;     -- erzwingt RLS auch für den Owner
-CREATE POLICY tenants_select_all ON tenants
+CREATE POLICY tenants_select_own_or_bypass ON tenants
   FOR SELECT
-  USING (is_rls_bypassed() OR current_tenant_id() = id OR current_tenant_id() IS NULL);
+  USING (is_rls_bypassed() OR current_tenant_id() = id);
 CREATE POLICY tenants_write_bypass ON tenants
   FOR ALL
   USING (is_rls_bypassed())
@@ -63,8 +65,11 @@ CREATE POLICY tenants_write_bypass ON tenants
 CREATE TABLE tenant_settings (
   tenant_id        UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
 
-  -- Module-Flags
-  modules_enabled  JSONB NOT NULL DEFAULT '[]'::jsonb,         -- ["M01","M02","M03",...]
+  -- Module-Flags — Whitelist gegen Tippfehler / ungültige IDs
+  -- (Validierung über IMMUTABLE Function valid_module_ids aus 002_helpers.sql,
+  --  weil Postgres Subqueries in CHECK-Constraints nicht erlaubt.)
+  modules_enabled  JSONB NOT NULL DEFAULT '[]'::jsonb
+                   CHECK (valid_module_ids(modules_enabled)),
 
   -- Integrations-Config
   integrations     JSONB NOT NULL DEFAULT '{}'::jsonb,         -- credential-Refs + Adapter-Auswahl

@@ -36,22 +36,47 @@ npm run seed:dev
 Alle Tabellen mit `tenant_id` haben **Row-Level-Security** aktiviert und eine
 Policy, die nur Zeilen freigibt, deren `tenant_id = current_tenant_id()` ist.
 
-Das Backend setzt diese GUC-Variable pro Request:
+Das Backend setzt diese GUC-Variable pro Request — **immer transaktionslokal**:
 
 ```sql
-SET LOCAL app.current_tenant = '<tenant-uuid>';
+BEGIN;
+SELECT set_config('app.current_tenant', '<tenant-uuid>', true);  -- 3. Arg = LOCAL
+-- … Queries …
+COMMIT;
 ```
 
-Wartungs- / Bootstrap-Scripts können RLS umgehen:
+> ⚠️ **WARNUNG — kritisch für Sicherheit:**
+> Niemals `SET app.current_tenant = '…'` ohne `LOCAL` benutzen. Plain `SET`
+> wirkt **session-weit**, d. h. das Setting bleibt aktiv, wenn die Connection
+> in den Pool zurückgegeben wird. Der nächste Request, der dieselbe Connection
+> bekommt, sieht dann Belege des falschen Tenants. Das ist ein direkter
+> Cross-Tenant-Datenleak.
+>
+> **Korrekt:** `set_config(name, value, true)` innerhalb `BEGIN/COMMIT`. ODER
+> `SET LOCAL name = …` innerhalb `BEGIN/COMMIT`. Beide enden mit dem Transaktions-End.
+
+Wartungs- / Bootstrap-Scripts können RLS gezielt umgehen — funktioniert
+**nur** unter Postgres-Superuser oder Rolle `gastro_owner`:
 
 ```sql
+BEGIN;
 SET LOCAL app.bypass_rls = 'on';
+-- … Queries …
+COMMIT;
 ```
+
+Für seltene `audit_log`-Korrekturen (DSGVO-Erasure mit gerichtlichem
+Beschluss, Forensik) muss zusätzlich `app.audit_maintenance = 'on'` gesetzt
+sein — sonst blockt der Append-Only-Trigger auch unter Bypass.
 
 Helper-Funktionen aus `002_helpers.sql`:
 
 - `current_tenant_id()` → `uuid` der aktuellen Session, sonst `NULL`
-- `is_rls_bypassed()` → `boolean`, `true` wenn `app.bypass_rls = 'on'`
+- `current_user_id()` → `uuid` des eingeloggten Mitarbeiters, sonst `NULL`
+- `is_rls_bypassed()` → `boolean`, **nur** `true` wenn die Session Superuser
+  *oder* Rolle `gastro_owner` ist **und** `app.bypass_rls = 'on'` gesetzt ist
+- `is_audit_maintenance()` → `boolean`, gleiche Rolle-Bedingung plus
+  `app.audit_maintenance = 'on'`
 
 Policy-Pattern (auf allen Tenant-Tabellen):
 ```sql
@@ -260,38 +285,40 @@ Datenbank existiert (siehe Task T011 Rollback-Plan im Backlog).
 
 ---
 
-## 7. App-User-Rolle (Production-Setup)
+## 7. App-User-Rolle (Production-Setup) — ERZWUNGEN
 
 Die Migrations werden als Postgres-Superuser ausgeführt (CREATE EXTENSION,
 CREATE TABLE). Der Backend-App-Runtime muss aber mit einer Rolle laufen, die
 **KEIN** Superuser ist und **KEIN** BYPASSRLS-Attribut hat — sonst greifen die
 RLS-Policies nicht.
 
-Empfohlenes Setup pro Umgebung:
+**Erzwungen durch:** `backend/src/core/db/role-check.ts`. Beim Backend-Start
+in Production wird `pg_roles.rolsuper` + `rolbypassrls` für den aktuellen User
+geprüft. Ist die Rolle privilegiert → der Prozess crasht mit klarer
+Fehlermeldung. In Dev wird nur gewarnt.
 
-```sql
--- Im Migration-User-Kontext (Superuser) einmalig:
-CREATE ROLE gastro_app WITH LOGIN PASSWORD '<starkes-passwort>'
-  NOSUPERUSER NOBYPASSRLS;
-GRANT USAGE ON SCHEMA public TO gastro_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gastro_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gastro_app;
--- Für künftige Tabellen (Folge-Migrations) automatisch GRANTen:
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO gastro_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO gastro_app;
+**Setup-Skript** (idempotent, einmal pro Umgebung als Superuser/`gastro_owner`):
+
+```bash
+psql "$DATABASE_URL_OWNER" \
+  -v app_password="'<starkes-passwort>'" \
+  -f backend/scripts/setup-app-role.sql
 ```
 
-Im `.env` des Backends:
+Das Skript legt die Rolle an, vergibt Privileges auf bestehende Objekte und
+konfiguriert `ALTER DEFAULT PRIVILEGES`, damit künftige Migrations-Tabellen
+automatisch read+write für `gastro_app` haben.
+
+In `.env` des Backends:
 
 ```
 DATABASE_URL=postgres://gastro_app:<passwort>@db-host:5432/gastro_prod
-DATABASE_URL_MIGRATION=postgres://gastro_owner:<passwort>@db-host:5432/gastro_prod
+DATABASE_URL_OWNER=postgres://gastro_owner:<passwort>@db-host:5432/gastro_prod
 ```
 
-In Dev/CI darf die Bequemlichkeit gewinnen (beides derselbe User), in
-Production muss die App den eingeschränkten Account nutzen.
+`DATABASE_URL_OWNER` ist nur für Migrations + DBA-Wartung, NIEMALS fürs
+laufende Backend. In Dev/CI darf die Bequemlichkeit gewinnen (Backend läuft
+mit dem Owner-Account) — der Startup-Check warnt dann, blockt aber nicht.
 
 ---
 

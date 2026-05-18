@@ -35,3 +35,6 @@ coverage/
 # Lokale Backup-Ordner
 *.bak-*/
 prozesspilot.bak-*/
+
+# Claude Code lokale State-Daten (Agent-Memory)
+.claude/agent-memory/

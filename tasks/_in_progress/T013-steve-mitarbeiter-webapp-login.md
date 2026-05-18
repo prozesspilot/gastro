@@ -17,16 +17,16 @@ Frontend-Komponente die Discord-Login-Button + Notfall-Login-Formular anzeigt. A
 
 ## Akzeptanz-Kriterien
 
-- [ ] Route `/login` in Mitarbeiter-Webapp (React/Vite oder Next.js — schau was im Repo ist)
-- [ ] Hauptbutton: „Mit Discord einloggen" → Redirect zu `/auth/discord/login` (Backend)
-- [ ] Sekundär unten: „Notfall-Login (nur GF)" → expandiert Formular
-- [ ] Notfall-Formular: Email + Passwort + TOTP-Code (3 Felder)
-- [ ] Submit → `POST /auth/notfall/login` → bei Erfolg JWT in Cookie + Redirect
-- [ ] Fehlermeldungen sichtbar: „Falsche Zugangsdaten", „TOTP-Code ungültig", „Zu viele Versuche"
-- [ ] Loading-State während Auth-Request
-- [ ] Mobile-responsive (375px+)
-- [ ] ProzessPilot-Branding (Logo, Farben aus Style-Guide)
-- [ ] Komponenten-Tests mit Testing Library
+- [x] Route `/login` in Mitarbeiter-Webapp (React + Vite)
+- [x] Hauptbutton: „Mit Discord anmelden" → Link zu `/api/v1/auth/discord/login` (Backend-Redirect)
+- [x] Sekundär unten: „Notfall-Login (nur für Geschäftsführer)" → expandiert Formular
+- [x] Notfall-Formular: Email + Passwort + TOTP-Code + Backup-Code-Toggle
+- [x] Submit → `POST /api/v1/auth/notfall/login` → bei Erfolg Cookie gesetzt + Redirect zu /
+- [x] Fehlermeldungen: „Zugangsdaten ungültig", „TOTP-Code ungültig", „Zu viele Versuche"
+- [x] Loading-State während Auth-Request (Spinner + deaktivierter Button)
+- [x] Mobile-responsive (maxWidth: 440px, 24px padding)
+- [x] ProzessPilot-Branding (🧭 Logo, CSS-Variablen aus index.css, Discord-Lila #5865F2)
+- [x] Komponenten-Tests mit Testing Library (10 Tests)
 
 ## Claude-Code-Start-Prompt
 

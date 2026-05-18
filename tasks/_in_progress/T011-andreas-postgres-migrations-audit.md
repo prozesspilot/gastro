@@ -17,16 +17,36 @@ Pre-Reboot-Migrations gegen das neue Konzept-Datenmodell abgleichen. Fehlende Ta
 
 ## Akzeptanz-Kriterien
 
-- [ ] Inventory: alle existierenden Migrations in `backend/migrations/` aufgelistet mit Status
-- [ ] Abgleich gegen Konzept-Datenmodell aus `01_Datenmodell.md` (falls existiert, sonst aus Modul-Specs M01-M15)
-- [ ] Fehlende Tabellen identifiziert: `users`, `tenants`, `belege`, `kasse_integrations`, `kasse_transactions`, `export_log`, `audit_log`, `tenant_settings`
-- [ ] Neue Migrations geschrieben für fehlende Tabellen/Spalten (eine Migration pro Konzept-Erweiterung)
-- [ ] Indexes auf häufige Query-Pfade: `(tenant_id, status)`, `(tenant_id, uploaded_at DESC)`, `(email)` unique
-- [ ] Row-Level-Security (RLS) Policies für Tenant-Isolation auf ALLEN Tabellen mit `tenant_id`
-- [ ] Migrations-Down-Pfad für Rollback getestet
-- [ ] Fresh-DB-Test: `dropdb && createdb && npm run migrate` läuft fehlerfrei durch
-- [ ] Seed-Daten-Skript für lokale Dev-Umgebung (Test-Tenant + Test-User)
-- [ ] Dokumentation: `backend/migrations/SCHEMA.md` mit ER-Diagramm-Beschreibung
+- [x] Inventory: alle existierenden Migrations in `backend/migrations/` aufgelistet mit Status
+- [x] Abgleich gegen Konzept-Datenmodell aus `01_Datenmodell_Events.md` + Modul-Specs M01/M11/M12/M14/M15
+- [x] Fehlende Tabellen identifiziert: `users`, `tenants`, `belege`, `kasse_integrations`, `kasse_transactions`, `export_log`, `audit_log`, `tenant_settings`
+- [x] Neue Migrations geschrieben für fehlende Tabellen/Spalten (eine Migration pro Konzept-Erweiterung)
+- [x] Indexes auf häufige Query-Pfade: `(tenant_id, status)`, `(tenant_id, received_at DESC)`, `(file_sha256)` unique, `(discord_user_id)` unique
+- [x] Row-Level-Security (RLS) Policies für Tenant-Isolation auf ALLEN Tabellen mit `tenant_id` — inkl. `FORCE ROW LEVEL SECURITY` gegen Owner-Bypass
+- [x] Migrations-Down-Pfad für Rollback getestet (`backend/migrations/_rollback.sql`)
+- [x] Fresh-DB-Test: `dropdb && createdb && npm run migrate` läuft fehlerfrei durch
+- [x] Seed-Daten-Skript für lokale Dev-Umgebung (Test-Tenant + Test-User) → `npm run seed:dev`
+- [x] Dokumentation: `backend/migrations/SCHEMA.md` mit ER-Diagramm-Beschreibung
+
+## Implementation-Notes
+
+**Bootstrap-Reset durchgeführt:** Pre-Reboot-Migrations (root-`/migrations/`, 26 SQL-Files mit zwei parallelen "Welten" Welt-A TEXT/Welt-B UUID) komplett entfernt. Neuer kanonischer Pfad: `backend/migrations/` (per Spec). `migrate.ts` umgehängt und um `_`-Prefix-Filter erweitert, damit `_rollback.sql` nicht als Migration interpretiert wird.
+
+**Migration-Inventar (8 neue Files):**
+- `001_extensions.sql` — pgcrypto, citext, uuid-ossp
+- `002_helpers.sql` — `set_updated_at()`, `current_tenant_id()`, `is_rls_bypassed()`
+- `010_tenants.sql` — `tenants`, `tenant_settings` (RLS + FORCE)
+- `020_users_auth.sql` — `users`, `auth_sessions`, `auth_audit_log` (gemäß M14)
+- `030_belege.sql` — `belege` (UUID-PK, status-FSM, JSONB-payload, RLS + FORCE)
+- `040_kasse.sql` — `kasse_integrations`, `kasse_transactions` (gemäß M15)
+- `050_export_log.sql` — `export_log` (M04-M07 + M11, beleg- + period-basiert)
+- `060_audit_log.sql` — `audit_log` (BIGSERIAL, append-only via Trigger)
+
+**Tests:** `backend/tests/migrations/schema.test.ts` — 5 grüne Tests, skipped ohne `TEST_DATABASE_URL`.
+
+**Production-Hinweis:** Backend muss mit Non-Superuser-Rolle (`gastro_app`) laufen, sonst greift RLS nicht. SCHEMA.md § 7 dokumentiert das CREATE-ROLE + GRANT-Pattern.
+
+**Lint/Type-Check:** Meine Files passieren `biome check` + `tsc --noEmit` clean. Pre-Reboot-Code (67 vorhandene Lint-Fehler) ist außerhalb des T011-Scopes.
 
 ## Claude-Code-Start-Prompt
 

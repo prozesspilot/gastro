@@ -14,9 +14,12 @@ import { Pool } from 'pg';
 import { config } from '../config';
 import { logger } from '../logger';
 
-// Pfad relativ zu dist/core/db/migrate.js → ../../../../migrations
-// Bei tsx (kein Build): __dirname ist src/core/db → ../../../migrations
-const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', '..', 'migrations');
+// Pfad relativ zu backend/src/core/db/migrate.ts → backend/migrations
+// (Spec T011: Migrations leben unter `backend/migrations/`.)
+// Bei tsx läuft __dirname auf backend/src/core/db → drei Ebenen hoch nach backend/,
+// dann /migrations. Bei tsc-Build (dist/core/db/migrate.js) gilt die gleiche
+// Relation, weil dist/ direkt unter backend/ liegt.
+const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', 'migrations');
 
 async function migrate(): Promise<void> {
   const pool = new Pool({ connectionString: config.DATABASE_URL });
@@ -40,7 +43,11 @@ async function migrate(): Promise<void> {
     // Alle SQL-Dateien einlesen und sortieren
     let files: string[];
     try {
-      files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
+      // `.sql`-Dateien sortiert; Files mit `_`-Prefix sind reservierte Helper
+      // (z. B. `_rollback.sql`, `_helpers.sql`) und keine Migrationen.
+      files = (await readdir(MIGRATIONS_DIR))
+        .filter((f) => f.endsWith('.sql') && !f.startsWith('_'))
+        .sort();
     } catch {
       logger.error({ dir: MIGRATIONS_DIR }, 'Migrations-Verzeichnis nicht gefunden');
       process.exit(1);

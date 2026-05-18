@@ -35,6 +35,22 @@ export interface DbUser {
   preferences: Record<string, unknown>;
 }
 
+export interface DbEmergencyUser {
+  id: string;
+  display_name: string;
+  role: 'geschaeftsfuehrer' | 'mitarbeiter' | 'support';
+  active: boolean;
+  emergency_email: string | null;
+  emergency_password_hash: string | null;
+  emergency_totp_secret: string | null;
+  emergency_backup_codes: BackupCode[] | null;
+}
+
+export interface BackupCode {
+  hash: string;
+  used: boolean;
+}
+
 export interface UpsertDiscordUserInput {
   discordUserId: string;
   discordUsername: string;
@@ -270,7 +286,90 @@ export async function logAuthEvent(pool: Pool, input: LogAuthEventInput): Promis
   }
 }
 
+/**
+ * Sucht einen User anhand seiner emergency_email (CITEXT → case-insensitive).
+ * Gibt die emergency-Login-Felder zurück. null wenn nicht gefunden.
+ */
+export async function getUserByEmergencyEmail(
+  pool: Pool,
+  email: string,
+): Promise<DbEmergencyUser | null> {
+  const result = await pool.query(
+    `SELECT
+       id, display_name, role, active,
+       emergency_email, emergency_password_hash,
+       emergency_totp_secret, emergency_backup_codes
+     FROM users
+     WHERE emergency_email = $1`,
+    [email],
+  );
+  if (result.rows.length === 0) return null;
+  return rowToDbEmergencyUser(result.rows[0]);
+}
+
+/**
+ * Aktualisiert last_login_at und last_login_method nach erfolgreichem Notfall-Login.
+ */
+export async function recordEmergencyLogin(
+  pool: Pool,
+  userId: string,
+  ipAddress: string | null,
+): Promise<void> {
+  await pool.query(
+    `UPDATE users
+     SET last_login_at = now(),
+         last_login_method = 'emergency',
+         last_login_ip = $2::inet,
+         updated_at = now()
+     WHERE id = $1`,
+    [userId, ipAddress],
+  );
+}
+
+/**
+ * Markiert einen Backup-Code als verwendet (atomare Race-Condition-sichere Query).
+ * Gibt true zurück wenn der Code erfolgreich markiert wurde, false wenn
+ * der Code bereits verwendet war (Race-Condition) oder nicht existiert.
+ *
+ * M1: NULL-safe + rowCount-Check gegen Race-Condition.
+ */
+export async function markBackupCodeUsed(
+  pool: Pool,
+  userId: string,
+  codeIndex: number,
+): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE users
+     SET emergency_backup_codes = jsonb_set(
+       emergency_backup_codes,
+       ARRAY[$2::text, 'used'],
+       'true'::jsonb,
+       false
+     ),
+     updated_at = now()
+     WHERE id = $1
+       AND emergency_backup_codes IS NOT NULL
+       AND (emergency_backup_codes->($2::int)->>'used')::boolean = false`,
+    [userId, codeIndex.toString()],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 // ── Interne Hilfsfunktionen ────────────────────────────────────────────────
+
+// biome-ignore lint/suspicious/noExplicitAny: pg-Row ist ein Record mit unknown Shape
+function rowToDbEmergencyUser(row: Record<string, any>): DbEmergencyUser {
+  return {
+    id: row.id as string,
+    display_name: row.display_name as string,
+    role: row.role as 'geschaeftsfuehrer' | 'mitarbeiter' | 'support',
+    active: row.active as boolean,
+    emergency_email: (row.emergency_email as string | null) ?? null,
+    emergency_password_hash: (row.emergency_password_hash as string | null) ?? null,
+    emergency_totp_secret: (row.emergency_totp_secret as string | null) ?? null,
+    emergency_backup_codes: (row.emergency_backup_codes as BackupCode[] | null) ?? null,
+  };
+}
 
 // biome-ignore lint/suspicious/noExplicitAny: pg-Row ist ein Record mit unknown Shape
 function rowToDbUser(row: Record<string, any>): DbUser {

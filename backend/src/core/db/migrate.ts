@@ -57,8 +57,12 @@ async function migrate(): Promise<void> {
     try {
       // `.sql`-Dateien sortiert; Files mit `_`-Prefix sind reservierte Helper
       // (z. B. `_rollback.sql`, `_helpers.sql`) und keine Migrationen.
+      // Files mit `_rollback.sql`-Suffix sind Rollback-Skripte (z. B. `021_xxx_rollback.sql`)
+      // und werden nicht als Vorwärts-Migration ausgeführt.
       files = (await readdir(MIGRATIONS_DIR))
-        .filter((f) => f.endsWith('.sql') && !f.startsWith('_'))
+        .filter(
+          (f) => f.endsWith('.sql') && !f.startsWith('_') && !f.endsWith('_rollback.sql'),
+        )
         .sort();
     } catch {
       logger.error({ dir: MIGRATIONS_DIR }, 'Migrations-Verzeichnis nicht gefunden');

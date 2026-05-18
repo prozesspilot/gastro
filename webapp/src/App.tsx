@@ -7,6 +7,9 @@ import CustomerProfilePage from './pages/CustomerProfilePage';
 import UploadPage from './pages/UploadPage';
 import ReceiptsPage from './pages/ReceiptsPage';
 import ReceiptDetailPage from './pages/ReceiptDetailPage';
+import BelegeListPage from './pages/BelegeListPage';
+import BelegeUploadPage from './pages/BelegeUploadPage';
+import BelegeDetailPage from './pages/BelegeDetailPage';
 import StatsPage from './pages/StatsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -54,6 +57,10 @@ export default function App() {
                         <Route path="/upload" element={<UploadPage />} />
                         <Route path="/receipts" element={<ReceiptsPage />} />
                         <Route path="/receipts/:receiptId" element={<ReceiptDetailPage />} />
+                        {/* T014 — Belege (neue /belege-API, unterscheidet sich von /receipts) */}
+                        <Route path="/belege" element={<BelegeListPage />} />
+                        <Route path="/belege/upload" element={<BelegeUploadPage />} />
+                        <Route path="/belege/:id" element={<BelegeDetailPage />} />
                         <Route path="/stats" element={<StatsPage />} />
                         <Route path="/tenants" element={<TenantsPage />} />
                         <Route path="/tenants/:tenantId/customers" element={<CustomersPage />} />

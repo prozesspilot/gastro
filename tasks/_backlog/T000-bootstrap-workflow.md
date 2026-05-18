@@ -49,20 +49,20 @@ Setze den Claude-Code-Workflow operativ auf, sodass alle weiteren Tasks ohne man
 - [ ] `npm install` läuft fehlerfrei
 - [ ] Claude Code lädt CLAUDE.md beim Start
 
-### Hetzner-Setup
-- [ ] Hetzner CX22 bestellt
-- [ ] SSH-Zugang konfiguriert
-- [ ] Docker + docker-compose installiert
+### IONOS-Setup
+- [x] IONOS VPS 4-4-120 vorhanden (87.106.8.111, Ubuntu 24.04)
+- [x] SSH-Zugang konfiguriert (Key-only, Passwort-Auth deaktiviert)
+- [x] Docker + docker compose plugin installiert
 - [ ] Caddy als Reverse-Proxy konfiguriert
-- [ ] DNS für `admin.prozesspilot.net`, `setup.prozesspilot.net`, `api.prozesspilot.net`, `chat.prozesspilot.net` aufgesetzt
-- [ ] Claude Code auf Hetzner installiert (für Hotfixes + Deploy-Trigger)
+- [x] DNS für `admin.prozesspilot.net`, `setup.prozesspilot.net`, `api.prozesspilot.net`, `chat.prozesspilot.net` aufgesetzt
+- [ ] Claude Code auf IONOS installiert (für Hotfixes + Deploy-Trigger)
 
 ### Erste End-to-End-Validierung
 - [ ] Test-Branch erstellt, Test-Commit, PR eröffnet
 - [ ] CI läuft grün auf dem Test-PR
 - [ ] Discord-Notifications kommen in den richtigen Channels an
 - [ ] Test-PR wird gemerged
-- [ ] Auto-Deploy auf Hetzner läuft erfolgreich
+- [ ] Auto-Deploy auf IONOS läuft erfolgreich
 - [ ] Health-Check auf `https://api.prozesspilot.net/health` antwortet 200
 
 ### Dokumentation
@@ -78,7 +78,7 @@ Setze den Claude-Code-Workflow operativ auf, sodass alle weiteren Tasks ohne man
 
 - `Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md` — Master-Spec
 - `Modulkonzept/Konzeptentwicklung/Discord_Integration.md` — Channel-Struktur, Bot-Setup
-- `Modulkonzept/Konzeptentwicklung/00_Architektur_Hauptdokument.md` — Hetzner-Setup, DNS-Subdomains
+- `Modulkonzept/Konzeptentwicklung/00_Architektur_Hauptdokument.md` — IONOS-Setup, DNS-Subdomains
 - `Modulkonzept/Konzeptentwicklung/05_Roadmap.md` — KW-21-Plan
 
 ---
@@ -109,8 +109,8 @@ Wenn alle Punkte abgehakt: /finish-task
 ## Notes
 
 - Diese Task wird nicht als regulärer PR gemerged, sondern direkt auf main committed (mit Ausnahme: Branch-Protection wird erst NACH dieser Task aktiviert).
-- Reihenfolge der Akzeptanz-Kriterien-Blöcke ist wichtig — Discord-Setup muss vor GitHub-Webhooks fertig sein, Hetzner-Setup vor Auto-Deploy-Test.
-- Für Hetzner-SSH-Key: 4096-bit RSA empfohlen, in 1Password speichern.
+- Reihenfolge der Akzeptanz-Kriterien-Blöcke ist wichtig — Discord-Setup muss vor GitHub-Webhooks fertig sein, IONOS-Setup vor Auto-Deploy-Test.
+- Für IONOS-SSH-Key: ed25519 (bereits eingerichtet, Deploy-Key liegt in GitHub-Secrets).
 - Discord-Webhook-URLs sind sicherheitskritisch — niemals committen, nur als GitHub-Secret.
 
 ---

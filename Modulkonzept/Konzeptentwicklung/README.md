@@ -197,7 +197,7 @@ Modulkonzept/Konzeptentwicklung/
 | Archiv | Google Drive (Default), Dropbox (Optional) |
 | Mitarbeiter-Auth | Discord OAuth 2.0 + Notfall-Login mit TOTP |
 | Customer-Auth | Magic-Link mit DB-Token |
-| Hosting | Hetzner EU |
+| Hosting | IONOS EU |
 | Mitarbeiter-Komm | Discord-Server + eigener Bot |
 | JSON-Felder | snake_case |
 | TypeScript | camelCase |

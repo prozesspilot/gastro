@@ -68,7 +68,7 @@ Die Mitarbeiter-Webapp hat zudem Zugriff auf Endkunden-Daten, deren Verarbeitung
 ### 5. Empfänger
 
 - Discord Inc. (USA, mit SCCs) — als OAuth-Provider und für Notifications
-- Hetzner Online GmbH (Deutschland) — als Hosting-Provider
+- IONOS SE (Deutschland) — als Hosting-Provider
 
 ---
 
@@ -119,7 +119,7 @@ Wenn Sie als Endkunde den Onboarding-Wizard durchlaufen, werden folgende Daten v
 
 ### 5. Empfänger
 
-- Hetzner Online GmbH (Hosting)
+- IONOS SE (Hosting)
 - Bei OAuth-Verbindungen: Google, Lexware, SumUp etc. — gemäß Subunternehmer-Liste
 
 ### 6. Magic-Link-Mechanik
@@ -162,7 +162,7 @@ Vorgangsbezogene Daten (z.B. der Beleg über den die Klärung erfolgt) werden mi
 
 ### 5. Empfänger
 
-- Hetzner Online GmbH (Hosting der Datenbank)
+- IONOS SE (Hosting der Datenbank)
 - Discord Inc. (USA, mit SCCs) — Mitarbeiter-Spiegelung als Notification + Reply-Interface
 - ProzessPilot-Mitarbeiter (intern, gemäß Rollen-Modell)
 

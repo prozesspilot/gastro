@@ -76,7 +76,7 @@ claude
 |---|---|---|
 | Steve | `steve/T<id>-<kurz>` | `steve/T012-onboarding-wizard-step1` |
 | Andreas | `andreas/T<id>-<kurz>` | `andreas/T015-m15-sumup-oauth` |
-| Hetzner-Server | `server/T<id>-<kurz>` | `server/T030-hotfix-deployment` |
+| IONOS-Server | `server/T<id>-<kurz>` | `server/T030-hotfix-deployment` |
 | Pair-Programming | `gemeinsam/T<id>-<kurz>` | `gemeinsam/T020-architecture-review` |
 
 ---
@@ -133,9 +133,9 @@ Vollständig: siehe `.claude/CLAUDE.md` Abschnitt 6.
 - Discord-Channel `#alerts-critical` schauen — dort kommt der Fehler-Detail
 - Bei Lint/Type-Check-Fehler: lokal `npm run lint && npm run typecheck` ausführen
 
-### Production rot (Hetzner)
+### Production rot (IONOS)
 - Im Discord `#alerts-critical` schauen
-- Über Hetzner-SSH einloggen
+- Über IONOS-SSH einloggen (87.106.8.111)
 - `docker compose logs -f backend` für Live-Logs
 - Bei Bedarf: `/start-task T<emergency>-hotfix-...`
 

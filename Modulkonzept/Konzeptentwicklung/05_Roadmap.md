@@ -56,7 +56,7 @@ Die neue Roadmap ist:
 
 | # | Aufgabe | Verantwortlich |
 |---|---|---|
-| 1 | Hetzner-Server CX22 bestellen, EU-Region | Andreas |
+| 1 | IONOS VPS bereits vorhanden (87.106.8.111, Ubuntu 24.04) | Andreas |
 | 2 | Domain-DNS für admin/setup/api/prozesspilot.net | Andreas |
 | 3 | Postgres-Migrations + Bootstrap-Admin | Andreas |
 | 4 | Discord-Server angelegt + Channel-Struktur | Steve |
@@ -215,7 +215,7 @@ Parallel zur Vertriebsagentur-Vorbereitung werden 2–3 weitere Direkt-Kunden ge
 ### 5.3 Q2 2027 — Skalierungs-Investitionen
 
 - Zweiter Mitarbeiter teilweise (oder Andreas mehr Vollzeit)
-- Hetzner-Server-Upgrade auf CX32
+- IONOS-Server-Upgrade auf grössere VPS-Klasse
 - Stripe-Subscriptions implementiert (ab 25 Tenants Schwelle)
 
 **M3 ist erreicht wenn:** 25 zahlende Tenants, GbR aktiv, beide Gründer offiziell eingebunden, Cashflow trägt zumindest einen Mitarbeiter teilweise.

@@ -35,14 +35,14 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}/discord-bot:latest
 
-      - name: SSH Deploy on Hetzner
+      - name: SSH Deploy on IONOS
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
+          host: ${{ secrets.IONOS_HOST }}
+          username: ${{ secrets.IONOS_USER }}
+          key: ${{ secrets.IONOS_SSH_KEY }}
           script: |
-            cd /opt/prozesspilot
+            cd /opt/gastro
             docker compose pull
             docker compose up -d
             docker compose exec -T backend npm run migrate
@@ -57,11 +57,11 @@ jobs:
         run: |
           curl -X POST ${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK }} \
             -H "Content-Type: application/json" \
-            -d '{"content": "🚀 **Deploy erfolgreich** auf Hetzner\nCommit: `${{ github.sha }}`\nAlle Services laufen."}'
+            -d '{"content": "🚀 **Deploy erfolgreich** auf IONOS\nCommit: `${{ github.sha }}`\nAlle Services laufen."}'
 
       - name: Discord-Notification Fehler
         if: failure()
         run: |
           curl -X POST ${{ secrets.DISCORD_ALERTS_WEBHOOK }} \
             -H "Content-Type: application/json" \
-            -d '{"content": "❌ **Deploy fehlgeschlagen** auf Hetzner\nCommit: `${{ github.sha }}`\nLogs prüfen: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+            -d '{"content": "❌ **Deploy fehlgeschlagen** auf IONOS\nCommit: `${{ github.sha }}`\nLogs prüfen: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

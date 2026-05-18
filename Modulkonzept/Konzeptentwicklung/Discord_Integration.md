@@ -18,7 +18,7 @@
 
 ### 1.2 Was Discord ausdrücklich nicht ist
 
-- **Keine Source of Truth für Daten.** Customer-Konversationen, Tasks, Tenant-Stammdaten leben in der ProzessPilot-Datenbank (Hetzner EU), nicht in Discord.
+- **Keine Source of Truth für Daten.** Customer-Konversationen, Tasks, Tenant-Stammdaten leben in der ProzessPilot-Datenbank (IONOS EU), nicht in Discord.
 - **Kein Customer-Touchpoint.** Endkunden (Wirte) sehen Discord nie. Sie sehen ein Web-Chat-Widget — die Discord-Spiegelung passiert nur auf Mitarbeiter-Seite.
 - **Kein dauerhaftes Archiv.** GoBD-relevante Daten werden in der EU-DB archiviert, nicht in Discord-Channels.
 - **Kein Workflow-Engine-Ersatz.** Komplexe Logik (Auto-Eskalation, SLAs, Berichts-Generierung) bleibt in n8n + Backend.
@@ -208,7 +208,7 @@ Initial-Setup einmalig durch Steve (oder den jeweiligen Geschäftsführer selbst
 ### 5.1 Bot-Architektur
 
 - Separater Node.js-Service mit **discord.js** (v14+)
-- Läuft als eigener Docker-Container auf Hetzner (Teil von docker-compose.prod.yml)
+- Läuft als eigener Docker-Container auf IONOS (Teil von docker-compose.prod.yml)
 - Discord-Bot-Token: Sicher in `.env.prod`, niemals im Repo
 - Bot kommuniziert mit ProzessPilot-Backend via interne REST-API + gegenseitige Webhooks
 - Bot ist stateless — alle Daten bleiben in der PP-DB
@@ -344,7 +344,7 @@ Wird als **ephemeral message** (nur für den klickenden User sichtbar) gesendet:
 [Customer im Web-Widget]
         │ HTTP/WebSocket
         ▼
-[ProzessPilot Backend (Hetzner EU)]
+[ProzessPilot Backend (IONOS EU)]
         │
         │ 1. Speichert Message in DB
         │    chat_messages { tenant_id, from: 'customer', content, ... }
@@ -504,7 +504,7 @@ Aufbewahrungs-Dauer: 12 Monate.
 ### 10.2 KW 22–23 (P1.1 läuft, Bot-Entwicklung parallel)
 
 7. Discord-Bot in Node.js mit discord.js initialisiert
-8. Bot deployed auf Hetzner als eigener Docker-Container
+8. Bot deployed auf IONOS als eigener Docker-Container
 9. Slash-Commands `/task list`, `/task claim`, `/tenant info` implementiert
 10. Interactive Buttons für Task-Claim implementiert
 11. Customer-Chat-Bridge implementiert (Webhook-Empfang + Thread-Management)

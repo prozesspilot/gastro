@@ -10,8 +10,8 @@
 
 ### 1.1 Zutrittskontrolle (physisch)
 
-- **Server-Hosting:** Hetzner Online GmbH, Rechenzentren in Falkenstein und Nürnberg (Deutschland)
-- **Physische Zugangskontrolle:** Hetzner-Rechenzentren sind ISO 27001-zertifiziert, mit Mehrfaktor-Zugangskontrolle, 24/7-Bewachung, Videoüberwachung
+- **Server-Hosting:** IONOS SE, Rechenzentrum in Deutschland (EU)
+- **Physische Zugangskontrolle:** IONOS-Rechenzentren sind ISO 27001-zertifiziert (Cloud C5), mit Mehrfaktor-Zugangskontrolle, 24/7-Bewachung, Videoüberwachung
 - **Mitarbeiter-Geräte:** Steve und Andreas arbeiten remote, jeweils auf eigenen MacBooks mit FileVault-Vollverschlüsselung
 - **Keine eigenen Büro-Räumlichkeiten** mit Datenverarbeitung
 
@@ -63,7 +63,7 @@
 - **Backup-Strategie:**
   - Postgres: tägliches Vollbackup, alle 6 Stunden inkrementelles Backup, 30 Tage Aufbewahrung
   - MinIO/Belege: Replication 3-fach, tägliches Snapshot
-  - Backups in separater Hetzner-Storage-Box (anderer Standort)
+  - Backups in separater IONOS-Storage (anderer Standort) oder externes Backup-Ziel
 - **Disaster-Recovery:** Wiederherstellungsplan dokumentiert, Drill mindestens halbjährlich
 - **Monitoring:** Sentry für Errors, Grafana + Loki für System-Metrics, Discord-Webhooks für kritische Alerts
 - **Verfügbarkeits-Ziel:** 99 % im Jahresmittel (kein SLA-Garantie, aber Best-Effort)
@@ -71,7 +71,7 @@
 ### 3.2 Schnelle Wiederherstellbarkeit
 
 - **Docker-Compose-basiertes Deployment:** vollständige Wiederherstellung in <60 Min möglich
-- **Infrastructure-as-Code:** alle Hetzner-Setup-Schritte in Repository dokumentiert
+- **Infrastructure-as-Code:** alle IONOS-Setup-Schritte in Repository dokumentiert
 - **Datenbank-Migrations versioniert:** rückwärts-kompatibel, mit Rollback-Skripten
 
 ---
@@ -102,7 +102,7 @@
 ### 4.4 Pseudonymisierung und Verschlüsselung
 
 - **Verschlüsselung in Ruhe (at rest):**
-  - Postgres: Volume-Verschlüsselung auf Hetzner
+  - Postgres: Volume-Verschlüsselung auf IONOS
   - MinIO: Object-Verschlüsselung server-side
   - API-Tokens: pgcrypto AES in dedizierten Spalten
 - **Verschlüsselung in Übertragung (in transit):**
@@ -127,10 +127,10 @@
 
 | Komponente | Maßnahme |
 |---|---|
-| Server | Hetzner Cloud CX22+ in EU (Falkenstein, Nürnberg) |
+| Server | IONOS VPS 4-4-120 in EU (Deutschland) — IP 87.106.8.111 |
 | Reverse Proxy | Caddy mit Auto-TLS (Let's Encrypt) |
 | Container | Docker + Docker Compose, isolierte Container pro Service |
-| Backup | Hetzner-Storage-Box, separater Standort, 30 Tage Retention |
+| Backup | Externes Backup-Ziel (IONOS S3 / S3-kompatibel), separater Standort, 30 Tage Retention |
 | Monitoring | Sentry + Grafana + Loki, Alerts via Discord-Webhook |
 
 ### 5.2 Datenbank-Sicherheit

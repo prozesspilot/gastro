@@ -47,6 +47,7 @@ import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
+import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
@@ -179,6 +180,9 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M14 Discord-OAuth-Routes (Reboot): /api/v1/auth/discord/login + /callback
   await app.register(discordAuthRoutes, { prefix: '/api/v1' });
   await app.register(emergencyLoginRoutes, { prefix: '/api/v1/auth' });
+  // M15 SumUp-OAuth-Routes — VOR HMAC-Block (Callback ist öffentlicher Redirect-Endpoint)
+  // /api/v1/m15/oauth/sumup/start, /api/v1/m15/oauth/sumup/callback, /api/v1/m15/sumup/disconnect/:tenantId
+  await app.register(sumupOauthRoutes, { prefix: '/api/v1' });
   await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
   await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
   await app.register(usersRoutes, { prefix: '/api/v1/users' });

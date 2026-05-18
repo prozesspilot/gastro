@@ -96,7 +96,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const { receipts, tenantName } = await loadReportData(app.db, req.tenantId, parsed.data);
+      const { receipts, tenantName } = await loadReportData(app.db, req.tenantId!, parsed.data);
       const pdf = await generateReceiptReport(receipts, tenantName);
       const filename = `belege-${new Date().toISOString().slice(0, 10)}.pdf`;
       return reply

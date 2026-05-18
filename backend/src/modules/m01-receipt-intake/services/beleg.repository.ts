@@ -274,6 +274,43 @@ export async function listBelege(
 }
 
 /**
+ * Prüft ob ein Beleg mit dem gegebenen SHA256-Hash bereits existiert.
+ *
+ * N1-Fix: Korrekte RLS-Disziplin — eigener BEGIN/COMMIT-Block mit
+ * setTenantContext (LOCAL, set_config mit true), kein session-scoped
+ * set_config via pool.query (was Connection-Vergiftung verursachen würde).
+ *
+ * @returns Beleg-ID + file_object_key + Status oder null wenn nicht gefunden.
+ */
+export async function getBelegBySha256(
+  pool: Pool,
+  tenantId: string,
+  sha256: string,
+): Promise<{ id: string; file_object_key: string; status: BelegStatus } | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+    const result = await client.query<{ id: string; file_object_key: string; status: string }>(
+      'SELECT id, file_object_key, status FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
+      [tenantId, sha256],
+    );
+    await client.query('COMMIT');
+    if (result.rows.length === 0) return null;
+    return {
+      id: result.rows[0].id,
+      file_object_key: result.rows[0].file_object_key,
+      status: result.rows[0].status as BelegStatus,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Holt einen einzelnen Beleg per ID + tenant_id.
  * Gibt null zurück wenn nicht vorhanden oder anderer Tenant (Tenant-Isolation).
  *

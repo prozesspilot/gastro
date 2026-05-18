@@ -41,9 +41,9 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const customer = await createCustomer(app.db, req.tenantId, parsed.data);
+      const customer = await createCustomer(app.db, req.tenantId!, parsed.data);
       // Event best-effort — darf Route nicht blockieren
-      void publishCustomerEvent(app.redis, 'customer.created', req.tenantId, {
+      void publishCustomerEvent(app.redis, 'customer.created', req.tenantId!, {
         customer_id: customer.id,
         external_id: customer.external_id,
       });
@@ -72,14 +72,14 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(422).send(zodToApiError(parsed.error));
     }
 
-    const { data, pagination } = await listCustomers(app.db, req.tenantId, parsed.data);
+    const { data, pagination } = await listCustomers(app.db, req.tenantId!, parsed.data);
     return reply.send(apiOkPaged(data, pagination));
   });
 
   // ── GET /customers/:id ─────────────────────────────────────────────────
 
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
-    const customer = await findCustomerById(app.db, req.tenantId, req.params.id);
+    const customer = await findCustomerById(app.db, req.tenantId!, req.params.id);
 
     if (!customer) {
       return reply.code(404).send(apiError('NOT_FOUND', `Kunde ${req.params.id} nicht gefunden.`));
@@ -96,13 +96,13 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(422).send(zodToApiError(parsed.error));
     }
 
-    const customer = await updateCustomer(app.db, req.tenantId, req.params.id, parsed.data);
+    const customer = await updateCustomer(app.db, req.tenantId!, req.params.id, parsed.data);
 
     if (!customer) {
       return reply.code(404).send(apiError('NOT_FOUND', `Kunde ${req.params.id} nicht gefunden.`));
     }
 
-    void publishCustomerEvent(app.redis, 'customer.updated', req.tenantId, {
+    void publishCustomerEvent(app.redis, 'customer.updated', req.tenantId!, {
       customer_id: customer.id,
       external_id: customer.external_id,
     });
@@ -112,13 +112,13 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
   // ── DELETE /customers/:id ──────────────────────────────────────────────
 
   app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
-    const deleted = await softDeleteCustomer(app.db, req.tenantId, req.params.id);
+    const deleted = await softDeleteCustomer(app.db, req.tenantId!, req.params.id);
 
     if (!deleted) {
       return reply.code(404).send(apiError('NOT_FOUND', `Kunde ${req.params.id} nicht gefunden.`));
     }
 
-    void publishCustomerEvent(app.redis, 'customer.soft_deleted', req.tenantId, {
+    void publishCustomerEvent(app.redis, 'customer.soft_deleted', req.tenantId!, {
       customer_id: req.params.id,
     });
     return reply.code(204).send();

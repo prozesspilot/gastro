@@ -16,10 +16,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 // ── Module-Augmentation ────────────────────────────────────────────────────
-// DECISION: tenant-context.ts (D5/HMAC-Routes) deklariert tenantId: string (required).
-// Dieser Hook ist für JWT-Auth-Routen (m01 belege.routes.ts). Wir nutzen dieselbe
-// Deklaration aus tenant-context.ts — keine erneute Augmentation nötig.
-// tenantId wird nach dem Hook immer gesetzt (required), Handler verwenden req.tenantId!
+// DECISION: tenant-context.ts (D5/HMAC-Routes) deklariert tenantId?: string (optional).
+// M10-Fix: Die Deklaration ist optional — der Hook setzt den Wert oder schickt 400.
+// Handler prüfen mit Type-Guard: if (!tenantId) return reply.code(500)...
+// Die Augmentation steht in core/hooks/tenant-context.ts und gilt global.
 
 // ── Konstanten ─────────────────────────────────────────────────────────────
 

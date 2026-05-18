@@ -93,6 +93,20 @@ export async function findTenantById(pool: Pool, id: string): Promise<TenantResp
   return rows[0] ? rowToResponse(rows[0]) : null;
 }
 
+/**
+ * Prüft ob ein Tenant mit der gegebenen ID existiert und nicht gelöscht ist.
+ *
+ * M11-Fix: Repository-Funktion statt direktem SQL im Handler.
+ * Tenants haben kein RLS — direktes pool.query ist korrekt.
+ */
+export async function tenantExists(pool: Pool, tenantId: string): Promise<boolean> {
+  const result = await pool.query<{ exists: boolean }>(
+    'SELECT 1 FROM tenants WHERE id = $1 AND deleted_at IS NULL',
+    [tenantId],
+  );
+  return result.rows.length > 0;
+}
+
 /** Mandanten-Felder aktualisieren (Partial Update). */
 export async function updateTenant(
   pool: Pool,

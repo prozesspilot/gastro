@@ -181,8 +181,8 @@ describe('POST /api/v1/belege/upload', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    // m14TenantContextHook wirft missing_tenant_header
-    expect(['missing_tenant', 'missing_tenant_header']).toContain(JSON.parse(response.body).error);
+    // m14TenantContextHook wirft genau missing_tenant_header
+    expect(JSON.parse(response.body).error).toBe('missing_tenant_header');
   });
 
   it('gibt 400 zurück wenn keine Datei im Body', async () => {
@@ -383,6 +383,8 @@ describe('POST /api/v1/belege/upload', () => {
           setConfigCalls.push(String(params?.[0]));
           return { rows: [] };
         }
+        // N1-Fix: getBelegBySha256 läuft über pool.connect — kein Duplikat
+        if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
         if (/INSERT INTO belege/i.test(sql)) return { rows: [mockBeleg], rowCount: 1 };
         if (/INSERT INTO audit_log/i.test(sql)) return { rows: [] }; // B1: audit in Tx
         return { rows: [] };
@@ -392,11 +394,9 @@ describe('POST /api/v1/belege/upload', () => {
 
     const pool = {
       connect: vi.fn(async () => mockClient),
-      // M3: Tenant-Check via pool.query (nicht pool.connect)
-      // B4: SHA256-Check via pool.query
+      // M3/M11: Tenant-Check via pool.query (tenantExists nutzt pool.query direkt)
       query: vi.fn(async (sql: string) => {
         if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] }; // Tenant existiert
-        if (/FROM belege/i.test(sql)) return { rows: [] }; // kein Duplikat
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -431,6 +431,8 @@ describe('POST /api/v1/belege/upload', () => {
         if (/COMMIT/i.test(sql)) return { rows: [] };
         if (/ROLLBACK/i.test(sql)) return { rows: [] };
         if (/set_config/i.test(sql)) return { rows: [] };
+        // N1-Fix: getBelegBySha256 läuft über pool.connect — kein Duplikat
+        if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
         if (/INSERT INTO belege/i.test(sql)) return { rows: [mockBeleg], rowCount: 1 };
         if (/INSERT INTO audit_log/i.test(sql)) {
           auditLogCalls.push({ sql, params: params ?? [] });
@@ -443,9 +445,9 @@ describe('POST /api/v1/belege/upload', () => {
 
     const pool = {
       connect: vi.fn(async () => mockClient),
+      // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
         if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
-        if (/FROM belege/i.test(sql)) return { rows: [] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -476,12 +478,13 @@ describe('POST /api/v1/belege/upload', () => {
   it('gibt 200 mit is_duplicate=true zurück bei doppeltem Upload (B4 SHA256-First)', async () => {
     const existingBeleg = makeMockBeleg({ id: BELEG_UUID });
 
-    const pool = {
-      connect: vi.fn(),
+    // N1-Fix: getBelegBySha256 verwendet pool.connect() + BEGIN/COMMIT
+    const mockClient = {
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
-        // B4: SHA256-Check via pool.query → Duplikat gefunden
-        if (/FROM belege.*file_sha256/i.test(sql) || /set_config.*FROM belege/i.test(sql)) {
+        if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
+        if (/set_config/i.test(sql)) return { rows: [] };
+        // SHA256-Check via Repository-Funktion → Duplikat
+        if (/FROM belege.*file_sha256/i.test(sql)) {
           return {
             rows: [
               {
@@ -492,6 +495,16 @@ describe('POST /api/v1/belege/upload', () => {
             ],
           };
         }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      // M11: tenantExists nutzt pool.query direkt
+      query: vi.fn(async (sql: string) => {
+        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -518,11 +531,22 @@ describe('POST /api/v1/belege/upload', () => {
   });
 
   it('M4: Storage-Error gibt generische Fehlermeldung zurück (kein internes Leak)', async () => {
+    // N1-Fix: getBelegBySha256 via pool.connect (kein Duplikat)
+    const mockClient = {
+      query: vi.fn(async (sql: string) => {
+        if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
+        if (/set_config/i.test(sql)) return { rows: [] };
+        if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] }; // kein Duplikat
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+
     const pool = {
-      connect: vi.fn(),
+      connect: vi.fn(async () => mockClient),
+      // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
         if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
-        if (/FROM belege/i.test(sql)) return { rows: [] }; // kein Duplikat
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -561,6 +585,8 @@ describe('POST /api/v1/belege/upload', () => {
       query: vi.fn(async (sql: string) => {
         if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
         if (/set_config/i.test(sql)) return { rows: [] };
+        // N1-Fix: getBelegBySha256 via pool.connect — kein Duplikat
+        if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
         if (/INSERT INTO belege/i.test(sql)) {
           dbInsertCalls.push(sql);
           return { rows: [makeMockBeleg()], rowCount: 1 };
@@ -572,9 +598,9 @@ describe('POST /api/v1/belege/upload', () => {
 
     const pool = {
       connect: vi.fn(async () => mockClient),
+      // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
         if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
-        if (/FROM belege/i.test(sql)) return { rows: [] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -613,6 +639,8 @@ describe('POST /api/v1/belege/upload', () => {
       query: vi.fn(async (sql: string, params?: unknown[]) => {
         if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
         if (/set_config/i.test(sql)) return { rows: [] };
+        // N1-Fix: getBelegBySha256 via pool.connect — kein Duplikat
+        if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
         if (/INSERT INTO belege/i.test(sql)) {
           // Capture payload um sanitized filename zu prüfen
           const payloadJson = params?.[6] as string | undefined;
@@ -630,9 +658,9 @@ describe('POST /api/v1/belege/upload', () => {
 
     const pool = {
       connect: vi.fn(async () => mockClient),
+      // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
         if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
-        if (/FROM belege/i.test(sql)) return { rows: [] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -688,7 +716,7 @@ describe('GET /api/v1/belege', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(['missing_tenant', 'missing_tenant_header']).toContain(JSON.parse(response.body).error);
+    expect(JSON.parse(response.body).error).toBe('missing_tenant_header');
   });
 
   it('gibt leere Liste zurück wenn keine Belege vorhanden', async () => {
@@ -760,15 +788,20 @@ describe('GET /api/v1/belege', () => {
     expect(body.pagination.total_pages).toBe(3);
   });
 
-  it('M8: payload-Feld ist NICHT in List-Response enthalten', async () => {
-    const belegWithPayload = { ...makeMockBeleg(), total_count: '1' };
+  it('M8: payload-Feld ist NICHT in SQL-Query der List-Route enthalten', async () => {
+    // M8-Fix: Statt Response-Felder prüfen (Mock gibt immer zurück was man rein gibt),
+    // testen wir dass das SELECT-Statement kein `payload` enthält.
+    const capturedSql: string[] = [];
 
     const pool = makePoolWithTxClient((sql: string) => {
       if (/^BEGIN$/i.test(sql.trim())) return { rows: [] };
       if (/^COMMIT$/i.test(sql.trim())) return { rows: [] };
       if (/^ROLLBACK$/i.test(sql.trim())) return { rows: [] };
       if (/set_config/i.test(sql)) return { rows: [] };
-      if (/FROM belege/i.test(sql)) return { rows: [belegWithPayload], rowCount: 1 };
+      if (/FROM belege/i.test(sql)) {
+        capturedSql.push(sql);
+        return { rows: [], rowCount: 0 };
+      }
       return { rows: [] };
     });
 
@@ -776,20 +809,20 @@ describe('GET /api/v1/belege', () => {
     currentApp = app;
     const token = makeStaffToken();
 
-    const response = await app.inject({
+    await app.inject({
       method: 'GET',
       url: '/api/v1/belege',
       cookies: { pp_auth: token },
       headers: { 'x-pp-tenant-id': TENANT_UUID },
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { belege: Array<Record<string, unknown>> };
-    // M8: payload nicht in listBelege-Response (nur im Detail-Endpoint)
-    // DECISION: listBelege gibt DbBelegListItem zurück (kein payload-Feld in SQL-Query)
-    // Das body.belege[0].payload kann vorhanden sein wenn der mock es zurückgibt —
-    // in Prod wird es durch die explizite SELECT-Spalten-Liste weggelassen.
-    expect(body.belege).toHaveLength(1);
+    // M8: Das SELECT-Statement darf kein `payload` als Spalte enthalten
+    expect(capturedSql.length).toBeGreaterThan(0);
+    const listQuery = capturedSql[0];
+    // Prüfen: kein direktes 'payload'-Feld in der SELECT-Spalten-Liste
+    // (payload könnte in einem anderen Kontext als Teil eines Strings vorkommen,
+    //  daher prüfen wir auf 'SELECT.*payload' als Spalten-Select)
+    expect(listQuery).not.toMatch(/SELECT\s[^F]*\bpayload\b[^F]*FROM/i);
   });
 
   it('filtert nach Status wenn angegeben', async () => {
@@ -871,7 +904,7 @@ describe('GET /api/v1/belege/:id', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(['missing_tenant', 'missing_tenant_header']).toContain(JSON.parse(response.body).error);
+    expect(JSON.parse(response.body).error).toBe('missing_tenant_header');
   });
 
   it('gibt 400 zurück bei ungültiger ID (kein UUID)', async () => {
@@ -1169,6 +1202,98 @@ describe('beleg.repository — insertBeleg', () => {
         originalFilename: 'test.jpg',
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('beleg.repository — getBelegBySha256 (N1 RLS-Disziplin)', () => {
+  it('N1: setzt Tenant-Context lokal (set_config true) innerhalb BEGIN/COMMIT', async () => {
+    // N1-Fix verifizieren: set_config muss mit true (local=true) aufgerufen werden
+    // und muss innerhalb BEGIN/COMMIT liegen.
+    const setConfigArgs: { sql: string; params: unknown[] }[] = [];
+    const txCalls: string[] = [];
+
+    const pool = makePoolWithTxClient((sql: string, params?: unknown[]) => {
+      if (/^BEGIN$/i.test(sql.trim())) {
+        txCalls.push('BEGIN');
+        return { rows: [] };
+      }
+      if (/^COMMIT$/i.test(sql.trim())) {
+        txCalls.push('COMMIT');
+        return { rows: [] };
+      }
+      if (/^ROLLBACK$/i.test(sql.trim())) return { rows: [] };
+      if (/set_config/i.test(sql)) {
+        setConfigArgs.push({ sql, params: params ?? [] });
+        return { rows: [] };
+      }
+      if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
+      return { rows: [] };
+    });
+
+    const { getBelegBySha256 } = await import(
+      '../../modules/m01-receipt-intake/services/beleg.repository'
+    );
+
+    await getBelegBySha256(pool as unknown as Pool, TENANT_UUID, 'a'.repeat(64));
+
+    // Reihenfolge: BEGIN → set_config → (SELECT) → COMMIT
+    expect(txCalls).toContain('BEGIN');
+    expect(txCalls).toContain('COMMIT');
+    expect(setConfigArgs.length).toBeGreaterThan(0);
+
+    const setConfigCall = setConfigArgs[0];
+    // set_config($1, true) — key=$1 ist tenant_id, local=true ist im SQL-Literal
+    // Das SQL muss 'true' als local-Flag enthalten (nicht 'false' = session-scoped)
+    expect(setConfigCall.params[0]).toBe(TENANT_UUID);
+    // N1-Fix: SQL muss set_config mit true (local) enthalten, nicht false (session-scoped)
+    expect(setConfigCall.sql).toContain('true');
+    expect(setConfigCall.sql).not.toMatch(/set_config\s*\(.*,\s*false\s*\)/i);
+  });
+
+  it('N1: gibt null zurück wenn kein Beleg mit dem SHA256 gefunden wird', async () => {
+    const pool = makePoolWithTxClient((sql: string) => {
+      if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
+      if (/set_config/i.test(sql)) return { rows: [] };
+      if (/FROM belege.*file_sha256/i.test(sql)) return { rows: [] };
+      return { rows: [] };
+    });
+
+    const { getBelegBySha256 } = await import(
+      '../../modules/m01-receipt-intake/services/beleg.repository'
+    );
+
+    const result = await getBelegBySha256(pool as unknown as Pool, TENANT_UUID, 'a'.repeat(64));
+    expect(result).toBeNull();
+  });
+
+  it('N1: gibt Beleg-Daten zurück wenn SHA256 gefunden', async () => {
+    const mockBeleg = makeMockBeleg();
+
+    const pool = makePoolWithTxClient((sql: string) => {
+      if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
+      if (/set_config/i.test(sql)) return { rows: [] };
+      if (/FROM belege.*file_sha256/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: mockBeleg.id,
+              file_object_key: mockBeleg.file_object_key,
+              status: mockBeleg.status,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const { getBelegBySha256 } = await import(
+      '../../modules/m01-receipt-intake/services/beleg.repository'
+    );
+
+    const result = await getBelegBySha256(pool as unknown as Pool, TENANT_UUID, 'a'.repeat(64));
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe(BELEG_UUID);
+    expect(result?.status).toBe('received');
   });
 });
 

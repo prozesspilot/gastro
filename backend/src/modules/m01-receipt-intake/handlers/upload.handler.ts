@@ -26,7 +26,8 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../../../core/config';
 import { uploadObject } from '../../../core/storage/storage.service';
-import { insertBeleg } from '../services/beleg.repository';
+import { tenantExists } from '../../tenants/tenant.repository';
+import { getBelegBySha256, insertBeleg } from '../services/beleg.repository';
 
 // ── Konstanten ─────────────────────────────────────────────────────────────
 
@@ -115,12 +116,20 @@ function sanitizeFilename(name: string): string {
  * B4: Löscht ein verwaistes MinIO-Objekt (Best-effort, Fehler werden geloggt).
  * Wird aufgerufen wenn DB-Insert nach MinIO-Upload fehlschlägt (z. B. Duplicate).
  */
-async function deleteOrphanedObject(s3: S3Client, bucket: string, key: string): Promise<void> {
+async function deleteOrphanedObject(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  logger: { warn: (obj: Record<string, unknown>, msg: string) => void },
+): Promise<void> {
   try {
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   } catch (err) {
     // Best-effort: bei Fehler nur loggen, nicht throwen
-    console.warn(`[m01] Orphaned MinIO object cleanup failed: ${key.substring(0, 40)}...`, err);
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err), keyPrefix: key.substring(0, 40) },
+      '[m01] Orphaned MinIO object cleanup failed',
+    );
   }
 }
 
@@ -134,6 +143,7 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
 
   if (!staff || !tenantId) {
     // Sollte nicht passieren wenn Hooks korrekt registriert — defensive Absicherung
+    // M10: tenantId ist optional im Type, daher Type-Guard hier statt Non-null-Assertion
     return reply.code(401).send({ error: 'unauthorized', message: 'Auth oder Tenant fehlt.' });
   }
 
@@ -147,11 +157,8 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
   }
 
   // M3: Tenant-Existenz prüfen VOR Multipart-Parse (spart Bandwidth bei ungültigem Tenant)
-  const tenantCheck = await req.server.db.query(
-    'SELECT 1 FROM tenants WHERE id = $1 AND deleted_at IS NULL',
-    [tenantId],
-  );
-  if (tenantCheck.rows.length === 0) {
+  // M11-Fix: Repository-Funktion statt direktem SQL im Handler
+  if (!(await tenantExists(req.server.db, tenantId))) {
     return reply.code(404).send({ error: 'tenant_not_found', message: 'Tenant nicht gefunden.' });
   }
 
@@ -205,20 +212,12 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
   const fileSha256 = createHash('sha256').update(fileBuffer).digest('hex');
 
   // B4: SHA256-First — Duplikat-Check VOR MinIO-Upload (verhindert verwaiste Objekte)
-  // DECISION: Wir prüfen direkt via pool.query (kein Tenant-Context nötig für SELECT mit
-  //   explizitem tenant_id=$1 — der RLS-Kontext wird im insertBeleg gesetzt).
-  //   Alternative wäre via getBelegBySha256, aber direkter Query ist einfacher.
-  const existingCheck = await req.server.db.query<{
-    id: string;
-    file_object_key: string;
-    status: string;
-  }>(
-    "SELECT set_config('app.tenant_id', $1, false), id, file_object_key, status FROM belege WHERE tenant_id = $1 AND file_sha256 = $2",
-    [tenantId, fileSha256],
-  );
+  // N1-Fix: getBelegBySha256 verwendet eigenen BEGIN/COMMIT-Block mit setTenantContext(local=true).
+  //   Vorher: set_config('app.tenant_id', $1, false) — session-scoped, vergiftet Connection im Pool.
+  //   Jetzt: korrekte Repository-Funktion mit RLS-Disziplin.
+  const existing = await getBelegBySha256(req.server.db, tenantId, fileSha256);
 
-  if (existingCheck.rows.length > 0) {
-    const existing = existingCheck.rows[0];
+  if (existing) {
     // M9: PII-sicher — kein vollständiger Storage-Key im Response
     return reply.code(200).send({
       beleg_id: existing.id,
@@ -288,7 +287,7 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
   } catch (err) {
     // B4: Race-Condition — paralleler Request hat denselben SHA256 eingetragen.
     //     MinIO-Objekt aufräumen (Best-effort).
-    await deleteOrphanedObject(s3Client, config.MINIO_BUCKET, storageKey);
+    await deleteOrphanedObject(s3Client, config.MINIO_BUCKET, storageKey, req.log);
     throw err; // Fastify-Error-Handler übernimmt
   }
 

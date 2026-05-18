@@ -11,6 +11,7 @@ import { requestLoggingPlugin } from './core/hooks/request-logging';
 import { logger } from './core/logger';
 import { httpRequestDuration, httpRequestsTotal, registry } from './core/metrics';
 import { captureException } from './core/sentry';
+import { createS3Client } from './core/storage/storage.service';
 import { startWorker as startWebhookWorker } from './core/webhooks/webhook.queue';
 import { internalCustomersRoutes } from './modules/_shared/customers/internal.routes';
 import { operatorNotificationsRoutes } from './modules/_shared/customers/notifications.routes';
@@ -44,21 +45,17 @@ import {
 } from './modules/m09-supplier-comm/routes';
 import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
-import { pluginSystemRoutes } from './modules/plugin-system/routes';
-import {
-  authProtectedRoutes,
-  authPublicRoutes,
-  usersRoutes,
-} from './modules/users/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
+import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
+import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
 import { reportRoutes } from './modules/reports/report.routes';
 import { routingPlanRoutes } from './modules/routing/plan.routes';
-import { createS3Client } from './core/storage/storage.service';
 import { routingRoutes } from './modules/routing/routing.routes';
 import { statsRoutes } from './modules/stats/routes';
 import { tenantRoutes } from './modules/tenants/tenant.routes';
+import { authProtectedRoutes, authPublicRoutes, usersRoutes } from './modules/users/routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
 import { sseRoutes } from './routes/sse';
@@ -181,6 +178,7 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // Registriert VOR dem HMAC-Block, damit /api/v1/auth/* nicht durch HMAC läuft.
   // M14 Discord-OAuth-Routes (Reboot): /api/v1/auth/discord/login + /callback
   await app.register(discordAuthRoutes, { prefix: '/api/v1' });
+  await app.register(emergencyLoginRoutes, { prefix: '/api/v1/auth' });
   await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
   await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
   await app.register(usersRoutes, { prefix: '/api/v1/users' });

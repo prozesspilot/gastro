@@ -20,6 +20,8 @@ import { config } from '../../core/config';
 
 // TTL für Discord-Login-JWTs: 24 Stunden
 const M14_DISCORD_JWT_TTL_SECONDS = 86_400;
+// TTL für Notfall-Login-JWTs: 4 Stunden (sicherheitskritisch, kürzer)
+const M14_EMERGENCY_JWT_TTL_SECONDS = 14_400;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,12 @@ export interface M14TokenPayload {
 export interface SignM14TokenInput {
   userId: string;
   discordId: string;
+  role: 'geschaeftsfuehrer' | 'mitarbeiter' | 'support';
+  displayName: string;
+}
+
+export interface SignM14EmergencyTokenInput {
+  userId: string;
   role: 'geschaeftsfuehrer' | 'mitarbeiter' | 'support';
   displayName: string;
 }
@@ -70,6 +78,24 @@ export function signM14Token(input: SignM14TokenInput): string {
     subject: input.userId,
     jwtid: randomUUID(),
     expiresIn: M14_DISCORD_JWT_TTL_SECONDS,
+  });
+}
+
+/**
+ * Signiert einen M14-Notfall-Login-JWT mit 4h TTL.
+ * Kein discord_id-Claim (kein Discord bei Notfall-Login).
+ */
+export function signM14EmergencyToken(input: SignM14EmergencyTokenInput): string {
+  const payload = {
+    role: input.role,
+    display_name: input.displayName,
+    login_method: 'emergency',
+  };
+  return jwt.sign(payload, getSecret(), {
+    algorithm: 'HS256',
+    subject: input.userId,
+    jwtid: randomUUID(),
+    expiresIn: M14_EMERGENCY_JWT_TTL_SECONDS,
   });
 }
 

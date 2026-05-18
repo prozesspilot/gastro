@@ -14,9 +14,12 @@ import { z } from 'zod';
 const uuidSchema = z.string().uuid();
 
 // Typerweiterung für req.tenantId
+// M10-Fix: optional (?) damit TypeScript korrekt ist — der Hook setzt den Wert oder
+// schickt 400 zurück. Nach dem Hook ist tenantId gesetzt, aber der Typ bleibt optional
+// damit Handler mit einem Type-Guard absichern können (statt ! Non-null-Assertion).
 declare module 'fastify' {
   interface FastifyRequest {
-    tenantId: string;
+    tenantId?: string;
   }
 }
 

@@ -79,7 +79,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const originalName = String(req.headers['x-original-filename'] ?? `upload-${Date.now()}.bin`);
-    const storageKey = buildStorageKey(req.tenantId, originalName);
+    const storageKey = buildStorageKey(req.tenantId!, originalName);
 
     // ── MinIO-Upload ────────────────────────────────────────────────────────
     try {
@@ -92,7 +92,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // ── DB-Eintrag ──────────────────────────────────────────────────────────
-    const document = await createDocument(app.db, req.tenantId, {
+    const document = await createDocument(app.db, req.tenantId!, {
       storage_key: storageKey,
       original_name: originalName,
       content_type: contentType,
@@ -102,7 +102,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
     // ── Event (best-effort) ─────────────────────────────────────────────────
     void publishEvent(app.redis, 'pp:documents', {
       type: 'document.received',
-      tenant_id: req.tenantId,
+      tenant_id: req.tenantId!,
       document_id: document.id,
       storage_key: storageKey,
       timestamp: new Date().toISOString(),
@@ -118,7 +118,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
     const page = Math.max(1, Number.parseInt(query.page ?? '1', 10));
     const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit ?? '20', 10)));
 
-    const { data, pagination } = await listDocuments(app.db, req.tenantId, {
+    const { data, pagination } = await listDocuments(app.db, req.tenantId!, {
       page,
       limit,
       status: query.status as never,
@@ -130,7 +130,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /documents/:id ────────────────────────────────────────────────────
 
   app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
-    const document = await findDocumentById(app.db, req.tenantId, req.params.id);
+    const document = await findDocumentById(app.db, req.tenantId!, req.params.id);
 
     if (!document) {
       return reply
@@ -144,7 +144,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /documents/:id/download-url ──────────────────────────────────────
 
   app.get<{ Params: { id: string } }>('/:id/download-url', async (req, reply) => {
-    const document = await findDocumentById(app.db, req.tenantId, req.params.id);
+    const document = await findDocumentById(app.db, req.tenantId!, req.params.id);
 
     if (!document) {
       return reply

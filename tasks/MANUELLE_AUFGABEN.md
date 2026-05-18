@@ -108,10 +108,11 @@
   2. Postgres 16 installieren + konfigurieren
   3. Redis 7 installieren
   4. MinIO (S3-kompatibel) installieren
-  5. Node.js 20 installieren
-  6. Docker / docker-compose installieren
-  7. SSH-Keys von Steve + Andreas hinterlegen
-  8. UFW / Firewall konfigurieren (nur 22/80/443 offen)
+  5. **MinIO-Bucket `prozesspilot-raw` anlegen** (für Beleg-Uploads, T006)
+  6. Node.js 20 installieren
+  7. Docker / docker-compose installieren
+  8. SSH-Keys von Steve + Andreas hinterlegen
+  9. UFW / Firewall konfigurieren (nur 22/80/443 offen)
 
 ### ⏳ GitHub-Secrets pflegen (alle Tasks mit ENV-Vars)
 - **Priorität:** P0 (vor Production-Deploy)

@@ -28,7 +28,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
   // ── GET /:customerId/profile ─────────────────────────────────────────
   app.get<{ Params: { customerId: string } }>('/:customerId/profile', async (req, reply) => {
-    const customer = await findCustomerById(app.db, req.tenantId, req.params.customerId);
+    const customer = await findCustomerById(app.db, req.tenantId!, req.params.customerId);
     if (!customer) {
       return reply
         .code(404)
@@ -45,7 +45,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(422).send(zodToApiError(parsed.error));
     }
 
-    const customer = await findCustomerById(app.db, req.tenantId, req.params.customerId);
+    const customer = await findCustomerById(app.db, req.tenantId!, req.params.customerId);
     if (!customer) {
       return reply
         .code(404)
@@ -60,7 +60,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { customerId: string }; Querystring: { limit?: string } }>(
     '/:customerId/profile/history',
     async (req, reply) => {
-      const customer = await findCustomerById(app.db, req.tenantId, req.params.customerId);
+      const customer = await findCustomerById(app.db, req.tenantId!, req.params.customerId);
       if (!customer) {
         return reply
           .code(404)
@@ -79,7 +79,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(422).send(zodToApiError(parsed.error));
     }
 
-    const customer = await findCustomerById(app.db, req.tenantId, req.params.customerId);
+    const customer = await findCustomerById(app.db, req.tenantId!, req.params.customerId);
     if (!customer) {
       return reply
         .code(404)

@@ -90,7 +90,7 @@ export function buildOcrHandler(deps: OcrHandlerDeps = {}) {
     }
     const receiptId = parsed.data.id;
     const db: Pool = req.server.db;
-    const tenantId = req.tenantId;
+    const tenantId = req.tenantId!;
 
     // 1) Receipt laden
     const receipt = await getReceipt(db, tenantId, receiptId);

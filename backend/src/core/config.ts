@@ -82,6 +82,12 @@ const envSchema = z.object({
   // OAuth-Redirects genutzt (z.B. SumUp-Callback → Webapp-Tenant-Seite).
   WEBAPP_URL: z.string().default('http://localhost:5173'),
 
+  // ── M01: Beleg-Upload ──────────────────────────────────────────────────
+  // Maximale Dateigröße beim Upload (Default 20 MB).
+  MAX_UPLOAD_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
+  // TTL für Presigned-Download-URLs in Sekunden (Default 15 Min).
+  SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+
   // ── M15: SumUp OAuth 2.0 ────────────────────────────────────────────────
   // SumUp Developer Portal → Apps → ProzessPilot POS-Connector
   // Setup: https://developer.sumup.com (App registrieren, Redirect-URI eintragen)

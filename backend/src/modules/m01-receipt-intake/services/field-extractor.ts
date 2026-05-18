@@ -149,7 +149,7 @@ export async function extract(
         for (const [k, v] of Object.entries(claude.fields)) {
           const key = k as keyof ExtractedFields;
           if (fields[key] === undefined && v !== undefined && v !== null) {
-              (fields as Record<keyof ExtractedFields, unknown>)[key] = v;
+            (fields as Record<keyof ExtractedFields, unknown>)[key] = v;
           }
         }
         sources.claude = true;

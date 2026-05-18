@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Redis from 'ioredis';
@@ -47,6 +48,7 @@ import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
+import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
@@ -66,10 +68,14 @@ declare module 'fastify' {
   interface FastifyInstance {
     db: Pool;
     redis: InstanceType<typeof Redis>;
+    // s3 wird via app.decorate('s3', createS3Client()) gesetzt (optional, da auch in m01 per deps injiziert)
+    s3?: import('@aws-sdk/client-s3').S3Client;
   }
   interface FastifyRequest {
     // Decision: startTime für HTTP-Metriken, gesetzt im onRequest-Hook
     startTime?: number;
+    // rawBody: Buffer für HMAC-Signaturberechnung
+    rawBody?: Buffer;
   }
 }
 
@@ -172,6 +178,13 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
     });
   }
 
+  // M01: Multipart-Plugin für Beleg-Upload (max 20 MB, konfigurierbar)
+  // DECISION: Registrierung VOR Cookie-Plugin und Auth-Routes, damit das Plugin
+  // global verfügbar ist. limits.fileSize ist der erste Schutzwall gegen zu große Dateien.
+  await app.register(multipart, {
+    limits: { fileSize: config.MAX_UPLOAD_SIZE_BYTES },
+  });
+
   // M14: Cookie-Plugin für Refresh-Token-Cookie (HttpOnly, Secure, SameSite)
   await app.register(cookie);
 
@@ -183,6 +196,9 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M15 SumUp-OAuth-Routes — VOR HMAC-Block (Callback ist öffentlicher Redirect-Endpoint)
   // /api/v1/m15/oauth/sumup/start, /api/v1/m15/oauth/sumup/callback, /api/v1/m15/sumup/disconnect/:tenantId
   await app.register(sumupOauthRoutes, { prefix: '/api/v1' });
+  // M01 Belege-Routes — VOR HMAC-Block (JWT-geschützt, nicht HMAC)
+  // /api/v1/belege/upload, /api/v1/belege, /api/v1/belege/:id
+  await app.register(belegeRoutes, { prefix: '/api/v1/belege' });
   await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
   await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
   await app.register(usersRoutes, { prefix: '/api/v1/users' });

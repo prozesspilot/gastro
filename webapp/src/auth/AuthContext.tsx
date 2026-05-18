@@ -67,9 +67,10 @@ function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
       : ['receipts.read', 'receipts.write', 'tasks.read', 'tasks.write'];
 
   // DECISION: M14-Cookie-User hat tenant_id null (systemweite Mitarbeiter-Session).
+  // B1: M14-Sessions haben keine Email im Frontend — display_name war fälschlich als email gesetzt.
   const dto: AuthUserDto = {
     id: sessionUser.id,
-    email: sessionUser.display_name,
+    email: '',
     display_name: sessionUser.display_name,
     tenant_id: null,
     permissions,
@@ -202,10 +203,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string, totpCode: string, backupCode?: string) => {
       await authApi.emergencyLogin(email, password, totpCode, backupCode);
       const sessionUser = await authApi.checkM14Session();
-      if (sessionUser) {
-        setUser(m14UserToAuthUser(sessionUser));
-        setAccessToken(null);
+      // M3: Session muss nach erfolgreichem Login verfügbar sein
+      if (!sessionUser) {
+        throw new Error('SESSION_LOAD_FAILED');
       }
+      setUser(m14UserToAuthUser(sessionUser));
+      setAccessToken(null);
     },
     [],
   );

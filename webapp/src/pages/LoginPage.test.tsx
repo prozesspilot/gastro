@@ -83,20 +83,18 @@ describe('LoginPage M14', () => {
   it('Notfall-Login-Submit → erfolgreicher Login → Redirect zu /', async () => {
     // Beginn: keine aktive Session (damit Login-Page nicht sofort redirectet)
     // Nach erfolgreichem POST: session gibt gültigen User zurück
-    let sessionCalled = 0;
+    // M1: State-Boolean statt fragilen Aufruf-Zähler
+    let loggedIn = false;
     server.use(
-      http.post('/api/v1/auth/notfall/login', () =>
-        HttpResponse.json({ ok: true, display_name: 'Steve', role: 'geschaeftsfuehrer', expires_in: 14400 }),
-      ),
-      http.get('/api/v1/auth/session', () => {
-        sessionCalled += 1;
-        // Erster Aufruf (beim Mount): keine Session → 401
-        // Zweite und folgende Aufrufe (nach Login): gültige Session
-        if (sessionCalled <= 1) {
-          return HttpResponse.json({ error: 'no_session', message: 'Nicht eingeloggt' }, { status: 401 });
-        }
-        return HttpResponse.json(makeM14Session());
+      http.post('/api/v1/auth/notfall/login', () => {
+        loggedIn = true;
+        return HttpResponse.json({ ok: true, display_name: 'Steve', role: 'geschaeftsfuehrer', expires_in: 14400 });
       }),
+      http.get('/api/v1/auth/session', () =>
+        loggedIn
+          ? HttpResponse.json(makeM14Session())
+          : HttpResponse.json({ error: 'no_session', message: 'Nicht eingeloggt' }, { status: 401 }),
+      ),
     );
 
     const user = userEvent.setup();
@@ -183,10 +181,12 @@ describe('LoginPage M14', () => {
   });
 
   it('Loading-State während Submit', async () => {
-    // Hängende Anfrage um Loading-State zu prüfen
+    // M1: Deterministisches Promise statt setTimeout(500)
+    let resolveRequest!: () => void;
+    const requestBlocker = new Promise<void>((r) => { resolveRequest = r; });
     server.use(
       http.post('/api/v1/auth/notfall/login', async () => {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await requestBlocker;
         return HttpResponse.json({ ok: true }, { status: 200 });
       }),
     );
@@ -197,14 +197,13 @@ describe('LoginPage M14', () => {
     await user.type(await screen.findByLabelText(/email/i), 'steve@prozesspilot.net');
     await user.type(screen.getByLabelText(/passwort/i), 'SecurePass123!');
     await user.type(screen.getByLabelText(/totp-code/i), '123456');
-
-    const submitBtn = screen.getByRole('button', { name: /notfall-anmeldung/i });
-    await user.click(submitBtn);
+    await user.click(screen.getByRole('button', { name: /notfall-anmeldung/i }));
 
     // Button zeigt Loading-Text
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /wird angemeldet/i })).toBeInTheDocument();
     });
+    resolveRequest(); // Request abschließen
   });
 
   it('Bereits eingeloggt (M14-Session) → Redirect zu /', async () => {

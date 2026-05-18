@@ -85,7 +85,8 @@ export default function UserMenu() {
         >
           <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{user.displayName}</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{user.email}</div>
+            {/* B1: M14-Sessions haben keine Email — Fallback auf displayName */}
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{user.email || user.displayName}</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
               {user.tenantId ? `Tenant: ${user.tenantId.slice(0, 8)}…` : 'super_admin'}
               {user.preset && ` · ${user.preset}`}

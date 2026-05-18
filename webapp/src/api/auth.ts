@@ -122,16 +122,22 @@ export async function emergencyLogin(
 /**
  * Prüft ob eine aktive M14-Cookie-Session besteht.
  * Gibt null zurück bei 401 (nicht eingeloggt), wirft nicht.
+ * B3: Netzwerkfehler werden abgefangen und als null zurückgegeben (Fallback-Refresh läuft dann).
  */
 export async function checkM14Session(): Promise<M14SessionUser | null> {
-  const res = await fetch(`${BASE}/session`, {
-    method: 'GET',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) return null;
-  const payload = await res.json() as { ok: boolean; user: M14SessionUser };
-  return payload.user ?? null;
+  try {
+    const res = await fetch(`${BASE}/session`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const payload = await res.json() as { ok: boolean; user: M14SessionUser };
+    return payload.user ?? null;
+  } catch {
+    // Netzwerkfehler → null zurückgeben, damit Fallback-Refresh läuft
+    return null;
+  }
 }
 
 export async function changePassword(

@@ -50,6 +50,7 @@ import {
   authPublicRoutes,
   usersRoutes,
 } from './modules/users/routes';
+import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
 import { reportRoutes } from './modules/reports/report.routes';
@@ -178,6 +179,8 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
 
   // M14: Auth-Routes — KEIN HMAC. JWT-geschützte Routes haben eigene Middleware.
   // Registriert VOR dem HMAC-Block, damit /api/v1/auth/* nicht durch HMAC läuft.
+  // M14 Discord-OAuth-Routes (Reboot): /api/v1/auth/discord/login + /callback
+  await app.register(discordAuthRoutes, { prefix: '/api/v1' });
   await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
   await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
   await app.register(usersRoutes, { prefix: '/api/v1/users' });

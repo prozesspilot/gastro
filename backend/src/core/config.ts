@@ -76,6 +76,24 @@ const envSchema = z.object({
   // Optional: einmalig zum Bootstrappen des ersten super_admin
   INITIAL_SUPER_ADMIN_EMAIL: z.string().default(''),
   INITIAL_SUPER_ADMIN_PASSWORD: z.string().default(''),
+
+  // ── M14: Discord OAuth 2.0 ──────────────────────────────────────────────
+  // Discord-App-Credentials (Developer Portal → OAuth2)
+  DISCORD_CLIENT_ID: z.string().default(''),
+  DISCORD_CLIENT_SECRET: z.string().default(''),
+  // Redirect-URI muss exakt mit Discord Developer Portal übereinstimmen.
+  DISCORD_REDIRECT_URI: z
+    .string()
+    .default('https://admin.prozesspilot.net/auth/discord/callback'),
+  // Guild-ID des ProzessPilot-Team-Servers (Discord-Server).
+  // Nur Mitglieder dieses Servers dürfen sich einloggen.
+  DISCORD_GUILD_ID: z.string().default(''),
+  // Bot-Token für Guild-Membership-Prüfung (GET /guilds/{id}/members/{userId}).
+  // Getrennt vom OAuth-Flow — Bot muss im Server mit "Server Members Intent" sein.
+  DISCORD_BOT_TOKEN: z.string().default(''),
+  // Discord-Rollen-ID für die Geschäftsführer-Rolle im Server.
+  // Mitglieder mit dieser Rolle erhalten die interne Rolle 'geschaeftsfuehrer'.
+  DISCORD_ROLE_ID_GF: z.string().default(''),
 });
 
 export type Config = z.infer<typeof envSchema>;
@@ -96,6 +114,21 @@ function loadConfig(): Config {
   if (cfg.NODE_ENV === 'production' && cfg.JWT_SECRET.length < 32) {
     console.error('FATAL: JWT_SECRET fehlt oder kürzer als 32 Zeichen (M14 Spec §7)');
     process.exit(1);
+  }
+  // M14 Discord-OAuth: Core-Credentials müssen in Production gesetzt sein.
+  if (cfg.NODE_ENV === 'production') {
+    if (!cfg.DISCORD_CLIENT_ID) {
+      console.error('FATAL: DISCORD_CLIENT_ID fehlt in Production');
+      process.exit(1);
+    }
+    if (!cfg.DISCORD_CLIENT_SECRET) {
+      console.error('FATAL: DISCORD_CLIENT_SECRET fehlt in Production');
+      process.exit(1);
+    }
+    if (!cfg.DISCORD_GUILD_ID) {
+      console.error('FATAL: DISCORD_GUILD_ID fehlt in Production');
+      process.exit(1);
+    }
   }
   return cfg;
 }

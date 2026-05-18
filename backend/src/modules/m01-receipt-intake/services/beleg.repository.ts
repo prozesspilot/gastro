@@ -6,16 +6,20 @@
  * RLS-Hinweis:
  *   Die belege-Tabelle hat FORCE ROW LEVEL SECURITY. Die Policy prüft
  *   `is_rls_bypassed() OR tenant_id = current_tenant_id()`.
- *   Vor jeder Query wird `set_config('app.tenant_id', tenantId, true)` gesetzt,
- *   damit current_tenant_id() den richtigen Wert zurückgibt.
- *   Der Parameter `true` (dritter Arg) bedeutet: lokal für die Transaktion.
  *
- * DECISION: Wir verwenden eine einzelne Connection aus dem Pool (nicht pool.query),
- *   um set_config + die eigentliche Query atomar in derselben Connection auszuführen.
- *   pool.query() könnte eine andere Connection aus dem Pool nehmen.
+ *   `set_config('app.tenant_id', id, true)` ist LOCAL — wirkt nur innerhalb
+ *   einer Transaktion (B2-Fix). Deshalb werden alle Funktionen mit einem
+ *   expliziten BEGIN/COMMIT-Block ausgeführt.
+ *
+ * DECISION: Wir verwenden pool.connect() + explizites BEGIN/COMMIT:
+ *   1. `set_config(..., true)` ohne TX würde in Auto-Commit sofort gelten und
+ *      beim nächsten Query-Cycle von derselben Connection bereits weg sein.
+ *   2. insertBeleg schreibt Audit-Log in derselben Tx (GoBD-Atomicity, B1).
  */
 
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { z } from 'zod';
+import { logAuditEvent } from '../../../core/audit/audit-log';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +39,10 @@ export type BelegStatus =
 
 export type SourceChannel = 'whatsapp' | 'email' | 'web_chat' | 'manual_upload' | 'api' | 'sumup';
 
+/**
+ * Vollständiges Beleg-Interface inkl. payload (nur im Detail-Endpoint zurückgeben).
+ * M8: payload-Feld nur hier, nicht im List-Interface.
+ */
 export interface DbBeleg {
   id: string;
   tenant_id: string;
@@ -56,16 +64,47 @@ export interface DbBeleg {
   updated_at: Date;
 }
 
-export interface InsertBelegInput {
-  tenantId: string;
-  sourceChannel: 'manual_upload';
-  fileObjectKey: string;
-  fileMimeType: string;
-  fileSizeBytes: number;
-  fileSha256: string;
-  uploadedByUserId: string;
-  originalFilename: string;
-}
+/**
+ * Listendarstellung ohne payload (M8: payload ist JSONB und kann groß sein —
+ * wird nur im Detail-Endpoint zurückgegeben).
+ */
+export type DbBelegListItem = Omit<DbBeleg, 'payload'>;
+
+/** Explizite Spalten für die List-Query (kein SELECT *) */
+const LIST_COLUMNS = [
+  'id',
+  'tenant_id',
+  'status',
+  'source_channel',
+  'source_external_id',
+  'received_at',
+  'file_object_key',
+  'file_mime_type',
+  'file_size_bytes',
+  'file_sha256',
+  'supplier_name',
+  'document_date',
+  'total_gross',
+  'currency',
+  'category',
+  'created_at',
+  'updated_at',
+].join(', ');
+
+// ── Zod-Schema für InsertBelegInput (M2) ──────────────────────────────────
+
+const InsertBelegInputSchema = z.object({
+  tenantId: z.string().uuid({ message: 'tenantId muss eine gültige UUID sein' }),
+  sourceChannel: z.literal('manual_upload'),
+  fileObjectKey: z.string().min(1),
+  fileMimeType: z.string().min(1),
+  fileSizeBytes: z.number().int().nonnegative(),
+  fileSha256: z.string().length(64),
+  uploadedByUserId: z.string().uuid({ message: 'uploadedByUserId muss eine gültige UUID sein' }),
+  originalFilename: z.string().min(1),
+});
+
+export type InsertBelegInput = z.infer<typeof InsertBelegInputSchema>;
 
 export interface ListBelegeOptions {
   limit: number;
@@ -73,24 +112,27 @@ export interface ListBelegeOptions {
   status?: BelegStatus;
 }
 
-// ── Repository-Funktionen ──────────────────────────────────────────────────
+// ── Interne Helpers ────────────────────────────────────────────────────────
 
 /**
  * Setzt den Tenant-Context für RLS auf der gegebenen Connection.
- * Muss vor jeder Query auf belege aufgerufen werden.
+ * Muss INNERHALB einer Transaktion (nach BEGIN) aufgerufen werden.
  */
-async function setTenantContext(
-  client: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
-  tenantId: string,
-): Promise<void> {
+async function setTenantContext(client: PoolClient, tenantId: string): Promise<void> {
   await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
 }
+
+// ── Repository-Funktionen ──────────────────────────────────────────────────
 
 /**
  * Legt einen neuen Beleg an.
  *
  * Idempotenz: Bei Conflict auf (tenant_id, file_sha256) wird die existierende
  * Row zurückgegeben + isDuplicate=true gesetzt.
+ *
+ * B1-Atomicity: Audit-Log wird in derselben Transaktion geschrieben.
+ * B2-Fix: Explizites BEGIN/COMMIT — set_config LOCAL braucht Transaktion.
+ * M2-Fix: Zod-Validierung der Input-UUIDs vor DB-Zugriff.
  *
  * DECISION: ON CONFLICT DO NOTHING + nachfolgendes SELECT statt DO UPDATE,
  * damit die originale Row erhalten bleibt und kein Update-Seiteneffekt entsteht.
@@ -99,17 +141,20 @@ export async function insertBeleg(
   pool: Pool,
   input: InsertBelegInput,
 ): Promise<{ beleg: DbBeleg; isDuplicate: boolean }> {
+  // M2: Zod-Validierung der Input-Daten
+  const parsed = InsertBelegInputSchema.parse(input);
+
   const client = await pool.connect();
   try {
-    // RLS-Context setzen
-    await setTenantContext(client, input.tenantId);
+    await client.query('BEGIN');
+    await setTenantContext(client, parsed.tenantId);
 
     const payload = {
       audit: {
-        uploaded_by_user_id: input.uploadedByUserId,
+        uploaded_by_user_id: parsed.uploadedByUserId,
       },
       meta: {
-        original_filename: input.originalFilename,
+        original_filename: parsed.originalFilename,
       },
     };
 
@@ -122,34 +167,61 @@ export async function insertBeleg(
        ON CONFLICT (tenant_id, file_sha256) DO NOTHING
        RETURNING *`,
       [
-        input.tenantId,
-        input.sourceChannel,
-        input.fileObjectKey,
-        input.fileMimeType,
-        input.fileSizeBytes,
-        input.fileSha256,
+        parsed.tenantId,
+        parsed.sourceChannel,
+        parsed.fileObjectKey,
+        parsed.fileMimeType,
+        parsed.fileSizeBytes,
+        parsed.fileSha256,
         JSON.stringify(payload),
       ],
     );
 
+    let beleg: DbBeleg;
+    let isDuplicate: boolean;
+
     if (insertResult.rows.length > 0) {
-      return { beleg: insertResult.rows[0], isDuplicate: false };
-    }
+      beleg = insertResult.rows[0];
+      isDuplicate = false;
 
-    // Conflict-Fall: existierende Row holen
-    const existingResult = await client.query<DbBeleg>(
-      'SELECT * FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
-      [input.tenantId, input.fileSha256],
-    );
-
-    if (existingResult.rows.length === 0) {
-      // Sollte nicht passieren — aber defensiv absichern
-      throw new Error(
-        `Beleg nicht gefunden nach ON CONFLICT: tenant=${input.tenantId}, sha256=${input.fileSha256}`,
+      // B1: Audit-Log in derselben Tx (GoBD-Atomicity)
+      await logAuditEvent(client, {
+        tenantId: parsed.tenantId,
+        entityType: 'beleg',
+        entityId: beleg.id,
+        eventType: 'beleg.uploaded',
+        actor: { type: 'staff', id: parsed.uploadedByUserId },
+        payloadAfter: {
+          source_channel: parsed.sourceChannel,
+          file_mime_type: parsed.fileMimeType,
+          file_size_bytes: parsed.fileSizeBytes,
+          original_filename: parsed.originalFilename,
+        },
+      });
+    } else {
+      // Conflict-Fall: existierende Row holen
+      const existingResult = await client.query<DbBeleg>(
+        'SELECT * FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
+        [parsed.tenantId, parsed.fileSha256],
       );
+
+      if (existingResult.rows.length === 0) {
+        // Sollte nicht passieren — aber defensiv absichern
+        throw new Error(
+          `Beleg nicht gefunden nach ON CONFLICT: tenant=${parsed.tenantId.substring(0, 8)}..., sha256=${parsed.fileSha256.substring(0, 16)}...`,
+        );
+      }
+
+      beleg = existingResult.rows[0];
+      isDuplicate = true;
+      // DECISION: Kein Audit-Log bei Duplikat-Upload — der ursprüngliche Eintrag bleibt unverändert.
     }
 
-    return { beleg: existingResult.rows[0], isDuplicate: true };
+    await client.query('COMMIT');
+    return { beleg, isDuplicate };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
   } finally {
     client.release();
   }
@@ -158,47 +230,44 @@ export async function insertBeleg(
 /**
  * Listet Belege paginiert, filterbar nach Status.
  * Sortierung: received_at DESC.
+ *
+ * M8: Verwendet Window-Function COUNT(*) OVER() statt separater COUNT-Query.
+ *     payload-Feld wird NICHT zurückgegeben (DbBelegListItem).
+ * B2-Fix: Explizites BEGIN/COMMIT.
  */
 export async function listBelege(
   pool: Pool,
   tenantId: string,
   opts: ListBelegeOptions,
-): Promise<{ belege: DbBeleg[]; total: number }> {
+): Promise<{ belege: DbBelegListItem[]; total: number }> {
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     await setTenantContext(client, tenantId);
 
-    const params: unknown[] = [tenantId, opts.limit, opts.offset];
-    let statusFilter = '';
-    if (opts.status) {
-      params.push(opts.status);
-      statusFilter = `AND status = $${params.length}`;
-    }
-
-    const listResult = await client.query<DbBeleg>(
-      `SELECT * FROM belege
-       WHERE tenant_id = $1 ${statusFilter}
+    // M8: Window-Function statt 2 Queries, explizite Spalten statt SELECT *
+    const result = await client.query<DbBelegListItem & { total_count: string }>(
+      `SELECT ${LIST_COLUMNS},
+              COUNT(*) OVER() AS total_count
+       FROM belege
+       WHERE tenant_id = $1
+         AND ($2::text IS NULL OR status = $2::text)
        ORDER BY received_at DESC
-       LIMIT $2 OFFSET $3`,
-      params,
+       LIMIT $3 OFFSET $4`,
+      [tenantId, opts.status ?? null, opts.limit, opts.offset],
     );
 
-    // Für total: separater COUNT mit gleichen Filterparametern
-    const countParams: unknown[] = [tenantId];
-    let countStatusFilter = '';
-    if (opts.status) {
-      countParams.push(opts.status);
-      countStatusFilter = `AND status = $${countParams.length}`;
-    }
+    await client.query('COMMIT');
 
-    const countResult = await client.query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM belege WHERE tenant_id = $1 ${countStatusFilter}`,
-      countParams,
-    );
+    const total = result.rows.length > 0 ? Number.parseInt(result.rows[0].total_count, 10) : 0;
 
-    const total = Number.parseInt(countResult.rows[0]?.count ?? '0', 10);
+    // total_count aus den Zeilen-Objekten entfernen bevor Return
+    const belege = result.rows.map(({ total_count: _tc, ...row }) => row as DbBelegListItem);
 
-    return { belege: listResult.rows, total };
+    return { belege, total };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
   } finally {
     client.release();
   }
@@ -207,6 +276,8 @@ export async function listBelege(
 /**
  * Holt einen einzelnen Beleg per ID + tenant_id.
  * Gibt null zurück wenn nicht vorhanden oder anderer Tenant (Tenant-Isolation).
+ *
+ * B2-Fix: Explizites BEGIN/COMMIT.
  */
 export async function getBelegById(
   pool: Pool,
@@ -215,6 +286,7 @@ export async function getBelegById(
 ): Promise<DbBeleg | null> {
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     await setTenantContext(client, tenantId);
 
     const result = await client.query<DbBeleg>(
@@ -222,7 +294,11 @@ export async function getBelegById(
       [id, tenantId],
     );
 
+    await client.query('COMMIT');
     return result.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
   } finally {
     client.release();
   }

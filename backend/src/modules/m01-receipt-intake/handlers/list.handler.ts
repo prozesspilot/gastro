@@ -5,11 +5,14 @@
  *
  * Liefert eine paginierte Liste von Belegen für den angegebenen Tenant.
  * Sortierung: received_at DESC.
+ *
+ * M7: Auth + Tenant-Context werden von Hooks in belege.routes.ts gesetzt.
+ *   req.m14Staff und req.tenantId sind hier bereits verfügbar.
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { getM14Staff } from '../../../core/auth/m14-staff-auth';
+import type { M14Staff } from '../../../core/auth/m14-staff-auth';
 import { type BelegStatus, listBelege } from '../services/beleg.repository';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
@@ -35,33 +38,19 @@ const ListQuerySchema = z.object({
   status: BelegStatusEnum.optional(),
 });
 
-const TenantHeaderSchema = z.object({
-  'x-pp-tenant-id': z.string().uuid({ message: 'X-PP-Tenant-ID muss eine gültige UUID sein' }),
-});
-
 // ── Handler ────────────────────────────────────────────────────────────────
 
 export async function listHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  // 1. Auth-Check
-  const staff = getM14Staff(req);
-  if (!staff) {
-    return reply.code(401).send({
-      error: 'unauthorized',
-      message: 'M14-JWT-Authentifizierung erforderlich.',
-    });
+  // M7: tenantId von m14TenantContextHook gesetzt; staff von m14StaffAuthHook gesetzt.
+  // Beide Hooks laufen als preHandler in belege.routes.ts — hier immer vorhanden.
+  // DECISION: Defensive Check statt Non-Null-Assertion — gibt 401 wenn Hook nicht gelaufen.
+  const tenantId = req.tenantId;
+  if (!tenantId) {
+    return reply.code(401).send({ error: 'unauthorized', message: 'Tenant-Context fehlt.' });
   }
+  const _staff = (req as FastifyRequest & { m14Staff?: M14Staff }).m14Staff;
 
-  // 2. Tenant-Context
-  const headerParse = TenantHeaderSchema.safeParse(req.headers);
-  if (!headerParse.success) {
-    return reply.code(400).send({
-      error: 'missing_tenant',
-      message: 'X-PP-Tenant-ID Header fehlt oder ist keine gültige UUID.',
-    });
-  }
-  const tenantId = headerParse.data['x-pp-tenant-id'];
-
-  // 3. Query-Params validieren
+  // Query-Params validieren
   const queryParse = ListQuerySchema.safeParse(req.query);
   if (!queryParse.success) {
     return reply.code(400).send({
@@ -73,7 +62,7 @@ export async function listHandler(req: FastifyRequest, reply: FastifyReply): Pro
   const { page, page_size, status } = queryParse.data;
   const offset = (page - 1) * page_size;
 
-  // 4. Belege aus DB holen
+  // Belege aus DB holen (M8: Window-Function, kein payload im List-Result)
   const { belege, total } = await listBelege(req.server.db, tenantId, {
     limit: page_size,
     offset,

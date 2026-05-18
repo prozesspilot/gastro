@@ -19,6 +19,10 @@ export interface PasswordValidation {
 /**
  * Prüft Passwort-Stärke gemäß M14-Spec §5.1.
  * Mindestens 16 Zeichen + 1 Groß + 1 Klein + 1 Ziffer + 1 Sonderzeichen.
+ *
+ * M14 §5.1: strikter als core/auth/password.ts (16 statt 12 Zeichen) wegen
+ * Notfall-Login-Sensitivität — der Notfall-Login ist der einzige Non-Discord-Zugang
+ * zum System und muss daher besonders hohe Passwort-Anforderungen stellen.
  */
 export function validatePassword(pw: string): PasswordValidation {
   if (pw.length < MIN_PASSWORD_LENGTH) {

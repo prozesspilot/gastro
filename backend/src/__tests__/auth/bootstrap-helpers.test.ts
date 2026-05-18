@@ -62,6 +62,21 @@ describe('validatePassword', () => {
       expect(validatePassword(pw).ok).toBe(true);
     }
   });
+
+  it('akzeptiert Passwort mit exakt 16 Zeichen (alle Anforderungen erfüllt)', () => {
+    // M14 §5.1: 16 Zeichen = Minimum, muss ok:true zurückgeben
+    // 'A1!aaaaaaaaaaaaa' = 1 Groß (A) + 1 Zahl (1) + 1 Sonderzeichen (!) + 13 Klein = 16 Zeichen
+    const result = validatePassword('A1!aaaaaaaaaaaaa');
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it('lehnt Passwort mit exakt 15 Zeichen ab', () => {
+    // 'A1!aaaaaaaaaaaa' = 15 Zeichen — gerade unter dem Minimum
+    const result = validatePassword('A1!aaaaaaaaaaaa');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('16');
+  });
 });
 
 // ── generateBackupCode ────────────────────────────────────────────────────────
@@ -88,13 +103,23 @@ describe('generateBackupCode', () => {
     }
   });
 
-  it('generiert eindeutige Codes (statistisch)', () => {
+  it('generiert eindeutige Codes (statistisch, n=100)', () => {
     const codes = new Set<string>();
     for (let i = 0; i < 100; i++) {
       codes.add(generateBackupCode());
     }
     // Bei ~60 Bit Entropie ist eine Kollision in 100 Codes praktisch unmöglich
     expect(codes.size).toBe(100);
+  });
+
+  it('generiert eindeutige Codes auch bei n=10000', () => {
+    const codes = new Set<string>();
+    for (let i = 0; i < 10000; i++) {
+      codes.add(generateBackupCode());
+    }
+    // ~60 Bit Entropie: Geburtstags-Paradoxon erst bei ~2^30 Codes relevant
+    // 10000 Codes sollten mit nahezu 100% Wahrscheinlichkeit eindeutig sein
+    expect(codes.size).toBe(10000);
   });
 });
 

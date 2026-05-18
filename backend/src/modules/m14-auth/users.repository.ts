@@ -289,19 +289,30 @@ export async function logAuthEvent(pool: Pool, input: LogAuthEventInput): Promis
 /**
  * Sucht einen User anhand seiner emergency_email (CITEXT → case-insensitive).
  * Gibt die emergency-Login-Felder zurück. null wenn nicht gefunden.
+ *
+ * DECISION: emergency_totp_secret wird via pgp_sym_decrypt entschlüsselt (Migration 021).
+ * Falls PP_PGCRYPTO_KEY nicht gesetzt ist (Dev/Test ohne Verschlüsselung), wird NULL
+ * zurückgegeben — TOTP funktioniert dann nicht, aber der Login schlägt kontrolliert fehl
+ * statt mit einem kryptischen Fehler.
  */
 export async function getUserByEmergencyEmail(
   pool: Pool,
   email: string,
 ): Promise<DbEmergencyUser | null> {
+  const pgcryptoKey = config.PP_PGCRYPTO_KEY ?? '';
   const result = await pool.query(
     `SELECT
        id, display_name, role, active,
        emergency_email, emergency_password_hash,
-       emergency_totp_secret, emergency_backup_codes
+       CASE
+         WHEN emergency_totp_secret IS NULL THEN NULL
+         WHEN length($2::text) = 0 THEN NULL
+         ELSE pgp_sym_decrypt(emergency_totp_secret, $2::text)
+       END AS emergency_totp_secret,
+       emergency_backup_codes
      FROM users
      WHERE emergency_email = $1`,
-    [email],
+    [email, pgcryptoKey],
   );
   if (result.rows.length === 0) return null;
   return rowToDbEmergencyUser(result.rows[0]);

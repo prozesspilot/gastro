@@ -23,23 +23,24 @@
  * SECURITY:
  *   - Klartext-Passwort wird NIE geloggt oder gespeichert (nur Argon2id-Hash)
  *   - Backup-Codes werden EINMAL im Terminal angezeigt — danach nur Hashes in DB
- *   - TOTP-Secret wird in DB gespeichert (Base32) — für Notfall-Recovery via DB-Dump
+ *   - TOTP-Secret wird verschlüsselt (pgp_sym_encrypt) in DB gespeichert (Migration 021)
+ *
+ * DESIGN: Prompts erfolgen ZUERST (außerhalb der DB-Transaktion), dann öffnet
+ * runBootstrap() eine Tx mit LOCK TABLE users. Damit blockiert User-Eingabe keine
+ * DB-Verbindungen.
  */
 
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import * as argon2 from 'argon2';
-import * as OTPAuth from 'otpauth';
 import { Pool } from 'pg';
 import qrcode from 'qrcode-terminal';
 import { config } from '../src/core/config';
 import {
-  BACKUP_CODE_COUNT,
   EMAIL_REGEX,
   MIN_PASSWORD_LENGTH,
-  generateBackupCode,
   validatePassword,
 } from '../src/modules/m14-auth/bootstrap-helpers';
+import { runBootstrap } from '../src/modules/m14-auth/bootstrap.service';
 
 // ── Prompt-Helfer ───────────────────────────────────────────────────────────
 
@@ -86,15 +87,6 @@ async function promptSilent(question: string): Promise<string> {
   }
 }
 
-// ── Argon2id-Optionen (synchron mit DUMMY_HASH in emergency-login.service.ts) ─
-
-const ARGON2_OPTIONS = {
-  type: argon2.argon2id,
-  memoryCost: config.ARGON2_MEMORY_COST,
-  timeCost: config.ARGON2_TIME_COST,
-  parallelism: config.ARGON2_PARALLELISM,
-} as const;
-
 // ── Haupt-Flow ──────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -104,42 +96,25 @@ async function main(): Promise<void> {
   console.log('║ ProzessPilot Bootstrap-Admin — erster Geschäftsführer-Account    ║');
   console.log('╚══════════════════════════════════════════════════════════════════╝\n');
 
+  // ── Warnung wenn PP_PGCRYPTO_KEY fehlt ──────────────────────────────────────
+  if (!config.PP_PGCRYPTO_KEY) {
+    console.warn(
+      '⚠ PP_PGCRYPTO_KEY nicht gesetzt — TOTP-Secret wird NICHT verschlüsselt gespeichert.',
+    );
+    console.warn('  Nur OK in Dev/Test. In Production MUSS der Key gesetzt sein.\n');
+  }
+
   const pool = new Pool({ connectionString: config.DATABASE_URL });
 
-  // ── 1. Idempotenz-Check ──────────────────────────────────────────────────
-  const countResult = await pool.query('SELECT count(*)::int AS n FROM users');
-  const userCount = countResult.rows[0].n as number;
-
-  if (userCount > 0 && !forceFlag) {
-    console.error(`✗ Es existieren bereits ${userCount} User in der DB.`);
-    console.error(
-      '  Nutze --force um trotzdem fortzufahren (z.B. zweiten Geschäftsführer anlegen).',
-    );
-    await pool.end();
-    process.exit(1);
-  }
-
-  if (forceFlag && userCount > 0) {
-    console.log(`ℹ ${userCount} User bereits vorhanden — --force aktiv, lege zusätzlich an.\n`);
-  }
-
-  // ── 2. Interaktive Eingaben ──────────────────────────────────────────────
+  // ── 1. Interaktive Eingaben (ZUERST — außerhalb der DB-Transaktion) ─────────
+  // DESIGN: Prompts außerhalb der Tx, damit User-Eingabe keine DB-Verbindung blockiert.
+  // Die eigentliche Tx (mit LOCK TABLE) öffnet runBootstrap() erst nach Eingabe aller Daten.
   const discordUsername = await prompt('Discord-Username (optional, z.B. stevebernhardt): ', true);
   const displayName = await prompt('Display-Name (z.B. Steve Bernhardt): ');
   const emergencyEmail = await prompt('Notfall-Email: ');
 
   if (!EMAIL_REGEX.test(emergencyEmail)) {
     console.error('  ✗ Ungültiges Email-Format.');
-    await pool.end();
-    process.exit(2);
-  }
-
-  // Email-Duplikat-Check (CITEXT in DB → case-insensitive)
-  const existingEmail = await pool.query('SELECT id FROM users WHERE emergency_email = $1', [
-    emergencyEmail,
-  ]);
-  if (existingEmail.rows.length > 0) {
-    console.error(`  ✗ Email "${emergencyEmail}" ist bereits einem User zugeordnet.`);
     await pool.end();
     process.exit(2);
   }
@@ -161,57 +136,30 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  console.log('\n→ Generiere TOTP-Secret + Backup-Codes…');
+  console.log('\n→ Generiere TOTP-Secret + Backup-Codes, schreibe in DB…');
 
-  // ── 3. TOTP-Secret + URL generieren ──────────────────────────────────────
-  const totpSecret = new OTPAuth.Secret({ size: 20 });
-  const totp = new OTPAuth.TOTP({
-    issuer: 'ProzessPilot',
-    label: emergencyEmail,
-    algorithm: 'SHA1',
-    digits: 6,
-    period: 30,
-    secret: totpSecret,
-  });
-  const totpUrl = totp.toString();
-
-  // ── 4. Backup-Codes generieren + hashen ──────────────────────────────────
-  const plainBackupCodes = Array.from({ length: BACKUP_CODE_COUNT }, generateBackupCode);
-  const hashedBackupCodes = await Promise.all(
-    plainBackupCodes.map(async (code) => ({
-      hash: await argon2.hash(code, ARGON2_OPTIONS),
-      used: false,
-    })),
-  );
-
-  // ── 5. Passwort hashen ──────────────────────────────────────────────────
-  const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
-
-  // ── 6. INSERT ───────────────────────────────────────────────────────────
-  const insertResult = await pool.query(
-    `INSERT INTO users (
-       discord_username, display_name, role,
-       emergency_email, emergency_password_hash, emergency_totp_secret, emergency_backup_codes,
-       active
-     ) VALUES ($1, $2, 'geschaeftsfuehrer', $3, $4, $5, $6::jsonb, true)
-     RETURNING id, created_at`,
-    [
-      discordUsername || null,
+  // ── 2. Bootstrap ausführen (Tx + Lock + INSERT + Audit-Log) ─────────────────
+  let result: Awaited<ReturnType<typeof runBootstrap>>;
+  try {
+    result = await runBootstrap(pool, {
+      discordUsername: discordUsername || null,
       displayName,
       emergencyEmail,
-      passwordHash,
-      totpSecret.base32,
-      JSON.stringify(hashedBackupCodes),
-    ],
-  );
+      password,
+      force: forceFlag,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`\n✗ Bootstrap fehlgeschlagen: ${message}`);
+    await pool.end();
+    process.exit(1);
+  }
 
-  const newUserId = insertResult.rows[0].id as string;
-
-  // ── 7. Output: QR-Code + Backup-Codes ────────────────────────────────────
+  // ── 3. Output: QR-Code + Backup-Codes ────────────────────────────────────────
   console.log('\n╔══════════════════════════════════════════════════════════════════╗');
   console.log('║ ✓ Geschäftsführer-Account angelegt                               ║');
   console.log('╚══════════════════════════════════════════════════════════════════╝');
-  console.log(`User-ID:           ${newUserId}`);
+  console.log(`User-ID:           ${result.userId}`);
   console.log(`Display-Name:      ${displayName}`);
   console.log(`Notfall-Email:     ${emergencyEmail}`);
   console.log(`Discord-Username:  ${discordUsername || '(nicht gesetzt)'}`);
@@ -219,15 +167,15 @@ async function main(): Promise<void> {
 
   console.log('\n── TOTP-Setup ─────────────────────────────────────────────────────');
   console.log('Scanne diesen QR-Code mit deiner Authenticator-App (z.B. 1Password, Authy):\n');
-  qrcode.generate(totpUrl, { small: true });
+  qrcode.generate(result.totpUrl, { small: true });
   console.log('\nFalls QR nicht funktioniert — manuell eingeben:');
-  console.log(`  Secret (Base32): ${totpSecret.base32}`);
-  console.log(`  URL:             ${totpUrl}\n`);
+  console.log(`  Secret (Base32): ${result.totpSecret}`);
+  console.log(`  URL:             ${result.totpUrl}\n`);
 
   console.log('── Backup-Codes ───────────────────────────────────────────────────');
   console.log('Diese Codes werden NUR JETZT angezeigt — speichere sie in 1Password!');
   console.log('Jeder Code ist einmal verwendbar als Ersatz für den TOTP-Code.\n');
-  plainBackupCodes.forEach((code, i) => {
+  result.backupCodes.forEach((code, i) => {
     console.log(`  ${(i + 1).toString().padStart(2, ' ')}.  ${code}`);
   });
 

@@ -27,7 +27,7 @@ import {
   fetchDiscordUser,
   mapDiscordRoleToInternalRole,
 } from './discord.service';
-import { signM14Token } from './m14-jwt';
+import { extractJtiUnsafe, signM14Token } from './m14-jwt';
 import { createAuthSession, logAuthEvent, upsertDiscordUser } from './users.repository';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ export async function discordAuthRoutes(app: FastifyInstance): Promise<void> {
 
     const authUrl = buildDiscordAuthUrl(state);
 
-    return reply.redirect(302, authUrl);
+    return reply.redirect(authUrl, 302);
   });
 
   /**
@@ -143,16 +143,17 @@ export async function discordAuthRoutes(app: FastifyInstance): Promise<void> {
 
       // ── 3. CSRF-State validieren ──────────────────────────────────────
       const stateKey = `${STATE_KEY_PREFIX}${query.state}`;
-      const stateValue = await app.redis.get(stateKey);
+      // DECISION (MAJOR 4): Atomares GETDEL statt GET + DEL.
+      // Verhindert Race-Condition bei parallelen Requests mit demselben State-Token:
+      // Zwei gleichzeitige Callbacks würden bei GET+DEL beide ein Ergebnis lesen,
+      // aber nur einer löscht danach. GETDEL ist atomar — der zweite Request bekommt null.
+      const stateValue = await app.redis.getdel(stateKey);
       if (!stateValue) {
         return reply.code(400).send({
           error: 'invalid_state',
           message: 'State ungültig oder abgelaufen. Bitte erneut einloggen.',
         });
       }
-
-      // State aus Redis löschen (einmalig-use — verhindert Replay-Angriffe)
-      await app.redis.del(stateKey);
 
       // ── 4. Code gegen Tokens tauschen ────────────────────────────────
       let tokens: Awaited<ReturnType<typeof exchangeCodeForTokens>>;
@@ -263,7 +264,7 @@ export async function discordAuthRoutes(app: FastifyInstance): Promise<void> {
       // JTI aus Token extrahieren (für Session-Tracking)
       // DECISION: Wir dekodieren den Token um JTI zu lesen, statt ihn separat zu generieren.
       // signM14Token gibt den signierten Token zurück, und jwt.decode() ist safe (keine Verifikation nötig).
-      const { extractJtiUnsafe } = await import('./m14-jwt');
+      // extractJtiUnsafe ist statisch importiert (kein dynamischer Import im Hot-Path).
       const jti = extractJtiUnsafe(jwtToken) ?? `session-${Date.now()}`;
 
       // ── 11. Auth-Session anlegen ──────────────────────────────────────
@@ -305,7 +306,7 @@ export async function discordAuthRoutes(app: FastifyInstance): Promise<void> {
       const redirectTarget =
         query.redirect && isSafeRedirect(query.redirect) ? query.redirect : '/';
 
-      return reply.redirect(302, redirectTarget);
+      return reply.redirect(redirectTarget, 302);
     },
   );
 }

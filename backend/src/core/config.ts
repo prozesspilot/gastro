@@ -82,9 +82,7 @@ const envSchema = z.object({
   DISCORD_CLIENT_ID: z.string().default(''),
   DISCORD_CLIENT_SECRET: z.string().default(''),
   // Redirect-URI muss exakt mit Discord Developer Portal übereinstimmen.
-  DISCORD_REDIRECT_URI: z
-    .string()
-    .default('https://admin.prozesspilot.net/auth/discord/callback'),
+  DISCORD_REDIRECT_URI: z.string().default('https://admin.prozesspilot.net/auth/discord/callback'),
   // Guild-ID des ProzessPilot-Team-Servers (Discord-Server).
   // Nur Mitglieder dieses Servers dürfen sich einloggen.
   DISCORD_GUILD_ID: z.string().default(''),
@@ -128,6 +126,17 @@ function loadConfig(): Config {
     if (!cfg.DISCORD_GUILD_ID) {
       console.error('FATAL: DISCORD_GUILD_ID fehlt in Production');
       process.exit(1);
+    }
+    if (!cfg.DISCORD_BOT_TOKEN) {
+      console.error(
+        'FATAL: DISCORD_BOT_TOKEN fehlt in Production (M14: Guild-Check nicht möglich)',
+      );
+      process.exit(1);
+    }
+    if (!cfg.DISCORD_ROLE_ID_GF) {
+      console.warn(
+        'WARNUNG: DISCORD_ROLE_ID_GF nicht gesetzt — alle Guild-Mitglieder bekommen Rolle "mitarbeiter". Manuell in DB korrigieren.',
+      );
     }
   }
   return cfg;

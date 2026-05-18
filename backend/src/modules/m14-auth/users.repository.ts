@@ -16,6 +16,7 @@
 
 import type { Pool } from 'pg';
 import { config } from '../../core/config';
+import { captureException } from '../../core/sentry';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,24 +62,6 @@ export interface LogAuthEventInput {
   ipAddress: string | null;
   userAgent: string | null;
   metadata?: Record<string, unknown>;
-}
-
-// ── Hilfsfunktionen ────────────────────────────────────────────────────────
-
-/**
- * Verschlüsselt einen Token-String mit pgcrypto.
- * Gibt den SQL-Fragment und Parameter zurück, die direkt in eine Query eingebaut werden.
- *
- * DECISION: Wenn PP_PGCRYPTO_KEY leer ist (Test/Dev ohne pgcrypto-Setup),
- * wird ein leeres BYTEA gespeichert. Tokens sind damit nicht wiederherstellbar,
- * aber der DB-Insert schlägt nicht fehl.
- */
-function encryptTokenSql(paramIndex: number, keyParamIndex: number): string {
-  if (!config.PP_PGCRYPTO_KEY) {
-    // Kein Encryption-Key → leeres BYTEA (nur Dev/Test)
-    return "''::bytea";
-  }
-  return `pgp_sym_encrypt($${paramIndex}::text, $${keyParamIndex}::text)`;
 }
 
 // ── Repository-Funktionen ──────────────────────────────────────────────────
@@ -248,19 +231,27 @@ export async function createAuthSession(pool: Pool, input: CreateAuthSessionInpu
 /**
  * Schreibt ein Auth-Audit-Log-Event (Append-Only durch DB-Trigger gesichert).
  *
- * DECISION: Diese Funktion nutzt den normalen Pool ohne RLS-Bypass.
- * Die auth_audit_log-Tabelle hat eine Insert-Policy: `WITH CHECK (is_rls_bypassed())`.
- * Im Dev/Test-Setup läuft der App-User als Owner → bypass greift.
- * In Production muss der DB-User die Bypass-Funktion aufrufen dürfen.
+ * DECISION (Blocker 1 — Option B SECURITY DEFINER):
+ *   auth_audit_log hat RLS INSERT-Policy `WITH CHECK (is_rls_bypassed())`.
+ *   is_rls_bypassed() gibt nur dann true zurück, wenn die DB-Rolle 'gastro_owner'
+ *   ist — der App-User (gastro_app) erfüllt das nicht. Statt einer separaten
+ *   Owner-Connection (Option A, erfordert GRANT gastro_owner TO gastro_app,
+ *   was zu weit reichende Privilegien vergeben würde) rufen wir die
+ *   SECURITY DEFINER Funktion `insert_auth_audit_log` auf (Migration 061).
+ *   Diese läuft mit Rechten des Definers (gastro_owner) und umgeht so die RLS-Policy
+ *   ohne dem App-User dauerhafte Owner-Rechte zu geben.
  *
  * Wirft keinen Fehler wenn der Insert fehlschlägt (fire-and-forget via try/catch),
  * damit ein Audit-Log-Fehler den Login-Flow nicht abbricht.
+ * Bei echten unerwarteten Fehlern wird Sentry alarmiert.
  */
 export async function logAuthEvent(pool: Pool, input: LogAuthEventInput): Promise<void> {
   try {
+    // DECISION: SELECT insert_auth_audit_log(...) statt direktem INSERT,
+    // weil die SECURITY DEFINER Funktion (Migration 061) die RLS-Policy bypassen darf,
+    // der App-User (gastro_app) aber nicht.
     await pool.query(
-      `INSERT INTO auth_audit_log (user_id, event_type, ip_address, user_agent, metadata)
-       VALUES ($1::uuid, $2, $3::inet, $4, $5::jsonb)`,
+      'SELECT insert_auth_audit_log($1::uuid, $2::text, $3::text, $4::text, $5::jsonb)',
       [
         input.userId,
         input.eventType,
@@ -272,10 +263,9 @@ export async function logAuthEvent(pool: Pool, input: LogAuthEventInput): Promis
   } catch (err) {
     // DECISION: Audit-Log-Fehler unterdrücken (fire-and-forget).
     // Lieber ein fehlender Log als ein abgebrochener Login.
-    // In Production: Sentry-Alert würde diesen Fehler melden.
+    // Sentry alarmieren damit Production-Fehler nicht lautlos verschwinden.
+    captureException(err, { module: 'm14-auth', function: 'logAuthEvent' });
     const message = err instanceof Error ? err.message : String(err);
-    // Kein Logger-Zugriff hier — Modul ist Logger-unabhängig.
-    // biome-ignore lint/suspicious/noConsole: Fallback-Logging ohne Logger-Dependency
     console.error(`[m14-auth] auth_audit_log Insert fehlgeschlagen: ${message}`);
   }
 }
@@ -299,6 +289,3 @@ function rowToDbUser(row: Record<string, any>): DbUser {
     preferences: (row.preferences as Record<string, unknown>) ?? {},
   };
 }
-
-// Verhindert unused-import-Warning für encryptTokenSql in Tests
-void (encryptTokenSql as unknown);

@@ -20,7 +20,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { AuthUserDto } from '../api/auth';
+import type { AuthUserDto, M14SessionUser } from '../api/auth';
 import * as authApi from '../api/auth';
 import { setAuthHooks, setActiveTenantId } from '../api/_client';
 import { matchPermission } from './permissions';
@@ -30,6 +30,8 @@ export interface AuthUser extends AuthUserDto {
   // alias for display (legacy code)
   displayName: string;
   tenantId: string | null;
+  // M14: optional role field for Discord/emergency logins
+  role?: string;
 }
 
 interface AuthContextValue {
@@ -37,6 +39,7 @@ interface AuthContextValue {
   accessToken: string | null;
   isLoading: boolean;
   loginWithPassword: (email: string, password: string) => Promise<void>;
+  loginWithEmergency: (email: string, password: string, totpCode: string, backupCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshNow: () => Promise<string | null>;
   hasPermission: (perm: string) => boolean;
@@ -50,6 +53,38 @@ function toAuthUser(dto: AuthUserDto): AuthUser {
     ...dto,
     displayName: dto.display_name,
     tenantId: dto.tenant_id,
+  };
+}
+
+/**
+ * Mappt einen M14-Session-User (Cookie-basiert) auf AuthUser.
+ * permissions aus Rolle ableiten: geschaeftsfuehrer → ['*'], andere → Standard-Set.
+ */
+function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
+  const permissions: string[] =
+    sessionUser.role === 'geschaeftsfuehrer'
+      ? ['*']
+      : ['receipts.read', 'receipts.write', 'tasks.read', 'tasks.write'];
+
+  // DECISION: M14-Cookie-User hat tenant_id null (systemweite Mitarbeiter-Session).
+  // B1: M14-Sessions haben keine Email im Frontend — display_name war fälschlich als email gesetzt.
+  const dto: AuthUserDto = {
+    id: sessionUser.id,
+    email: '',
+    display_name: sessionUser.display_name,
+    tenant_id: null,
+    permissions,
+    preset: null,
+    is_active: true,
+    password_must_change: false,
+    last_login_at: null,
+    created_at: new Date().toISOString(),
+  };
+  return {
+    ...dto,
+    displayName: sessionUser.display_name,
+    tenantId: null,
+    role: sessionUser.role,
   };
 }
 
@@ -104,16 +139,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [refreshNow, clearSession]);
 
-  // Beim Mount: Refresh-Cookie ausprobieren → Session wiederherstellen.
+  // Beim Mount: ZUERST M14-Cookie-Session prüfen (Discord/Notfall-Login),
+  // dann als Fallback alten Refresh-Token-Flow versuchen.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
+        // M14: Cookie-basierte Session (Discord-OAuth oder Notfall-Login)
+        const m14Session = await authApi.checkM14Session();
+        if (cancelled) return;
+        if (m14Session) {
+          setUser(m14UserToAuthUser(m14Session));
+          // M14-Sessions haben keinen access_token (Cookie-only)
+          setAccessToken(null);
+          return;
+        }
+        // Fallback: alter Refresh-Token-Flow (Bearer-basiert)
         const res = await authApi.refresh();
         if (cancelled) return;
         applySession(res.access_token, res.user);
       } catch {
-        // Kein gültiger Refresh-Token → nicht eingeloggt.
+        // Kein gültiger Session-Cookie und kein Refresh-Token → nicht eingeloggt.
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -150,6 +196,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applySession],
   );
 
+  /**
+   * Notfall-Login: ruft emergencyLogin auf (setzt Cookie), dann checkM14Session um User zu laden.
+   */
+  const loginWithEmergency = useCallback(
+    async (email: string, password: string, totpCode: string, backupCode?: string) => {
+      await authApi.emergencyLogin(email, password, totpCode, backupCode);
+      const sessionUser = await authApi.checkM14Session();
+      // M3: Session muss nach erfolgreichem Login verfügbar sein
+      if (!sessionUser) {
+        throw new Error('SESSION_LOAD_FAILED');
+      }
+      setUser(m14UserToAuthUser(sessionUser));
+      setAccessToken(null);
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -177,12 +240,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken,
       isLoading,
       loginWithPassword,
+      loginWithEmergency,
       logout,
       refreshNow,
       hasPermission,
       updateLocalUser,
     }),
-    [user, accessToken, isLoading, loginWithPassword, logout, refreshNow, hasPermission, updateLocalUser],
+    [user, accessToken, isLoading, loginWithPassword, loginWithEmergency, logout, refreshNow, hasPermission, updateLocalUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

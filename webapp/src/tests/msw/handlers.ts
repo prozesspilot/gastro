@@ -275,6 +275,10 @@ export const authHandlers = [
   http.post(`${BASE}/auth/logout`, () =>
     HttpResponse.json({ ok: true, data: { logged_out: true } }),
   ),
+  // M14: Default → keine aktive Cookie-Session (Cold-Start)
+  http.get(`${BASE}/auth/session`, () =>
+    HttpResponse.json({ error: 'no_session', message: 'Nicht eingeloggt' }, { status: 401 }),
+  ),
 ];
 
 // ── Alle Handler zusammen ─────────────────────────────────────────────────

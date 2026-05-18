@@ -79,6 +79,67 @@ export async function me(accessToken: string): Promise<{ user: AuthUserDto }> {
   return getJson<{ user: AuthUserDto }>('/me', accessToken);
 }
 
+// ── M14: Discord-OAuth + Notfall-Login ───────────────────────────────────────
+
+export interface M14SessionUser {
+  id: string;
+  display_name: string;
+  role: 'geschaeftsfuehrer' | 'mitarbeiter' | 'support';
+  login_method: 'discord' | 'emergency';
+}
+
+/**
+ * Notfall-Login für Geschäftsführer.
+ * Setzt pp_auth HttpOnly-Cookie via Backend — kein access_token zurück.
+ * Wirft ApiError bei Fehler (error.code: 'invalid_credentials' | 'totp_invalid' | 'rate_limit_ip' | 'rate_limit_email').
+ */
+export async function emergencyLogin(
+  email: string,
+  password: string,
+  totpCode: string,
+  backupCode?: string,
+): Promise<void> {
+  const body: Record<string, string> = { email, password };
+  if (backupCode) {
+    body.backup_code = backupCode;
+  } else {
+    body.totp_code = totpCode;
+  }
+  const res = await fetch(`${BASE}/notfall/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let parsed: unknown;
+    try { parsed = await res.json(); } catch { /* ignore */ }
+    const err = parsed as { error?: string; message?: string } | undefined;
+    throw new ApiError(res.status, err?.message ?? res.statusText, err?.error);
+  }
+}
+
+/**
+ * Prüft ob eine aktive M14-Cookie-Session besteht.
+ * Gibt null zurück bei 401 (nicht eingeloggt), wirft nicht.
+ * B3: Netzwerkfehler werden abgefangen und als null zurückgegeben (Fallback-Refresh läuft dann).
+ */
+export async function checkM14Session(): Promise<M14SessionUser | null> {
+  try {
+    const res = await fetch(`${BASE}/session`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const payload = await res.json() as { ok: boolean; user: M14SessionUser };
+    return payload.user ?? null;
+  } catch {
+    // Netzwerkfehler → null zurückgeben, damit Fallback-Refresh läuft
+    return null;
+  }
+}
+
 export async function changePassword(
   accessToken: string,
   currentPassword: string,

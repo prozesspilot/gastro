@@ -17,14 +17,16 @@ CLI-Skript das den ersten Geschäftsführer-Account in der DB anlegt, damit übe
 
 ## Akzeptanz-Kriterien
 
-- [ ] Skript `backend/scripts/bootstrap-admin.ts` läuft via `npm run bootstrap-admin`
-- [ ] Prompt-basierter Input: Email, Klartext-Passwort (wird sofort gehasht), Tenant-Slug
-- [ ] Anlegt: Tenant-Row, User-Row mit role=`gf`, generiert TOTP-Secret + QR-Code in Terminal
-- [ ] Idempotent: bei zweiter Ausführung mit gleicher Email — Fehlermeldung „User existiert"
-- [ ] Klartext-Passwort wird NICHT geloggt oder in DB gespeichert (nur Argon2id-Hash)
-- [ ] Output: JWT für sofortigen Test-Login + Hinweis „TOTP-Secret in 1Password speichern!"
-- [ ] Skript läuft NUR wenn Tabelle `users` leer ist ODER `--force`-Flag gesetzt
-- [ ] Dokumentation in `backend/scripts/README.md`
+- [x] Skript `backend/scripts/bootstrap-admin.ts` läuft via `npm run bootstrap-admin`
+- [x] Prompt-basierter Input: Discord-Username, Display-Name, Notfall-Email, Notfall-Passwort (Argon2id-gehasht)
+- [x] Anlegt: User-Row mit role=`geschaeftsfuehrer` (post-Reboot: KEIN Tenant für GF), generiert TOTP-Secret + QR-Code im Terminal
+- [x] Idempotent: bricht ab wenn Email existiert (CITEXT-Duplikat-Check) ODER wenn User > 0 ohne `--force`
+- [x] Klartext-Passwort wird NICHT geloggt oder in DB gespeichert (nur Argon2id-Hash)
+- [x] Output: Hinweis „TOTP-Secret + Backup-Codes in 1Password speichern" + Verifikations-Anleitung via `/api/v1/auth/notfall/login` (neuer Cookie-Flow, kein direkter JWT)
+- [x] Skript läuft NUR wenn Tabelle `users` leer ist ODER `--force`-Flag gesetzt
+- [x] Dokumentation in `backend/scripts/README.md`
+- [x] Bonus: 10 Backup-Codes (12 Zeichen, ohne Verwechsler) Argon2id-gehasht in DB
+- [x] Bonus: 13 Unit-Tests für validatePassword + generateBackupCode + EMAIL_REGEX
 
 ## Claude-Code-Start-Prompt
 

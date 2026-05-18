@@ -99,7 +99,7 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
    */
   app.get('/session', async (req: FastifyRequest, reply: FastifyReply) => {
     const cookies = req.cookies as Record<string, string | undefined>;
-    const token = cookies['pp_auth'];
+    const token = cookies.pp_auth;
     if (!token) {
       return reply.code(401).send({ error: 'no_session', message: 'Nicht eingeloggt' });
     }
@@ -124,7 +124,9 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
       [jti],
     );
     if (sessionCheck.rows.length === 0) {
-      return reply.code(401).send({ error: 'session_revoked', message: 'Session abgelaufen oder widerrufen' });
+      return reply
+        .code(401)
+        .send({ error: 'session_revoked', message: 'Session abgelaufen oder widerrufen' });
     }
 
     const user = await getUserById(app.db, result.payload.sub);

@@ -14,11 +14,13 @@
  *   await app.register(emergencyLoginRoutes, { prefix: '/api/v1/auth' });
  */
 
+import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../../core/config';
 import { performEmergencyLogin } from './emergency-login.service';
-import { extractJtiUnsafe, signM14EmergencyToken } from './m14-jwt';
+import type { EmergencyLoginError } from './emergency-login.service';
+import { signM14EmergencyToken } from './m14-jwt';
 import { createAuthSession, logAuthEvent } from './users.repository';
 
 // ── Schemas ────────────────────────────────────────────────────────────────
@@ -31,7 +33,10 @@ const EmergencyLoginBodySchema = z
       .string()
       .regex(/^\d{6}$/)
       .optional(),
-    backup_code: z.string().min(8).max(32).optional(),
+    backup_code: z
+      .string()
+      .regex(/^[A-Z0-9]{12,16}$/)
+      .optional(), // M6: 12-16 alphanumerisch gem. Spec §5.3
   })
   .refine((data) => data.totp_code !== undefined || data.backup_code !== undefined, {
     message: 'Entweder totp_code oder backup_code muss angegeben werden',
@@ -44,12 +49,43 @@ const AUTH_COOKIE_NAME = 'pp_auth';
 // 4 Stunden Cookie-Lebensdauer (= JWT-TTL)
 const EMERGENCY_COOKIE_MAX_AGE_SECONDS = 14_400;
 
-// ── Hilfsfunktion ──────────────────────────────────────────────────────────
+// ── Hilfsfunktionen ────────────────────────────────────────────────────────
 
-function getClientIp(req: FastifyRequest): string | null {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim() ?? null;
-  return req.ip ?? null;
+/**
+ * Mappt interne Fehler-Codes auf externe Fehlercodes (B1: User-Enumeration-Schutz).
+ * Nur rate_limit_* und totp_invalid werden spezifisch zurückgegeben.
+ * Alle anderen internen Fehler werden zu 'invalid_credentials' maskiert.
+ */
+function toExternalError(
+  error: EmergencyLoginError,
+): 'rate_limit_ip' | 'rate_limit_email' | 'totp_invalid' | 'invalid_credentials' {
+  switch (error) {
+    case 'rate_limit_ip':
+      return 'rate_limit_ip';
+    case 'rate_limit_email':
+      return 'rate_limit_email';
+    case 'totp_invalid':
+      return 'totp_invalid';
+    // role_not_allowed, account_disabled, no_emergency_setup, invalid_credentials
+    // alle → 'invalid_credentials' (verhindert User-Enumeration)
+    default:
+      return 'invalid_credentials';
+  }
+}
+
+/**
+ * Gibt den Audit-Log-Event-Type je nach internem Fehler zurück (B1 Punkt 5, M9).
+ */
+function toAuditEventType(error: EmergencyLoginError): string {
+  switch (error) {
+    case 'rate_limit_ip':
+    case 'rate_limit_email':
+      return 'emergency_login_rate_limited';
+    case 'totp_invalid':
+      return 'emergency_login_totp_failed';
+    default:
+      return 'emergency_login_failed';
+  }
 }
 
 // ── Fastify-Plugin ─────────────────────────────────────────────────────────
@@ -73,7 +109,14 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
       }
 
       const body = parseResult.data;
-      const clientIp = getClientIp(req);
+      // M2+M3: req.ip direkt verwenden (kein X-Forwarded-For-Parsing in der Route)
+      const clientIp = req.ip;
+      if (!clientIp) {
+        return reply.code(400).send({
+          error: 'invalid_request',
+          message: 'Client-IP nicht ermittelbar',
+        });
+      }
       const userAgent = req.headers['user-agent'] ?? null;
 
       const outcome = await performEmergencyLogin({
@@ -87,33 +130,45 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
       });
 
       if (!outcome.ok) {
-        // Audit-Log für jeden Fehlversuch
+        // Minor #24: SHA256-Hash statt Klartext-Hint
+        const emailHint = createHash('sha256')
+          .update(body.email.toLowerCase())
+          .digest('hex')
+          .substring(0, 16);
+
+        // B1 Punkt 5 + M9: Audit-Log mit differenziertem Event-Type je nach internem Fehler
         await logAuthEvent(app.db, {
           userId: null,
-          eventType: 'emergency_login_failed',
+          eventType: toAuditEventType(outcome.error),
           ipAddress: clientIp,
           userAgent,
           metadata: {
-            reason: outcome.error,
-            email_hint: `${body.email.substring(0, 3)}***`,
+            reason: outcome.error, // interner Fehler nur im Audit-Log, nicht nach außen
+            email_hint: emailHint,
           },
         });
 
-        const statusCode = outcome.error.startsWith('rate_limit') ? 429 : 401;
+        // B1: externe Fehlermaskierung — nur rate_limit_* und totp_invalid sichtbar
+        const externalError = toExternalError(outcome.error);
+        const statusCode = externalError.startsWith('rate_limit') ? 429 : 401;
         return reply.code(statusCode).send({
-          error: outcome.error,
-          message: resolveErrorMessage(outcome.error),
+          error: externalError,
+          message: resolveErrorMessage(externalError),
         });
       }
 
       // ── Erfolgreich — JWT ausstellen ────────────────────────────────────
-      const jwtToken = signM14EmergencyToken({
-        userId: outcome.userId,
-        role: outcome.role,
-        displayName: outcome.displayName,
-      });
+      // Minor #23: JTI vor Sign generieren — kein extractJtiUnsafe mehr nötig
+      const jti = randomUUID();
+      const jwtToken = signM14EmergencyToken(
+        {
+          userId: outcome.userId,
+          role: outcome.role,
+          displayName: outcome.displayName,
+        },
+        jti,
+      );
 
-      const jti = extractJtiUnsafe(jwtToken) ?? `emergency-${Date.now()}`;
       const sessionExpiresAt = new Date(Date.now() + EMERGENCY_COOKIE_MAX_AGE_SECONDS * 1000);
 
       await createAuthSession(app.db, {
@@ -152,17 +207,20 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
   );
 }
 
-function resolveErrorMessage(error: string): string {
+/**
+ * Gibt eine externe Fehlermeldung zurück.
+ * B1 Punkt 6: Nur rate_limit_* und totp_invalid haben spezifische Messages.
+ * Alle anderen (inkl. maskierten internen Fehlern) → 'Anmeldedaten ungültig.'
+ */
+function resolveErrorMessage(
+  error: 'rate_limit_ip' | 'rate_limit_email' | 'totp_invalid' | 'invalid_credentials',
+): string {
   switch (error) {
     case 'rate_limit_ip':
     case 'rate_limit_email':
       return 'Zu viele Fehlversuche. Bitte später erneut versuchen.';
-    case 'role_not_allowed':
-      return 'Notfall-Login ist nur für Geschäftsführer verfügbar.';
-    case 'account_disabled':
-      return 'Dein Account ist deaktiviert.';
-    case 'no_emergency_setup':
-      return 'Notfall-Login ist für diesen Account nicht eingerichtet.';
+    case 'totp_invalid':
+      return 'Der eingegebene Code ist ungültig.';
     default:
       return 'Anmeldedaten ungültig.';
   }

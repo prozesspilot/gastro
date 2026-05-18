@@ -327,25 +327,32 @@ export async function recordEmergencyLogin(
 }
 
 /**
- * Markiert einen Backup-Code als verwendet.
- * codeIndex ist der Index im emergency_backup_codes-Array.
+ * Markiert einen Backup-Code als verwendet (atomare Race-Condition-sichere Query).
+ * Gibt true zurück wenn der Code erfolgreich markiert wurde, false wenn
+ * der Code bereits verwendet war (Race-Condition) oder nicht existiert.
+ *
+ * M1: NULL-safe + rowCount-Check gegen Race-Condition.
  */
 export async function markBackupCodeUsed(
   pool: Pool,
   userId: string,
   codeIndex: number,
-): Promise<void> {
-  await pool.query(
+): Promise<boolean> {
+  const result = await pool.query(
     `UPDATE users
      SET emergency_backup_codes = jsonb_set(
        emergency_backup_codes,
        ARRAY[$2::text, 'used'],
-       'true'::jsonb
+       'true'::jsonb,
+       false
      ),
      updated_at = now()
-     WHERE id = $1`,
+     WHERE id = $1
+       AND emergency_backup_codes IS NOT NULL
+       AND (emergency_backup_codes->($2::int)->>'used')::boolean = false`,
     [userId, codeIndex.toString()],
   );
+  return (result.rowCount ?? 0) > 0;
 }
 
 // ── Interne Hilfsfunktionen ────────────────────────────────────────────────

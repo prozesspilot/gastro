@@ -27,9 +27,10 @@ const M14_EMERGENCY_JWT_TTL_SECONDS = 14_400;
 
 export interface M14TokenPayload {
   sub: string; // user_id UUID (interne DB-ID)
-  discord_id: string; // Discord-User-ID (numerisch als String)
+  discord_id: string | null; // Discord-User-ID (null bei emergency-Login)
   role: 'geschaeftsfuehrer' | 'mitarbeiter' | 'support';
   display_name: string;
+  login_method: 'discord' | 'emergency'; // Pflichtfeld — B2
   jti: string;
   iat: number;
   exp: number;
@@ -72,6 +73,7 @@ export function signM14Token(input: SignM14TokenInput): string {
     discord_id: input.discordId,
     role: input.role,
     display_name: input.displayName,
+    login_method: 'discord' as const, // B2: Pflichtfeld
   };
   return jwt.sign(payload, getSecret(), {
     algorithm: 'HS256',
@@ -83,18 +85,20 @@ export function signM14Token(input: SignM14TokenInput): string {
 
 /**
  * Signiert einen M14-Notfall-Login-JWT mit 4h TTL.
- * Kein discord_id-Claim (kein Discord bei Notfall-Login).
+ * discord_id ist null (kein Discord bei Notfall-Login).
+ * Optionaler jti-Parameter für deterministische JTI-Vergabe (Minor-Fix #23).
  */
-export function signM14EmergencyToken(input: SignM14EmergencyTokenInput): string {
+export function signM14EmergencyToken(input: SignM14EmergencyTokenInput, jti?: string): string {
   const payload = {
+    discord_id: null, // B2: explicit null statt fehlendem Claim
     role: input.role,
     display_name: input.displayName,
-    login_method: 'emergency',
+    login_method: 'emergency' as const, // B2: Pflichtfeld
   };
   return jwt.sign(payload, getSecret(), {
     algorithm: 'HS256',
     subject: input.userId,
-    jwtid: randomUUID(),
+    jwtid: jti ?? randomUUID(),
     expiresIn: M14_EMERGENCY_JWT_TTL_SECONDS,
   });
 }
@@ -110,9 +114,11 @@ export function verifyM14Token(token: string): VerifyResult<M14TokenPayload> {
       return { ok: false, code: 'INVALID', message: 'JWT-Payload kein Objekt' };
     }
     const p = decoded as Record<string, unknown>;
+    // discord_id darf string oder null sein (emergency-Login hat null) — B2
+    const discordIdOk = typeof p.discord_id === 'string' || p.discord_id === null;
     if (
       typeof p.sub !== 'string' ||
-      typeof p.discord_id !== 'string' ||
+      !discordIdOk ||
       typeof p.role !== 'string' ||
       typeof p.display_name !== 'string' ||
       typeof p.jti !== 'string'
@@ -124,13 +130,23 @@ export function verifyM14Token(token: string): VerifyResult<M14TokenPayload> {
     if (!validRoles.includes(p.role as (typeof validRoles)[number])) {
       return { ok: false, code: 'INVALID', message: `Ungültige Rolle: ${p.role}` };
     }
+    // login_method validieren — B2
+    const validMethods = ['discord', 'emergency'] as const;
+    if (!validMethods.includes(p.login_method as (typeof validMethods)[number])) {
+      return {
+        ok: false,
+        code: 'INVALID',
+        message: `Ungültige login_method: ${String(p.login_method)}`,
+      };
+    }
     return {
       ok: true,
       payload: {
         sub: p.sub,
-        discord_id: p.discord_id,
+        discord_id: typeof p.discord_id === 'string' ? p.discord_id : null,
         role: p.role as M14TokenPayload['role'],
         display_name: p.display_name,
+        login_method: p.login_method as M14TokenPayload['login_method'],
         jti: p.jti,
         iat: typeof p.iat === 'number' ? p.iat : 0,
         exp: typeof p.exp === 'number' ? p.exp : 0,

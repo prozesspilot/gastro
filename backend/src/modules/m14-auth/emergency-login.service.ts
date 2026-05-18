@@ -225,18 +225,24 @@ export async function performEmergencyLogin(
   }
 
   // ── 3. Rolle + Active-Check ───────────────────────────────────────────────
+  // SECURITY: DUMMY_HASH-Verify in allen Fehlerpfaden (Timing-Schutz / B1)
   if (!user.active) {
     await incrementFailureCounters(redis, ip, email);
+    await argon2.verify(DUMMY_HASH, password).catch(() => {});
     return { ok: false, error: 'account_disabled' };
   }
 
   if (user.role !== 'geschaeftsfuehrer') {
     await incrementFailureCounters(redis, ip, email);
+    await argon2.verify(DUMMY_HASH, password).catch(() => {});
     return { ok: false, error: 'role_not_allowed' };
   }
 
   // ── 4. Emergency-Setup-Check ──────────────────────────────────────────────
   if (!user.emergency_password_hash || !user.emergency_totp_secret) {
+    // SECURITY: DUMMY_HASH-Verify + Counter-Increment (Timing-Schutz / B1 + M4)
+    await argon2.verify(DUMMY_HASH, password).catch(() => {});
+    await incrementFailureCounters(redis, ip, email);
     return { ok: false, error: 'no_emergency_setup' };
   }
 
@@ -270,8 +276,15 @@ export async function performEmergencyLogin(
   }
 
   // ── 7. Backup-Code verbrauchen ────────────────────────────────────────────
+  // M1: Race-Condition-Check — markBackupCodeUsed gibt false wenn Code
+  // zwischen verifyBackupCode und markBackupCodeUsed bereits verbraucht wurde
   if (usedBackupCodeIndex >= 0) {
-    await markBackupCodeUsed(pool, user.id, usedBackupCodeIndex);
+    const marked = await markBackupCodeUsed(pool, user.id, usedBackupCodeIndex);
+    if (!marked) {
+      // Race-Condition: ein anderer Request hat diesen Code gleichzeitig verwendet
+      await incrementFailureCounters(redis, ip, email);
+      return { ok: false, error: 'totp_invalid' };
+    }
   }
 
   // ── 8. Erfolg: Zähler zurücksetzen + last_login aktualisieren ─────────────

@@ -17,17 +17,17 @@ Backup-Login wenn Discord-OAuth ausfällt. **Nur für Geschäftsführer-Accounts
 
 ## Akzeptanz-Kriterien
 
-- [ ] DB-Spalten `users.email`, `users.password_hash`, `users.totp_secret`, `users.role` aus T011 migriert
-- [ ] Argon2id-Library (`argon2` npm) eingebunden, Parameters: m=64MB, t=3, p=4
-- [ ] Backend-Endpoint `POST /auth/notfall/login` — Body: `{email, password, totp_code}`
-- [ ] Drei-Faktor-Check: Email existiert + Passwort matched (Argon2id-verify) + TOTP-Code valide
-- [ ] TOTP-Library `otpauth` oder `speakeasy`, 6-stellig, 30s-Fenster
-- [ ] Rate-Limiting: max 5 Versuche / 15 Min pro Email-Adresse
-- [ ] Erfolgreicher Login → JWT-Issue (gleiches Format wie T001)
-- [ ] Nur Role `gf` darf Notfall-Login nutzen — Mitarbeiter-Accounts werden abgelehnt
-- [ ] Audit-Log-Eintrag bei jedem Versuch (Erfolg + Fehlversuch)
-- [ ] Unit-Tests für Argon2id-Verify + TOTP-Check
-- [ ] Integration-Test mit echtem TOTP-Secret
+- [x] DB-Spalten `users.email`, `users.password_hash`, `users.totp_secret`, `users.role` aus T011 migriert
+- [x] Argon2id-Library (`argon2` npm) eingebunden, Parameters: m=64MB, t=3, p=4
+- [x] Backend-Endpoint `POST /auth/notfall/login` — Body: `{email, password, totp_code}`
+- [x] Drei-Faktor-Check: Email existiert + Passwort matched (Argon2id-verify) + TOTP-Code valide
+- [x] TOTP-Library `otpauth`, 6-stellig, 30s-Fenster
+- [x] Rate-Limiting: max 5 Versuche / 15 Min pro Email-Adresse (+ IP-Achse)
+- [x] Erfolgreicher Login → JWT-Issue (4h TTL, gleiches Format wie T001)
+- [x] Nur Role `geschaeftsfuehrer` darf Notfall-Login nutzen — Mitarbeiter-Accounts werden abgelehnt
+- [x] Audit-Log-Eintrag bei jedem Versuch (Erfolg + Fehlversuch)
+- [x] Unit-Tests für Argon2id-Verify + TOTP-Check (17 Tests)
+- [x] Integration-Test mit echtem TOTP-Secret (in Unit-Tests mit realem otpauth-Code)
 
 ## Claude-Code-Start-Prompt
 

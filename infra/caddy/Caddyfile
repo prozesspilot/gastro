@@ -1,0 +1,93 @@
+# Gastro Reverse-Proxy-Konfiguration
+# Liegt auf dem IONOS-Server unter /etc/caddy/Caddyfile
+#
+# Caddy übernimmt:
+#   - TLS-Terminierung (Let's Encrypt, automatisch)
+#   - HTTP → HTTPS-Redirect (automatisch)
+#   - Reverse-Proxy zu Docker-Containern (localhost:8080-8083)
+#   - Security-Header
+#
+# Subdomain-Routing:
+#   admin.prozesspilot.net  → Mitarbeiter-Webapp        (Port 8081)
+#   setup.prozesspilot.net  → Onboarding-Wizard         (Port 8082, Stub bis T016)
+#   api.prozesspilot.net    → Backend-API               (Port 8080)
+#   chat.prozesspilot.net   → Web-Chat-Widget           (Port 8083, Stub bis Widget-Task)
+
+# Globale Optionen
+{
+	# Let's Encrypt-Account-Email (für Zertifikat-Ablauf-Benachrichtigungen)
+	email steve@prozesspilot.net
+
+	# Admin-API nur auf Localhost (Caddy-Default in v2, hier explizit)
+	admin localhost:2019
+}
+
+# ── Mitarbeiter-Webapp ────────────────────────────────────────────────────────
+admin.prozesspilot.net {
+	encode gzip
+
+	reverse_proxy localhost:8081
+
+	header {
+		# HSTS: 1 Jahr, includeSubDomains + preload
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		# Keine Iframe-Einbettung (Mitarbeiter-Tool, kein Widget)
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# CSP: lädt nur eigene Assets + Backend-API
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.prozesspilot.net wss://api.prozesspilot.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
+		# Permissions-Policy: keine unnötigen Browser-Features
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+}
+
+# ── Onboarding-Wizard (Wirt-Setup, einmalig) ─────────────────────────────────
+# Stub bis T016 (Onboarding-Wizard) implementiert ist.
+setup.prozesspilot.net {
+	encode gzip
+
+	reverse_proxy localhost:8082
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+}
+
+# ── Backend-API ───────────────────────────────────────────────────────────────
+api.prozesspilot.net {
+	encode gzip
+
+	reverse_proxy localhost:8080
+
+	# API-spezifische Header (kein X-Frame, kein CSP — API liefert nur JSON)
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		# CORS wird vom Backend selbst gesetzt (Fastify-cors-Plugin)
+	}
+
+	# Body-Limit für Multipart-Upload (Belege max. 20 MB, 25 MB Puffer)
+	request_body {
+		max_size 25MB
+	}
+}
+
+# ── Web-Chat-Widget (Customer-facing) ────────────────────────────────────────
+# Stub bis Web-Chat-Widget-Task implementiert ist.
+# Wird von Customer-Websites per Iframe eingebunden → kein X-Frame-Options DENY
+chat.prozesspilot.net {
+	encode gzip
+
+	reverse_proxy localhost:8083
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Absichtlich kein X-Frame-Options — Widget wird per Iframe eingebettet
+	}
+}

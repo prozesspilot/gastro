@@ -1,9 +1,14 @@
 # DECISION: Interne Services (postgres, redis, minio) sind nicht nach außen
-# erreichbar. Nur webapp (80/443) und n8n (5678) sind extern zugänglich.
+# erreichbar. Caddy (System-Service, nicht Container) macht TLS-Terminierung
+# auf Port 80/443 und routet zu den Containern auf localhost:8080-8083.
+#
+# T012: webapp-Ports von 80/443 auf 127.0.0.1:8081:80 geaendert,
+# damit Caddy die Ports 80+443 halten kann.
 #
 # IONOS 4 GB RAM Budget (Phase 4):
-#   postgres 1G, n8n 800M, backend 768M, redis 256M, minio 256M, webapp 128M
-#   = 3.2 GB Container + ~800 MB OS-Reserve. 4G Swap als Notfall-Puffer.
+#   postgres 1G, n8n 800M, backend 768M, redis 256M, minio 256M, webapp 128M,
+#   setup-stub 32M, chat-stub 32M = ~3.3 GB Container + ~700 MB OS-Reserve.
+#   4G Swap als Notfall-Puffer.
 
 networks:
   internal:
@@ -105,6 +110,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # T012: Port nur auf Localhost binden — Caddy routet api.prozesspilot.net → :8080
+    ports:
+      - "127.0.0.1:8080:3000"
     networks:
       - internal
       - external
@@ -125,12 +133,13 @@ services:
       context: ./webapp
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_API_URL: ${VITE_API_URL:-https://api.prozesspilot.net}
         VITE_N8N_URL: ${VITE_N8N_URL:-http://localhost:5678}
     restart: always
+    # T012: Nur auf Localhost binden — Caddy routet admin.prozesspilot.net → :8081
+    # Ports 80+443 haelt jetzt Caddy (System-Service), nicht dieser Container.
     ports:
-      - "80:80"
-      - "443:443"
+      - "127.0.0.1:8081:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -145,6 +154,48 @@ services:
       resources:
         limits:
           memory: 128M
+
+  # ── Healthcheck-Stub: Onboarding-Wizard (Platzhalter bis T016) ────────────
+  setup-stub:
+    build:
+      context: ./infra/healthcheck-stub
+      dockerfile: Dockerfile
+    restart: always
+    # T012: Caddy routet setup.prozesspilot.net → :8082
+    ports:
+      - "127.0.0.1:8082:8080"
+    networks:
+      - external
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+  # ── Healthcheck-Stub: Web-Chat-Widget (Platzhalter bis Widget-Task) ────────
+  chat-stub:
+    build:
+      context: ./infra/healthcheck-stub
+      dockerfile: Dockerfile
+    restart: always
+    # T012: Caddy routet chat.prozesspilot.net → :8083
+    ports:
+      - "127.0.0.1:8083:8080"
+    networks:
+      - external
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 32M
 
   # ── n8n Workflow-Engine ────────────────────────────────────────────────────
   n8n:

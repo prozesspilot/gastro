@@ -77,6 +77,16 @@ const envSchema = z.object({
   INITIAL_SUPER_ADMIN_EMAIL: z.string().default(''),
   INITIAL_SUPER_ADMIN_PASSWORD: z.string().default(''),
 
+  // ── M15: SumUp OAuth 2.0 ────────────────────────────────────────────────
+  // SumUp Developer Portal → Apps → ProzessPilot POS-Connector
+  // Setup: https://developer.sumup.com (App registrieren, Redirect-URI eintragen)
+  SUMUP_CLIENT_ID: z.string().default(''),
+  SUMUP_CLIENT_SECRET: z.string().default(''),
+  SUMUP_REDIRECT_URI: z
+    .string()
+    .default('https://api.prozesspilot.net/api/v1/m15/oauth/sumup/callback'),
+  SUMUP_API_BASE_URL: z.string().default('https://api.sumup.com'),
+
   // ── M14: Discord OAuth 2.0 ──────────────────────────────────────────────
   // Discord-App-Credentials (Developer Portal → OAuth2)
   DISCORD_CLIENT_ID: z.string().default(''),
@@ -113,6 +123,15 @@ function loadConfig(): Config {
     console.error('FATAL: JWT_SECRET fehlt oder kürzer als 32 Zeichen (M14 Spec §7)');
     process.exit(1);
   }
+  // M15 SumUp-OAuth: Warnung wenn Credentials in Production leer sind.
+  if (cfg.NODE_ENV === 'production') {
+    if (!cfg.SUMUP_CLIENT_ID || !cfg.SUMUP_CLIENT_SECRET) {
+      console.warn(
+        'WARNUNG: SUMUP_CLIENT_ID oder SUMUP_CLIENT_SECRET nicht gesetzt — M15 POS-Connector inaktiv.',
+      );
+    }
+  }
+
   // M14 Discord-OAuth: Core-Credentials müssen in Production gesetzt sein.
   if (cfg.NODE_ENV === 'production') {
     if (!cfg.DISCORD_CLIENT_ID) {

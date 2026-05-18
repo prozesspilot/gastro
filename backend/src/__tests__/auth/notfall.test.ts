@@ -478,6 +478,26 @@ describe('performEmergencyLogin', () => {
     if (!result.ok) expect(result.error).toBe('no_emergency_setup');
   });
 
+  it('gibt no_emergency_setup zurück wenn kein Passwort-Hash (GF ohne Setup)', async () => {
+    const noHashUser = { ...validUser, emergency_password_hash: null };
+    const pool = makePool(noHashUser) as unknown as Parameters<
+      typeof performEmergencyLogin
+    >[0]['pool'];
+    const redis = makeRedis() as unknown as Parameters<typeof performEmergencyLogin>[0]['redis'];
+
+    const result = await performEmergencyLogin({
+      email: 'steve@test.de',
+      password: TEST_PASSWORD,
+      totpCode: generateCurrentTotpCode(),
+      ipAddress: '127.0.0.1',
+      pool,
+      redis,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('no_emergency_setup');
+  });
+
   it('inkrementiert Rate-Limit-Zähler bei Fehlversuch', async () => {
     const pool = makePool(null) as unknown as Parameters<typeof performEmergencyLogin>[0]['pool'];
     const redis = makeRedis() as unknown as Parameters<typeof performEmergencyLogin>[0]['redis'];

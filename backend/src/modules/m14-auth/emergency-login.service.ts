@@ -303,5 +303,11 @@ export async function performEmergencyLogin(
 
 // Dummy-Hash für Timing-Schutz bei unbekannter Email.
 // Verhindert, dass Angreifer via Response-Zeit auf User-Existenz schließen können.
+//
+// WICHTIG — Argon2-Parameter müssen synchron mit echten User-Hashes bleiben:
+// Echte Hashes werden mit ARGON2_MEMORY_COST / ARGON2_TIME_COST aus config.ts
+// erzeugt (Default: m=65536, t=3, p=1). Wenn diese Werte erhöht werden, muss
+// dieser Hash neu generiert werden — sonst entsteht ein Timing-Side-Channel.
+// Prüfen: `argon2.hash('dummy', { type: argon2.argon2id, memoryCost: X, ... })`
 const DUMMY_HASH =
   '$argon2id$v=19$m=65536,t=3,p=1$dGVzdHNhbHRmb3JkdW1teQ$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';

@@ -11,17 +11,21 @@ einfachen HTML-Seite und einem `/health`-Endpoint.
 
 ## Aktueller Einsatz
 
-| Subdomain | Port | Stub bis... |
+Ein einziger Container (`stubs`-Service in `docker-compose.prod.yml`) hört
+auf Port 8080 und bekommt zwei Port-Bindings:
+
+| Subdomain | Host-Port | Stub bis... |
 |---|---|---|
-| `setup.prozesspilot.net` | 8082 | T016 Onboarding-Wizard implementiert |
-| `chat.prozesspilot.net` | 8083 | Web-Chat-Widget-Task implementiert |
+| `setup.prozesspilot.net` | 127.0.0.1:8082 → :8080 | T016 Onboarding-Wizard implementiert |
+| `chat.prozesspilot.net` | 127.0.0.1:8083 → :8080 | Web-Chat-Widget-Task implementiert |
 
 ## Abloesung
 
 Sobald die echten Services fertig sind:
 
 1. Den jeweiligen Service in `docker-compose.prod.yml` auf dem entsprechenden Port starten
-2. Den Stub-Service (`setup-stub` / `chat-stub`) aus `docker-compose.prod.yml` entfernen
+2. Das entsprechende Port-Binding aus dem `stubs`-Service entfernen
+   (oder den ganzen Service löschen, falls beide echten Services existieren)
 3. Diesen README aktualisieren
 
 Der Stub-Container selbst bleibt im Repo als Fallback-Option.

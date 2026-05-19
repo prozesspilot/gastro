@@ -1,0 +1,13 @@
+# Healthcheck-Stub — interner Caddy-Listener
+# Horcht auf Port 8080, liefert statische HTML-Seite + /health-Endpoint.
+
+:8080 {
+    root * /usr/share/caddy
+    file_server
+
+    # /health gibt JSON zurück (für Caddy-Upstream-Health-Checks + curl-Tests)
+    handle /health {
+        header Content-Type "application/json"
+        respond `{"status":"ok","service":"healthcheck-stub"}` 200
+    }
+}

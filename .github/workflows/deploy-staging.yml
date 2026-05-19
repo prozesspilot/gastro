@@ -5,9 +5,9 @@ on:
     branches: [main]
 
 jobs:
-  deploy:
+  # ── Build-Job: Images bauen + in Registry pushen ───────────────────────────
+  build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +26,36 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository }}/backend:latest,ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Push Webapp Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./webapp
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/webapp:latest
+            ghcr.io/${{ github.repository }}/webapp:${{ github.sha }}
+          # VITE_API_URL wird zur Build-Zeit eingebettet
+          build-args: |
+            VITE_API_URL=https://api.prozesspilot.net
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # T012: Healthcheck-Stub fuer setup.* und chat.* bauen
+      - name: Build & Push Healthcheck-Stub Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./infra/healthcheck-stub
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/healthcheck-stub:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build & Push Discord-Bot Image
         uses: docker/build-push-action@v5
@@ -34,34 +63,105 @@ jobs:
           context: ./discord-bot
           push: true
           tags: ghcr.io/${{ github.repository }}/discord-bot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # T012: Caddy-Konfiguration syntax-prüfen
+      - name: Caddy Config Syntax-Check
+        run: bash infra/caddy/test-config.sh
+
+  # ── Deploy-Job: SSH zu IONOS, Container hochfahren, Caddy reloaden ─────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
 
       - name: SSH Deploy on IONOS
         uses: appleboy/ssh-action@v1
+        env:
+          # T012 Review-Fix M3: Webhook für Drift-Warning ans innere Skript reichen.
+          DISCORD_ALERTS_WEBHOOK: ${{ secrets.DISCORD_ALERTS_WEBHOOK }}
         with:
           host: ${{ secrets.IONOS_HOST }}
           username: ${{ secrets.IONOS_USER }}
           key: ${{ secrets.IONOS_SSH_KEY }}
+          envs: DISCORD_ALERTS_WEBHOOK
           script: |
+            set -e
             cd /opt/gastro
-            docker compose pull
-            docker compose up -d
-            docker compose exec -T backend npm run migrate
 
-      - name: Health-Check
+            # T012 Review-Fix M3: Drift-Warning bei verworfenen lokalen Änderungen.
+            # Wenn jemand auf dem Server einen Hotfix testet und vergisst zu committen,
+            # geht der beim nächsten Deploy verloren — wir warnen in Discord.
+            if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then
+              echo "WARN: lokale Änderungen in /opt/gastro werden verworfen"
+              if [ -n "$DISCORD_ALERTS_WEBHOOK" ]; then
+                curl -fsS -X POST "$DISCORD_ALERTS_WEBHOOK" \
+                  -H 'Content-Type: application/json' \
+                  -d '{"content":"⚠️ Deploy hat lokale Änderungen in `/opt/gastro` verworfen — bitte prüfen ob ein Hotfix in Git fehlt."}' \
+                  || true
+              fi
+            fi
+
+            # Repo aktualisieren — fetch + reset --hard statt git pull.
+            # Grund: pull bricht bei lokalen Modifikationen ab (Hotfixes,
+            # docker-compose-Overrides, manuell editierte Caddyfile etc.).
+            # reset --hard erzwingt den Stand von origin/main und macht den
+            # Deploy auch nach manuellen Server-Eingriffen robust.
+            git fetch origin main
+            git reset --hard origin/main
+
+            # T012 Review-Fix M2: pg_dump-Backup vor Migration.
+            # Falls migrate:prod fehlschlägt, kann manuell zurückgespielt werden:
+            #   docker compose exec -T postgres pg_restore -U pp -d prozesspilot -c <backup-file>
+            # Backup-Retention: 14 Tage (vor Migration, keine Stunden-Backups).
+            mkdir -p /opt/gastro/backups
+            BACKUP_FILE="/opt/gastro/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
+            echo "Erstelle Pre-Deploy-Backup: $BACKUP_FILE"
+            docker compose -f docker-compose.prod.yml exec -T postgres \
+              pg_dump -U pp -Fc prozesspilot > "$BACKUP_FILE"
+            # Alte Backups (>14 Tage) aufräumen
+            find /opt/gastro/backups -name 'pre-deploy-*.dump' -mtime +14 -delete || true
+
+            # Images pullen + Container hochfahren
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+
+            # DB-Migrationen ausfuehren
+            # T012 Review-Fix B2b: migrate:prod nutzt das kompilierte dist/-Output
+            # (kein tsx im Prod-Image, weil --omit=dev). Lock via pg_advisory_lock
+            # ist im Skript schon vorhanden (siehe migrate.ts).
+            docker compose -f docker-compose.prod.yml exec -T backend npm run migrate:prod
+
+            # T012: Caddyfile aus Repo deployen + Caddy reloaden
+            # (nur wenn sich das Caddyfile veraendert hat oder als Sicherheit)
+            cp /opt/gastro/infra/caddy/Caddyfile /etc/caddy/Caddyfile
+            caddy validate --config /etc/caddy/Caddyfile
+            systemctl reload caddy
+
+      - name: Health-Check Backend
         run: |
-          sleep 10
-          curl -f https://api.prozesspilot.net/health || exit 1
+          sleep 15
+          curl -f --retry 3 --retry-delay 5 https://api.prozesspilot.net/api/v1/health || exit 1
+
+      # T012: Healthcheck-Stub-Endpunkte pruefen
+      - name: Health-Check Stubs
+        run: |
+          curl -f --retry 3 --retry-delay 5 https://setup.prozesspilot.net/health || exit 1
+          curl -f --retry 3 --retry-delay 5 https://chat.prozesspilot.net/health || exit 1
 
       - name: Discord-Notification Erfolg
         if: success()
         run: |
-          curl -X POST ${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK }} \
+          curl -X POST "${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{"content": "🚀 **Deploy erfolgreich** auf IONOS\nCommit: `${{ github.sha }}`\nAlle Services laufen."}'
+            -d "{\"content\": \"**Deploy erfolgreich** auf IONOS\\nCommit: \`${{ github.sha }}\`\\nAlle Services laufen.\"}"
 
       - name: Discord-Notification Fehler
         if: failure()
         run: |
-          curl -X POST ${{ secrets.DISCORD_ALERTS_WEBHOOK }} \
+          curl -X POST "${{ secrets.DISCORD_ALERTS_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{"content": "❌ **Deploy fehlgeschlagen** auf IONOS\nCommit: `${{ github.sha }}`\nLogs prüfen: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+            -d "{\"content\": \"**Deploy fehlgeschlagen** auf IONOS\\nCommit: \`${{ github.sha }}\`\\nLogs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"

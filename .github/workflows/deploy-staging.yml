@@ -104,7 +104,7 @@ jobs:
               if [ -n "$DISCORD_ALERTS_WEBHOOK" ]; then
                 curl -fsS -X POST "$DISCORD_ALERTS_WEBHOOK" \
                   -H 'Content-Type: application/json' \
-                  -d '{"content":"⚠️ Deploy hat lokale Änderungen in `/opt/gastro` verworfen — bitte prüfen ob ein Hotfix in Git fehlt."}' \
+                  -d '{"content":"@everyone ⚠️ Deploy hat lokale Änderungen in `/opt/gastro` verworfen — bitte prüfen ob ein Hotfix in Git fehlt.","allowed_mentions":{"parse":["everyone"]}}' \
                   || true
               fi
             fi
@@ -174,4 +174,4 @@ jobs:
         run: |
           curl -X POST "${{ secrets.DISCORD_ALERTS_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": \"**Deploy fehlgeschlagen** auf IONOS\\nCommit: \`${{ github.sha }}\`\\nLogs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+            -d "{\"content\": \"@everyone 🚨 **Deploy fehlgeschlagen** auf IONOS\\nCommit: \`${{ github.sha }}\`\\nLogs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"allowed_mentions\":{\"parse\":[\"everyone\"]}}"

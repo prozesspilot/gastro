@@ -1,0 +1,100 @@
+name: Task Tracker
+
+# Postet automatisch in Discord, wenn jemand eine Task-Datei zwischen
+# tasks/_backlog/, tasks/_in_progress/ und tasks/_done/ verschiebt
+# (via `git mv`). Erkennt Renames via `git diff --name-status -M`.
+#
+# Drei Übergänge werden erkannt:
+#   _backlog        → _in_progress   → 🟢 "X startet Task Y"
+#   _in_progress    → _done          → ✅ "Task Y abgeschlossen"
+#   _backlog        → _done          → ✅ "Task Y direkt erledigt"
+#
+# Owner-Erkennung:
+#   1. Aus Filename-Convention: TXXX-<owner>-<rest>.md → <owner>
+#   2. Fallback: Commit-Author (github.event.head_commit.author.name)
+#
+# Title-Erkennung:
+#   Erste Markdown-Zeile (# TXXX — <Titel>) aus dem (Ziel-)File
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tasks/_backlog/**'
+      - 'tasks/_in_progress/**'
+      - 'tasks/_done/**'
+
+jobs:
+  detect-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # brauchen den Vorgänger-Commit für Diff
+
+      - name: Detect Task-Moves und poste Discord-Notifications
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+        run: |
+          set -e
+
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_DEV_LOG_WEBHOOK nicht gesetzt — überspringe."
+            exit 0
+          fi
+
+          # Renames im letzten Commit ermitteln. Format:
+          # R100<TAB>tasks/_backlog/T015-...md<TAB>tasks/_in_progress/T015-andreas-...md
+          renames=$(git diff --name-status -M HEAD~1 HEAD -- 'tasks/_backlog/' 'tasks/_in_progress/' 'tasks/_done/' \
+            | awk '/^R[0-9]+\t/' || true)
+
+          if [ -z "$renames" ]; then
+            echo "Keine Task-Renames in diesem Commit."
+            exit 0
+          fi
+
+          echo "$renames" | while IFS=$'\t' read -r _status old_path new_path; do
+            echo "Rename erkannt: $old_path → $new_path"
+
+            # Quelle/Ziel-Bucket extrahieren
+            old_bucket=$(echo "$old_path" | sed -E 's|tasks/(_[a-z_]+)/.*|\1|')
+            new_bucket=$(echo "$new_path" | sed -E 's|tasks/(_[a-z_]+)/.*|\1|')
+
+            # Nur die drei relevanten Übergänge
+            transition="${old_bucket}→${new_bucket}"
+            case "$transition" in
+              "_backlog→_in_progress") emoji="🟢"; verb="startet" ;;
+              "_in_progress→_done")    emoji="✅"; verb="hat abgeschlossen" ;;
+              "_backlog→_done")        emoji="✅"; verb="hat direkt erledigt" ;;
+              *)
+                echo "  Übergang $transition wird nicht beachtet."
+                continue ;;
+            esac
+
+            # Task-Titel aus erster Markdown-Zeile (# TXXX — Titel)
+            title=$(head -1 "$new_path" | sed -E 's/^# *//' || echo "(unbekannt)")
+
+            # Owner aus Filename extrahieren: TXXX-<owner>-<rest>.md
+            owner_from_file=$(basename "$new_path" | sed -nE 's/^T[0-9]+-([a-z]+)-.*/\1/p')
+            # Capitalize first letter (steve → Steve, andreas → Andreas)
+            if [ -n "$owner_from_file" ]; then
+              owner="$(echo "${owner_from_file:0:1}" | tr a-z A-Z)${owner_from_file:1}"
+            else
+              owner="$COMMIT_AUTHOR"
+            fi
+
+            # Discord-Post
+            content=$(printf "@everyone %s **%s %s**: %s\n%s" \
+              "$emoji" "$owner" "$verb" "$title" "$COMMIT_URL")
+            payload=$(jq -nc \
+              --arg c "$content" \
+              '{content: $c, allowed_mentions: {parse: ["everyone"]}}')
+
+            echo "Sende Discord-Post: $content"
+            curl -fsS -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "$payload" \
+              -o /dev/null -w "HTTP %{http_code}\n" || true
+          done

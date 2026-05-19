@@ -91,7 +91,7 @@ export function aggregateTransactions(
         const price = p.price ?? 0;
         const qty = p.quantity ?? 1;
         const grossLine = round2(price * qty);
-        const vatRate = p.vat_rate ?? tx.vat_rate ?? 0.19;
+        const vatRate = normalizeVatRate(p.vat_rate ?? tx.vat_rate);
         applyVatLine(vatRate, grossLine, (b19, n19, a19, b7, n7, a7, b0) => {
           ust19Brutto = round2(ust19Brutto + b19);
           ust19Netto = round2(ust19Netto + n19);
@@ -103,7 +103,7 @@ export function aggregateTransactions(
         });
       }
     } else {
-      const vatRate = tx.vat_rate ?? 0.19;
+      const vatRate = normalizeVatRate(tx.vat_rate);
       applyVatLine(vatRate, tx.amount, (b19, n19, a19, b7, n7, a7, b0) => {
         ust19Brutto = round2(ust19Brutto + b19);
         ust19Netto = round2(ust19Netto + n19);
@@ -131,6 +131,29 @@ export function aggregateTransactions(
     ust0Brutto,
     paymentMethodSplit,
   };
+}
+
+/**
+ * T005-Review-Fix #2 — Normalisiert vat_rate auf decimal (0.19, 0.07, 0).
+ *
+ * SumUp-API kann sowohl integer percent (`19`) als auch decimal (`0.19`)
+ * liefern — die OpenAPI-Doku ist hier nicht eindeutig. Ohne Normalizer
+ * landet `vat_rate=19` als "unknown" in `ust_0_brutto` (Pfand-Position) →
+ * falsche Buchhaltung.
+ *
+ * Heuristik:
+ *   * undefined / null      → 0.19 (Default, gastro-typisch)
+ *   * Wert > 1              → integer percent → dividiere durch 100
+ *   * Wert <= 1             → schon decimal, passt
+ *   * Wert <= 0             → 0 (Pfand / 0%-Satz)
+ *
+ * Exportiert fuer Test-Suite (Roundtrip-Tests beide Formate).
+ */
+export function normalizeVatRate(raw: number | undefined | null): number {
+  if (raw === undefined || raw === null) return 0.19;
+  if (raw <= 0) return 0;
+  if (raw > 1) return raw / 100;
+  return raw;
 }
 
 function applyVatLine(

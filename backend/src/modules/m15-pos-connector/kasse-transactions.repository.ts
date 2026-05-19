@@ -184,21 +184,38 @@ export async function listKasseTransactions(
 
 /**
  * Listet alle aktiven pos_credentials-Tenants — Daily-Cron iteriert darueber.
- * Wir umgehen RLS via is_rls_bypassed() Cron-Pfad: der Cron-Caller setzt
- * `SET LOCAL app.bypass_rls='on'` (siehe sumup-daily.ts).
+ *
+ * RLS-Bypass via `app.bypass_rls='on'` GUC + `is_rls_bypassed()`-Funktion.
+ *
+ * T005-Review-Fix #1 (Bug): `set_config(name, value, is_local=true)` ist
+ * LOCAL und braucht eine aktive Transaktion. Ohne BEGIN/COMMIT laeuft jedes
+ * Statement im pg-Pool als eigene Auto-Commit-Transaktion → das GUC ist
+ * im naechsten Statement schon wieder weg. Das fuehrte zu silent-empty-Result
+ * sobald RLS auf pos_credentials aktiviert wird (T020).
+ *
+ * Fix: explizites BEGIN/COMMIT-Pattern wie alle anderen Repo-Funktionen.
+ *
+ * Aktuell hat `pos_credentials` noch keine RLS-Policy (Migration 022
+ * Header-Kommentar), aber wir schreiben den Code korrekt fuer den
+ * zukuenftigen Zustand.
  */
 export async function listActiveSumUpTenants(
   pool: Pool,
 ): Promise<Array<{ tenant_id: string; pos_account_id: string }>> {
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     await client.query("SELECT set_config('app.bypass_rls', 'on', true)");
     const result = await client.query<{ tenant_id: string; pos_account_id: string }>(
       `SELECT tenant_id, pos_account_id
          FROM pos_credentials
         WHERE active = true AND pos_system = 'sumup_lite'`,
     );
+    await client.query('COMMIT');
     return result.rows;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
   } finally {
     client.release();
   }

@@ -9,7 +9,7 @@
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { aggregateTransactions, syncDay } from '../sumup-sync.service';
+import { aggregateTransactions, normalizeVatRate, syncDay } from '../sumup-sync.service';
 import { SumUpApiError, type SumUpTransaction } from '../sumup.service';
 
 vi.mock('../kasse-transactions.repository', () => ({
@@ -104,6 +104,31 @@ describe('aggregateTransactions', () => {
     expect(agg.ust7Amount).toBe(0);
   });
 
+  // T005-Review-Fix #2: vat_rate-Format-Ambiguitaet (decimal vs integer percent)
+  it('vat_rate=19 (integer percent) wird zu 0.19 normalisiert', () => {
+    const agg = aggregateTransactions([makeTx({ amount: 11.9, vat_rate: 19 })]);
+    expect(agg.ust19Brutto).toBe(11.9);
+    expect(agg.ust0Brutto).toBe(0); // NICHT in Pfand-Bucket
+    expect(agg.ust19Amount).toBeCloseTo(1.9, 2);
+  });
+
+  it('vat_rate=7 (integer percent) wird zu 0.07 normalisiert', () => {
+    const agg = aggregateTransactions([makeTx({ amount: 10.7, vat_rate: 7 })]);
+    expect(agg.ust7Brutto).toBe(10.7);
+    expect(agg.ust19Amount).toBe(0);
+  });
+
+  it('Products-vat_rate=19 (integer) wird auch normalisiert', () => {
+    const agg = aggregateTransactions([
+      makeTx({
+        amount: 11.9,
+        products: [{ name: 'Bier', price: 11.9, vat_rate: 19, quantity: 1 }],
+      }),
+    ]);
+    expect(agg.ust19Brutto).toBe(11.9);
+    expect(agg.ust0Brutto).toBe(0);
+  });
+
   it('leere Liste → alle Werte 0', () => {
     const agg = aggregateTransactions([]);
     expect(agg.transactionCount).toBe(0);
@@ -193,4 +218,45 @@ describe('syncDay', () => {
     expect(result.attempts).toBe(2);
     expect(result.transaction_count).toBe(1);
   }, 10_000);
+});
+
+// ── T005-Review-Fix #2: normalizeVatRate ─────────────────────────────────
+
+describe('normalizeVatRate (vat_rate-Format-Ambiguitaet)', () => {
+  it('undefined → 0.19 (Default)', () => {
+    expect(normalizeVatRate(undefined)).toBe(0.19);
+  });
+
+  it('null → 0.19 (Default)', () => {
+    expect(normalizeVatRate(null)).toBe(0.19);
+  });
+
+  it('0 → 0 (Pfand/durchlaufend)', () => {
+    expect(normalizeVatRate(0)).toBe(0);
+  });
+
+  it('negativ → 0 (Defensiv: behandelt wie 0%)', () => {
+    expect(normalizeVatRate(-1)).toBe(0);
+  });
+
+  it('0.19 (decimal) bleibt 0.19', () => {
+    expect(normalizeVatRate(0.19)).toBe(0.19);
+  });
+
+  it('0.07 (decimal) bleibt 0.07', () => {
+    expect(normalizeVatRate(0.07)).toBe(0.07);
+  });
+
+  it('19 (integer percent) → 0.19', () => {
+    expect(normalizeVatRate(19)).toBeCloseTo(0.19, 4);
+  });
+
+  it('7 (integer percent) → 0.07', () => {
+    expect(normalizeVatRate(7)).toBeCloseTo(0.07, 4);
+  });
+
+  it('1.0 (edge: schon decimal als float, NICHT integer percent 100%)', () => {
+    // Heuristik: <= 1 ist decimal, > 1 ist integer percent
+    expect(normalizeVatRate(1)).toBe(1);
+  });
 });

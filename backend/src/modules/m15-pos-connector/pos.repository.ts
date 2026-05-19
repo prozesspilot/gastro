@@ -338,45 +338,97 @@ export interface PurgedPosCredential {
 }
 
 /**
- * T018: Loescht alle pos_credentials, die seit `retentionDays` deaktiviert sind.
+ * T018: Loescht alle pos_credentials die seit `retentionDays` deaktiviert sind
+ * UND schreibt pro Loeschung einen `auth_audit_log`-Eintrag — alles in EINER
+ * Transaktion (Review-Fix #1 Atomicity).
  *
- * Pattern:
- *   * Token sind kein Geschaeftsdaten-Bestandteil — die 10-Jahres-Aufbewahrungs-
- *     pflicht (§ 147 AO) gilt fuer Belege/Buchungen, NICHT fuer OAuth-Tokens.
- *   * Bei Disconnect oder Refresh-Fail wird `active=false` + `updated_at`
- *     gesetzt. Nach Ablauf der Retention (Default 30 Tage) Hard-Delete.
+ * Vorher: DELETE + logAuthEvent waren separate Auto-Commit-Statements →
+ * wenn die Connection zwischen DELETE-Commit und Audit-Insert crashte,
+ * gab es geloeschte Rows ohne Audit-Eintrag → DSGVO-Compliance-Gap.
  *
- * Audit:
- *   * RETURNING * liefert alle geloeschten Rows zurueck → Caller schreibt pro
- *     Row einen auth_audit_log-Eintrag mit eventType 'pos_credentials_purged'.
- *   * Wir loggen NICHT im SQL — separieren Concerns, kein Trigger.
+ * Jetzt:
+ *   BEGIN
+ *     SET LOCAL app.bypass_rls='on'   -- Review-Fix #2: defensive RLS-Bypass
+ *     DELETE … RETURNING
+ *     INSERT INTO auth_audit_log (×N via insert_auth_audit_log SECURITY DEFINER)
+ *   COMMIT
+ *
+ * Bei jedem Fehler im Block: ROLLBACK → DELETE rueckabgewickelt, kein
+ * orphaner Zustand.
+ *
+ * Defense-in-Depth: `SET LOCAL app.bypass_rls='on'` ist redundant solange
+ * `pos_credentials` kein RLS hat (Migration 022). Sobald T020 das aktiviert,
+ * funktioniert der Cron weiter (keine silent-empty-Result).
+ *
+ * Token sind kein Geschaeftsdaten-Bestandteil — die 10-Jahres-Aufbewahrungs-
+ * pflicht (§ 147 AO) gilt fuer Belege/Buchungen, NICHT fuer OAuth-Tokens.
  *
  * Idempotent: bei wiederholtem Aufruf ohne neue inactive-Rows nichts zu tun.
  */
 export async function purgeInactivePosCredentials(
   pool: Pool,
   retentionDays: number,
+  actorUserAgent = 'cron:pos-credentials-cleanup',
 ): Promise<PurgedPosCredential[]> {
-  const result = await pool.query<{
-    id: string;
-    tenant_id: string;
-    pos_system: PosSystem;
-    pos_account_id: string;
-    inactive_reason: string | null;
-    updated_at: Date;
-  }>(
-    `DELETE FROM pos_credentials
-      WHERE active = false
-        AND updated_at < now() - ($1::int * INTERVAL '1 day')
-      RETURNING id, tenant_id, pos_system, pos_account_id, inactive_reason, updated_at`,
-    [retentionDays],
-  );
-  return result.rows.map((r) => ({
-    id: r.id,
-    tenant_id: r.tenant_id,
-    pos_system: r.pos_system,
-    pos_account_id: r.pos_account_id,
-    inactive_reason: r.inactive_reason,
-    inactive_since: r.updated_at,
-  }));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Review-Fix #2: defensive RLS-Bypass (LOCAL, wirkt nur in dieser Tx)
+    await client.query("SELECT set_config('app.bypass_rls', 'on', true)");
+
+    const result = await client.query<{
+      id: string;
+      tenant_id: string;
+      pos_system: PosSystem;
+      pos_account_id: string;
+      inactive_reason: string | null;
+      updated_at: Date;
+    }>(
+      `DELETE FROM pos_credentials
+        WHERE active = false
+          AND updated_at < now() - ($1::int * INTERVAL '1 day')
+        RETURNING id, tenant_id, pos_system, pos_account_id, inactive_reason, updated_at`,
+      [retentionDays],
+    );
+
+    const purged: PurgedPosCredential[] = result.rows.map((r) => ({
+      id: r.id,
+      tenant_id: r.tenant_id,
+      pos_system: r.pos_system,
+      pos_account_id: r.pos_account_id,
+      inactive_reason: r.inactive_reason,
+      inactive_since: r.updated_at,
+    }));
+
+    // Review-Fix #1: Audit-Inserts in DERSELBEN Tx wie DELETE.
+    // SECURITY DEFINER `insert_auth_audit_log()` (Migration 061) erlaubt
+    // dem App-User den Insert trotz RLS-INSERT-Policy `WITH CHECK (is_rls_bypassed())`.
+    for (const p of purged) {
+      await client.query(
+        'SELECT insert_auth_audit_log($1::uuid, $2::text, $3::text, $4::text, $5::jsonb)',
+        [
+          null, // userId = system actor
+          'pos_credentials_purged',
+          null, // ipAddress
+          actorUserAgent,
+          JSON.stringify({
+            tenant_id: p.tenant_id,
+            pos_system: p.pos_system,
+            pos_account_id: p.pos_account_id,
+            inactive_reason: p.inactive_reason,
+            inactive_since: p.inactive_since.toISOString(),
+            retention_days: retentionDays,
+          }),
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+    return purged;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }

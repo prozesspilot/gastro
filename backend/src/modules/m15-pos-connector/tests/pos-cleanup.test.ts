@@ -1,36 +1,189 @@
 /**
  * T018/M15 — Tests fuer purgeInactivePosCredentials + Cron-Script.
  *
- * Strategie:
- *   * Pool-Mock simuliert das DELETE ... RETURNING + interpretiert das
- *     retentionDays-Param.
- *   * Cron-Script-Test verifiziert: Audit-Log pro geloeschter Row.
+ * Nach T018-Review-Fix #1 (Atomicity):
+ *   * DELETE + auth_audit_log-Inserts in EINER Postgres-Transaktion
+ *   * Pool-Mock simuliert BEGIN/set_config/DELETE/SELECT(insert_audit)/COMMIT
  */
 
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { purgeInactivePosCredentials } from '../pos.repository';
+
+interface QueryReturn {
+  rows: unknown[];
+  rowCount?: number;
+}
+
+/**
+ * Pool-Mock mit Tx-Tracker: Liste der ausgefuehrten SQL-Statements.
+ */
+function makeTxPool(deletedRows: Array<Record<string, unknown>>): {
+  pool: Pool;
+  sqlCalls: string[];
+  paramsCalls: unknown[][];
+} {
+  const sqlCalls: string[] = [];
+  const paramsCalls: unknown[][] = [];
+
+  const mockClient = {
+    query: vi.fn(async (sql: string, params?: unknown[]): Promise<QueryReturn> => {
+      sqlCalls.push(sql);
+      paramsCalls.push(params ?? []);
+
+      if (sql.startsWith('DELETE FROM pos_credentials')) {
+        return { rows: deletedRows, rowCount: deletedRows.length };
+      }
+      // BEGIN, COMMIT, ROLLBACK, set_config, insert_auth_audit_log → leeres Ergebnis
+      return { rows: [] };
+    }),
+    release: vi.fn(),
+  } as unknown as PoolClient;
+
+  return {
+    pool: {
+      connect: vi.fn(async () => mockClient),
+    } as unknown as Pool,
+    sqlCalls,
+    paramsCalls,
+  };
+}
 
 const TENANT = '550e8400-e29b-41d4-a716-446655440000';
 
-function makeMockPool(returnedRows: Array<Record<string, unknown>>) {
-  return {
-    query: vi.fn(async () => ({ rows: returnedRows, rowCount: returnedRows.length })),
-  } as unknown as Pool;
-}
+import { purgeInactivePosCredentials } from '../pos.repository';
 
-describe('purgeInactivePosCredentials', () => {
-  beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
-  it('keine inaktiven Credentials → []', async () => {
-    const pool = makeMockPool([]);
-    const result = await purgeInactivePosCredentials(pool, 30);
-    expect(result).toHaveLength(0);
+describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
+  it('wraps DELETE + Audit-Inserts in EINER Transaktion', async () => {
+    const { pool, sqlCalls } = makeTxPool([
+      {
+        id: 'cred-1',
+        tenant_id: TENANT,
+        pos_system: 'sumup_lite',
+        pos_account_id: 'merch-001',
+        inactive_reason: 'refresh_failed',
+        updated_at: new Date(),
+      },
+    ]);
+
+    await purgeInactivePosCredentials(pool, 30);
+
+    // Reihenfolge muss BEGIN → set_config → DELETE → insert_auth_audit_log → COMMIT sein
+    const beginIdx = sqlCalls.findIndex((s) => s === 'BEGIN');
+    const setConfigIdx = sqlCalls.findIndex((s) => s.includes('set_config'));
+    const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
+    const auditIdx = sqlCalls.findIndex((s) => s.includes('insert_auth_audit_log'));
+    const commitIdx = sqlCalls.findIndex((s) => s === 'COMMIT');
+
+    expect(beginIdx).toBeGreaterThanOrEqual(0);
+    expect(setConfigIdx).toBeGreaterThan(beginIdx);
+    expect(deleteIdx).toBeGreaterThan(setConfigIdx);
+    expect(auditIdx).toBeGreaterThan(deleteIdx);
+    expect(commitIdx).toBeGreaterThan(auditIdx);
   });
 
-  it('eine inaktive Row > 30 Tage → 1 PurgedPosCredential', async () => {
+  it('Review-Fix #2: defensive RLS-Bypass via app.bypass_rls=on', async () => {
+    const { pool, sqlCalls } = makeTxPool([]);
+    await purgeInactivePosCredentials(pool, 30);
+    const bypass = sqlCalls.find((s) => s.includes('set_config'));
+    expect(bypass).toContain("'app.bypass_rls'");
+    expect(bypass).toContain("'on'");
+  });
+
+  it('ROLLBACK wenn DELETE wirft (kein orphaner Zustand)', async () => {
+    const sqlCalls: string[] = [];
+    const mockClient = {
+      query: vi.fn(async (sql: string) => {
+        sqlCalls.push(sql);
+        if (sql.startsWith('DELETE FROM pos_credentials')) {
+          throw new Error('DB unavailable');
+        }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    } as unknown as PoolClient;
+    const pool = { connect: vi.fn(async () => mockClient) } as unknown as Pool;
+
+    await expect(purgeInactivePosCredentials(pool, 30)).rejects.toThrow('DB unavailable');
+    expect(sqlCalls).toContain('ROLLBACK');
+  });
+
+  it('ROLLBACK wenn insert_auth_audit_log wirft → DELETE wird rueckabgewickelt', async () => {
+    const sqlCalls: string[] = [];
+    const mockClient = {
+      query: vi.fn(async (sql: string) => {
+        sqlCalls.push(sql);
+        if (sql.startsWith('DELETE FROM pos_credentials')) {
+          return {
+            rows: [
+              {
+                id: 'cred-1',
+                tenant_id: TENANT,
+                pos_system: 'sumup_lite',
+                pos_account_id: 'merch-001',
+                inactive_reason: null,
+                updated_at: new Date(),
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('insert_auth_audit_log')) {
+          throw new Error('Audit-Log DB unavailable');
+        }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    } as unknown as PoolClient;
+    const pool = { connect: vi.fn(async () => mockClient) } as unknown as Pool;
+
+    await expect(purgeInactivePosCredentials(pool, 30)).rejects.toThrow('Audit-Log DB');
+    // Wichtig: COMMIT darf NICHT vorkommen — DELETE muss rueckabgewickelt sein
+    expect(sqlCalls).toContain('ROLLBACK');
+    expect(sqlCalls).not.toContain('COMMIT');
+  });
+
+  it('client.release() wird in finally aufgerufen (kein Pool-Leak)', async () => {
+    const releaseFn = vi.fn();
+    const mockClient = {
+      query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
+      release: releaseFn,
+    } as unknown as PoolClient;
+    const pool = { connect: vi.fn(async () => mockClient) } as unknown as Pool;
+
+    await purgeInactivePosCredentials(pool, 30);
+    expect(releaseFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('client.release() auch bei Error im finally aufgerufen', async () => {
+    const releaseFn = vi.fn();
+    const mockClient = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.startsWith('DELETE')) throw new Error('boom');
+        return { rows: [] };
+      }),
+      release: releaseFn,
+    } as unknown as PoolClient;
+    const pool = { connect: vi.fn(async () => mockClient) } as unknown as Pool;
+
+    await expect(purgeInactivePosCredentials(pool, 30)).rejects.toThrow('boom');
+    expect(releaseFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('purgeInactivePosCredentials — Output', () => {
+  it('keine inaktiven Credentials → []', async () => {
+    const { pool } = makeTxPool([]);
+    const result = await purgeInactivePosCredentials(pool, 30);
+    expect(result).toEqual([]);
+  });
+
+  it('eine inaktive Row → PurgedPosCredential mit inactive_since=updated_at', async () => {
     const inactiveDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
-    const pool = makeMockPool([
+    const { pool } = makeTxPool([
       {
         id: 'cred-1',
         tenant_id: TENANT,
@@ -48,18 +201,19 @@ describe('purgeInactivePosCredentials', () => {
     expect(result[0].inactive_since).toEqual(inactiveDate);
   });
 
-  it('SQL nutzt retentionDays-Parameter', async () => {
-    const pool = makeMockPool([]);
+  it('SQL nutzt retentionDays-Parameter im DELETE', async () => {
+    const { pool, sqlCalls, paramsCalls } = makeTxPool([]);
     await purgeInactivePosCredentials(pool, 90);
-    const queryCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(queryCall[1]).toEqual([90]);
-    expect(queryCall[0]).toContain('active = false');
-    expect(queryCall[0]).toContain("INTERVAL '1 day'");
+    const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
+    expect(deleteIdx).toBeGreaterThanOrEqual(0);
+    expect(paramsCalls[deleteIdx]).toEqual([90]);
+    expect(sqlCalls[deleteIdx]).toContain('active = false');
+    expect(sqlCalls[deleteIdx]).toContain("INTERVAL '1 day'");
   });
 
-  it('mehrere Rows werden alle zurueckgegeben', async () => {
+  it('mehrere Rows + N Audit-Inserts (1 pro Row)', async () => {
     const oldDate = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
-    const pool = makeMockPool([
+    const { pool, sqlCalls } = makeTxPool([
       {
         id: 'c-1',
         tenant_id: TENANT,
@@ -79,19 +233,48 @@ describe('purgeInactivePosCredentials', () => {
     ]);
     const result = await purgeInactivePosCredentials(pool, 30);
     expect(result).toHaveLength(2);
-    expect(result.map((r) => r.id)).toEqual(['c-1', 'c-2']);
+
+    // Genau 2 insert_auth_audit_log-Calls (1 pro Row)
+    const auditCalls = sqlCalls.filter((s) => s.includes('insert_auth_audit_log'));
+    expect(auditCalls).toHaveLength(2);
+  });
+
+  it('Audit-Payload enthaelt alle Metadata-Felder (pos_account_id, inactive_reason, retention_days)', async () => {
+    const inactiveDate = new Date('2026-04-15T10:00:00Z');
+    const { pool, sqlCalls, paramsCalls } = makeTxPool([
+      {
+        id: 'c-1',
+        tenant_id: TENANT,
+        pos_system: 'sumup_lite',
+        pos_account_id: 'merch-test',
+        inactive_reason: 'token_revoked',
+        updated_at: inactiveDate,
+      },
+    ]);
+    await purgeInactivePosCredentials(pool, 30);
+
+    const auditIdx = sqlCalls.findIndex((s) => s.includes('insert_auth_audit_log'));
+    const auditParams = paramsCalls[auditIdx];
+    // Params: [userId=null, eventType, ipAddress=null, userAgent, metadata-JSON]
+    expect(auditParams[0]).toBeNull(); // userId
+    expect(auditParams[1]).toBe('pos_credentials_purged'); // eventType
+    expect(auditParams[3]).toBe('cron:pos-credentials-cleanup'); // userAgent
+
+    const metadata = JSON.parse(auditParams[4] as string);
+    expect(metadata.tenant_id).toBe(TENANT);
+    expect(metadata.pos_system).toBe('sumup_lite');
+    expect(metadata.pos_account_id).toBe('merch-test');
+    expect(metadata.inactive_reason).toBe('token_revoked');
+    expect(metadata.retention_days).toBe(30);
+    expect(metadata.inactive_since).toBe('2026-04-15T10:00:00.000Z');
   });
 });
 
 // ── Cron-Integration ─────────────────────────────────────────────────────
 
-vi.mock('../../m14-auth/users.repository', () => ({
-  logAuthEvent: vi.fn(async () => undefined),
-}));
-
 vi.mock('pg', () => {
   const mockPool = {
-    query: vi.fn(),
+    connect: vi.fn(),
     end: vi.fn(async () => undefined),
   };
   return {
@@ -101,61 +284,33 @@ vi.mock('pg', () => {
 });
 
 import { runPosCredentialsCleanup } from '../../../cron/pos-credentials-cleanup';
-import { logAuthEvent } from '../../m14-auth/users.repository';
 
 describe('runPosCredentialsCleanup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('schreibt einen auth_audit_log-Eintrag pro geloeschter Row', async () => {
-    // Mock-Pool gibt 2 Purged-Rows zurueck
+  it('nichts zu loeschen → purged=0', async () => {
     const pg = (await import('pg')) as unknown as {
-      __mockPool: { query: ReturnType<typeof vi.fn> };
+      __mockPool: { connect: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
     };
-    pg.__mockPool.query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'c-1',
-          tenant_id: TENANT,
-          pos_system: 'sumup_lite',
-          pos_account_id: 'a',
-          inactive_reason: 'refresh_failed',
-          updated_at: new Date(),
-        },
-        {
-          id: 'c-2',
-          tenant_id: '660e8400-e29b-41d4-a716-446655440000',
-          pos_system: 'sumup_pos_pro',
-          pos_account_id: 'b',
-          inactive_reason: null,
-          updated_at: new Date(),
-        },
-      ],
-      rowCount: 2,
+    pg.__mockPool.connect.mockResolvedValueOnce({
+      query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
+      release: vi.fn(),
     });
 
     const result = await runPosCredentialsCleanup();
-    expect(result.purged).toBe(2);
-    expect(logAuthEvent).toHaveBeenCalledTimes(2);
-    expect(logAuthEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        eventType: 'pos_credentials_purged',
-        userId: null,
-        userAgent: 'cron:pos-credentials-cleanup',
-      }),
-    );
+    expect(result.purged).toBe(0);
+    expect(pg.__mockPool.end).toHaveBeenCalled();
   });
 
-  it('nichts zu loeschen → kein Audit-Log', async () => {
+  it('pool.end() wird auch bei Crash aufgerufen (finally-Block)', async () => {
     const pg = (await import('pg')) as unknown as {
-      __mockPool: { query: ReturnType<typeof vi.fn> };
+      __mockPool: { connect: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
     };
-    pg.__mockPool.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    pg.__mockPool.connect.mockRejectedValueOnce(new Error('Pool exhausted'));
 
-    const result = await runPosCredentialsCleanup();
-    expect(result.purged).toBe(0);
-    expect(logAuthEvent).not.toHaveBeenCalled();
+    await expect(runPosCredentialsCleanup()).rejects.toThrow('Pool exhausted');
+    expect(pg.__mockPool.end).toHaveBeenCalled();
   });
 });

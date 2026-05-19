@@ -4,8 +4,10 @@
  * Loescht pos_credentials mit `active=false AND updated_at < now() - retention`.
  * Default-Retention: 30 Tage (konfigurierbar via POS_CREDENTIALS_RETENTION_DAYS).
  *
- * Pro geloeschter Row ein auth_audit_log-Eintrag mit eventType
- * 'pos_credentials_purged' (DSGVO-Nachweis fuer Loeschung).
+ * Atomicity (T018-Review-Fix #1): DELETE und auth_audit_log-Inserts laufen
+ * in EINER Postgres-Transaktion (siehe `purgeInactivePosCredentials`).
+ * Kein orphaner Zustand mehr bei Connection-Crash zwischen Loeschung und
+ * Audit-Eintrag.
  *
  * Aufruf via IONOS systemd-Timer:
  *   docker compose exec -T backend node dist/cron/pos-credentials-cleanup.js
@@ -18,7 +20,6 @@
 import { Pool } from 'pg';
 import { config } from '../core/config';
 import { logger } from '../core/logger';
-import { logAuthEvent } from '../modules/m14-auth/users.repository';
 import { purgeInactivePosCredentials } from '../modules/m15-pos-connector/pos.repository';
 
 export async function runPosCredentialsCleanup(): Promise<{ purged: number }> {
@@ -27,6 +28,8 @@ export async function runPosCredentialsCleanup(): Promise<{ purged: number }> {
 
   try {
     logger.info({ retentionDays }, '[pos-cleanup-cron] Start');
+    // Atomic: DELETE + Audit-Log laufen in einer Tx. Bei Fehler: ROLLBACK,
+    // kein orphaner Zustand (Compliance-sicher).
     const purged = await purgeInactivePosCredentials(pool, retentionDays);
 
     if (purged.length === 0) {
@@ -34,27 +37,9 @@ export async function runPosCredentialsCleanup(): Promise<{ purged: number }> {
       return { purged: 0 };
     }
 
-    // Audit-Log pro geloeschter Row (DSGVO-Nachweis)
-    for (const p of purged) {
-      await logAuthEvent(pool, {
-        userId: null,
-        eventType: 'pos_credentials_purged',
-        ipAddress: null,
-        userAgent: 'cron:pos-credentials-cleanup',
-        metadata: {
-          tenant_id: p.tenant_id,
-          pos_system: p.pos_system,
-          pos_account_id: p.pos_account_id,
-          inactive_reason: p.inactive_reason,
-          inactive_since: p.inactive_since.toISOString(),
-          retention_days: retentionDays,
-        },
-      });
-    }
-
     logger.info(
       { count: purged.length, retentionDays },
-      '[pos-cleanup-cron] Fertig — Credentials geloescht',
+      '[pos-cleanup-cron] Fertig — Credentials geloescht (mit Audit-Trail)',
     );
     return { purged: purged.length };
   } finally {

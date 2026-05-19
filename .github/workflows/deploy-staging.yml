@@ -130,8 +130,14 @@ jobs:
             find /opt/gastro/backups -name 'pre-deploy-*.dump' -mtime +14 -delete || true
 
             # Images pullen + Container hochfahren
+            # --remove-orphans räumt Container weg, deren Service nicht mehr in
+            # docker-compose.prod.yml steht (z.B. nach Service-Rename oder
+            # Konsolidierung wie setup-stub+chat-stub → stubs). Sonst halten die
+            # alten Container ihre Ports und neue Container bleiben in "Created".
+            # --force-recreate stellt sicher, dass auch bei unverändertem Image-Tag
+            # die neue Compose-Config (Ports, ENV, Healthcheck) angewendet wird.
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans --force-recreate
 
             # DB-Migrationen ausfuehren
             # T012 Review-Fix B2b: migrate:prod nutzt das kompilierte dist/-Output

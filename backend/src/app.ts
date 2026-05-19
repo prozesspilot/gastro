@@ -50,6 +50,7 @@ import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
 import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
+import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
@@ -231,6 +232,9 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M01 Belege-Routes — VOR HMAC-Block (JWT-geschützt, nicht HMAC)
   // /api/v1/belege/upload, /api/v1/belege, /api/v1/belege/:id
   await app.register(belegeRoutes, { prefix: '/api/v1/belege' });
+  // T009/M05: Lexware-Office-Export-Routes — /api/v1/belege/:id/exports/lexware
+  // und /api/v1/exports/lexware/batch (JWT-geschuetzt, nicht HMAC).
+  await app.register(belegeLexwareRoutes, { prefix: '/api/v1' });
   // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm

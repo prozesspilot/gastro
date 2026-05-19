@@ -142,6 +142,44 @@
 - **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
 - **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
 
+### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
+- **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
+- **Was:** Steuerberaterin von Almaz kontaktieren, Lexware-Office-API-Token (Public-API-Schluessel) anfordern, in DB hinterlegen
+- **Schritte:**
+  1. Steuerberaterin per Mail/Anruf: „Wir brauchen einen Lexware-Office-API-Token, um Almaz' Belege automatisch in deinen Posteingang zu schieben."
+  2. Token unter https://app.lexoffice.de → Einstellungen → Öffentliche API erzeugen lassen
+  3. Token sicher uebergeben (1Password Share, NIEMALS per Mail-Klartext)
+  4. Token in DB via Bootstrap-Script ablegen (verschluesselt via pgcrypto):
+     ```bash
+     ssh root@87.106.8.111
+     docker compose exec backend node -e "
+       const { upsertBookingCredential } = require('./dist/modules/m05-lexoffice/services/booking-credentials.repository.js');
+       const { Pool } = require('pg');
+       const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+       await upsertBookingCredential(pool, {
+         tenantId: '<almaz-tenant-uuid>',
+         provider: 'lexware_office',
+         apiTokenPlaintext: '<token-from-steuerberaterin>',
+         displayName: 'Steuerkanzlei <Name>',
+         actorUserId: '<steve-user-uuid>',
+       });
+     "
+     ```
+     Alternativ: kleines Setup-Skript schreiben (kann ich liefern wenn Token da ist).
+  5. Smoke-Test: `curl -X POST https://api.prozesspilot.net/api/v1/belege/<beleg-id>/exports/lexware -H "Cookie: pp_auth=..." -H "X-PP-Tenant-ID: ..."`
+- **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
+- **Dependencies:** Migration 100 muss vorher gelaufen sein.
+
+### ⏳ Migration 100 in Production laufen lassen (T009)
+- **Priorität:** P0 (Token-Storage existiert sonst nicht)
+- **Was:** `belege` bekommt nichts; neue Tabelle `booking_credentials` (Lexware-Token-Storage)
+- **Schritte:**
+  1. Backup ziehen
+  2. SQL via psql: `\i /opt/gastro/migrations/100_booking_credentials.sql`
+  3. Verifizieren: `\d booking_credentials`
+  4. `INSERT INTO schema_migrations(filename) VALUES ('100_booking_credentials.sql')`
+- **Rollback:** `100_booking_credentials_rollback.sql`
+
 ### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
 - **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)
 - **Was:** GCP-Projekt anlegen, Vision-API aktivieren, Service-Account erzeugen, JSON-Key herunterladen

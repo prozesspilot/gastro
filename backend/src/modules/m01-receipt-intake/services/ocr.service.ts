@@ -119,6 +119,11 @@ export async function processBeleg(
   }
 
   // 3. Daily-Cost-Limit prüfen
+  // T007 Review-Fix M1: Race-Condition akzeptiert (Pilot-Volumen max 100/Monat,
+  // Worker-Concurrency=2). Check + Vision-Call + Increment ist nicht atomar,
+  // theoretisch kann Limit um max. Concurrency-Wert überschritten werden.
+  // Empfehlung: OCR_DAILY_LIMIT_PER_TENANT mit 10% Sicherheitspuffer setzen
+  // (z.B. 900 wenn Hard-Limit 1000). Bei höherer Concurrency später: Pre-Increment.
   const today = await getOcrCallCountToday(pool, tenantId, ocrAdapter.id);
   if (today >= config.OCR_DAILY_LIMIT_PER_TENANT) {
     logger.warn(

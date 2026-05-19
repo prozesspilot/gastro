@@ -18,6 +18,7 @@
  *   * Integration läuft mit echtem Redis (vitest setup hat dev-Redis verfügbar).
  */
 
+import { access } from 'node:fs/promises';
 import type { Worker } from 'bullmq';
 import type { Pool } from 'pg';
 
@@ -107,6 +108,27 @@ export async function startOcrWorker(
   deps: OcrWorkerDeps,
 ): Promise<Worker<OcrJobData, OcrJobResult>> {
   if (cachedWorker) return cachedWorker;
+
+  // T007 Review-Fix M3: Pre-Flight-Check für Vision-Key-File.
+  // Ohne diesen Check würde der erste OCR-Job mit ENOENT crashen, 3× retry
+  // → final fail nach ca. 4 Minuten — Steve/Andreas sehen erst dann den Bug.
+  // Mit Pre-Check: Warn-Log beim Worker-Start, Operator kann reagieren bevor
+  // Belege im Status 'extracting' hängen. Worker startet trotzdem (Tests/Dev
+  // brauchen keine echten Credentials — OCR-Calls sind dort gemockt).
+  if (config.GOOGLE_VISION_KEY_FILE) {
+    try {
+      await access(config.GOOGLE_VISION_KEY_FILE);
+      logger.info(
+        { keyFile: config.GOOGLE_VISION_KEY_FILE },
+        '[ocr-worker] Vision-Key-File gefunden',
+      );
+    } catch {
+      logger.warn(
+        { keyFile: config.GOOGLE_VISION_KEY_FILE },
+        '[ocr-worker] GOOGLE_VISION_KEY_FILE zeigt auf nicht-existente Datei — OCR-Jobs werden mit Error abgebrochen',
+      );
+    }
+  }
 
   const bullmq = await import('bullmq');
   const processor = buildOcrJobProcessor(deps);

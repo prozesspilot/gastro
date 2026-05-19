@@ -209,8 +209,8 @@ function extractByRegex(rawText: string, profile: CustomerProfileSlice): RegexRe
   // Beträge: "Total / Summe / Brutto / Gesamt" als linker Anker.
   const amountRe =
     /(?:total|summe|brutto|gesamt|netto|zwischensumme)\s*[:\-]?\s*(?:€\s*)?(\d{1,3}(?:[.,  ]\d{3})*[.,]\d{2})\s*(?:€|eur)?/gi;
-  let m: RegExpExecArray | null;
-  while ((m = amountRe.exec(rawText)) !== null) {
+  // T007 Review-Fix B2: matchAll statt while+exec (kein assignment-in-expression).
+  for (const m of rawText.matchAll(amountRe)) {
     const label = m[0].toLowerCase();
     const value = parseAmount(m[1]);
     if (value === null) continue;

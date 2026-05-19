@@ -63,8 +63,12 @@ export async function getOcrQueue(): Promise<Queue<OcrJobData, OcrJobResult>> {
  * Wenn OCR_QUEUE_ENABLED=0 (z. B. in Tests), wird der Aufruf zur No-op —
  * keine Redis-Verbindung wird geöffnet.
  *
- * Idempotenz: jobId = `ocr:<belegId>` — ein zweiter enqueue für denselben
- * Beleg, während ein Job noch in der Queue liegt, wird von BullMQ verworfen.
+ * Idempotenz / jobId-Strategie (Review-Fix M2):
+ *   reason='upload'    → jobId = `ocr:<belegId>` (deduped — paralleler Upload
+ *                        desselben SHA256 enqueued nicht doppelt).
+ *   reason='reprocess' → jobId = `ocr:<belegId>:reprocess:<ts>` (immer eindeutig
+ *                        — Operator-Reprocess wird auch ausgeführt wenn der
+ *                        vorherige Job noch 24h removeOnComplete-cached ist).
  */
 export async function enqueueOcrJob(data: OcrJobData): Promise<void> {
   if (!config.OCR_QUEUE_ENABLED) {
@@ -72,7 +76,10 @@ export async function enqueueOcrJob(data: OcrJobData): Promise<void> {
     return;
   }
   const queue = await getOcrQueue();
-  const jobId = `ocr:${data.belegId}`;
+  const jobId =
+    data.reason === 'reprocess'
+      ? `ocr:${data.belegId}:reprocess:${Date.now()}`
+      : `ocr:${data.belegId}`;
   await queue.add('process-beleg', data, { jobId });
   logger.info({ jobId, belegId: data.belegId, reason: data.reason }, '[ocr-queue] Job enqueued');
 }

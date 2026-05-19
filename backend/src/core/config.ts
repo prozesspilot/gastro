@@ -87,9 +87,23 @@ const envSchema = z.object({
   // OAuth-Redirects genutzt (z.B. SumUp-Callback → Webapp-Tenant-Seite).
   WEBAPP_URL: z.string().default('http://localhost:5173'),
 
+  // ── T017: trustProxy für Reverse-Proxy-Setups (IONOS, Caddy) ─────────────
+  // Fastify-Konfig fuer req.ip + X-Forwarded-For-Verarbeitung.
+  // Akzeptiert:
+  //   ''            → Default (Dev/Test): kein Proxy-Trust, req.ip ist die direkte Connection-IP
+  //   'true' | '1'  → ALLEN Proxies vertrauen (einfach, aber unsicher in offenen Netzen)
+  //   CIDR | IP     → konkrete IONOS-LB-IP/-Range, z. B. '10.0.0.0/8' oder '203.0.113.5'
+  //   'a, b, c'     → Komma-getrennte Liste (mehrere CIDRs / IPs)
+  // Production-Empfehlung (Sicherheits-Anker T017): IONOS-Loadbalancer-CIDR.
+  TRUST_PROXY: z.string().default(''),
+
   // ── M01: Beleg-Upload ──────────────────────────────────────────────────
   // Maximale Dateigröße beim Upload (Default 20 MB).
-  MAX_UPLOAD_SIZE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
+  MAX_UPLOAD_SIZE_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(20 * 1024 * 1024),
   // TTL für Presigned-Download-URLs in Sekunden (Default 15 Min).
   SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 
@@ -144,6 +158,18 @@ function loadConfig(): Config {
   if (cfg.NODE_ENV === 'production' && !cfg.PP_PGCRYPTO_KEY) {
     console.error(
       'FATAL: PP_PGCRYPTO_KEY fehlt in Production — Token-Encryption inaktiv (Discord, TOTP, SumUp)',
+    );
+    process.exit(1);
+  }
+
+  // T017: TRUST_PROXY ist in Production PFLICHT — sonst zeigt req.ip immer
+  // die Reverse-Proxy-IP und das IP-Rate-Limit ist als DoS-Vektor ausnutzbar
+  // (ein Angreifer kann Geschaeftsfuehrer aus dem Notfall-Login aussperren).
+  // Hard-Fail (Review-Fix M2): besser kein Backend als ein Backend mit
+  // gebrochenem Login-Rate-Limit. Recommended: TRUST_PROXY=loopback.
+  if (cfg.NODE_ENV === 'production' && !cfg.TRUST_PROXY) {
+    console.error(
+      'FATAL: TRUST_PROXY fehlt in Production — req.ip waere die Reverse-Proxy-IP, IP-Rate-Limit waere DoS-Vektor (Geschaeftsfuehrer aussperrbar). Setze TRUST_PROXY=loopback (Caddy auf gleichem Host) oder CIDR fuer externen LB.',
     );
     process.exit(1);
   }

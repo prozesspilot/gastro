@@ -79,11 +79,42 @@ declare module 'fastify' {
   }
 }
 
+/**
+ * T017: Parst die TRUST_PROXY-ENV-Variable in den von Fastify erwarteten Typ.
+ *
+ * Akzeptiert:
+ *   ''            → false (kein Proxy-Trust)
+ *   'true' | '1'  → true  (allen Proxies vertrauen)
+ *   'loopback'    → string 'loopback' (Fastify/proxy-addr-Keyword: 127.0.0.1 + ::1)
+ *   CIDR / IP     → string
+ *   'a, b, c'     → string[]
+ *
+ * Exportiert für Test-Wiederverwendung (Review-Fix NH1: keine Duplikation).
+ */
+export function parseTrustProxy(raw: string): boolean | string | string[] {
+  const trimmed = raw.trim();
+  if (trimmed === '') return false;
+  if (trimmed === 'true' || trimmed === '1') return true;
+  // Komma-Liste → string[]
+  if (trimmed.includes(',')) {
+    return trimmed
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+  return trimmed;
+}
+
 // biome-ignore lint/suspicious/noExplicitAny: Fastify-Generics erfordern explizite any für custom Logger-Typ
 export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   const app = Fastify({
     // Im Test-Modus kein Logging-Output; sonst eigene Pino-Instanz
     logger: config.NODE_ENV === 'test' ? false : logger,
+    // T017: req.ip + X-Forwarded-For-Verarbeitung hinter Reverse-Proxy
+    //   (IONOS Loadbalancer + Caddy). Pflicht in Production fuer korrektes
+    //   IP-Rate-Limiting (Notfall-Login, @fastify/rate-limit global).
+    //   Default in Dev/Test: false (req.ip = direkte Connection-IP).
+    trustProxy: parseTrustProxy(config.TRUST_PROXY),
   });
 
   const db = new Pool({ connectionString: config.DATABASE_URL });

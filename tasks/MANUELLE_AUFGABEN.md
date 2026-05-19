@@ -78,15 +78,28 @@
 
 ## 🔧 Andreas — Backend / Infrastructure / DB
 
-### ⏳ trustProxy IONOS konfigurieren (T017)
-- **Priorität:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht)
-- **Dependencies:** T012 (Caddy-Setup) muss laufen
-- **Was:** `app.ts` mit `trustProxy: true` + spezifische IONOS-LB-IPs konfigurieren
+### ⏳ TRUST_PROXY ENV-Variable in Production setzen (T017)
+- **Priorität:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht und ist als DoS-Vektor ausnutzbar)
+- **Dependencies:** T012 (Caddy-Setup) ✅ erledigt
+- **Was:** ENV-Variable `TRUST_PROXY` setzen, damit Fastify `X-Forwarded-For` korrekt verarbeitet
 - **Schritte:**
-  1. IONOS-Loadbalancer-IPs / CIDR ermitteln
-  2. `trustProxy: '10.x.x.x'` oder ähnlich setzen
-  3. Caddy-Config prüfen: `X-Forwarded-For` muss korrekt geforwarded werden
-  4. Smoke-Test: `req.ip` zeigt echte Client-IP
+  1. **Für unser aktuelles Setup** (Caddy auf gleichem Host wie Backend-Container, kein externer LB):
+     - `TRUST_PROXY=loopback` (vertraut nur `127.0.0.1` + `::1` — die Caddy-IP)
+     - Das ist die **empfohlene Primär-Wahl** — minimaler Trust-Scope, kein Spoofing-Risiko
+  2. **Wenn später ein echter externer IONOS-Loadbalancer dazukommt:**
+     - `TRUST_PROXY=10.0.0.0/8` (IONOS-internes Netz)
+     - oder Komma-Liste `TRUST_PROXY=loopback, 10.0.0.0/8`
+     - **NIEMALS** `TRUST_PROXY=true` in Production — das vertraut allen Proxies inkl. gefälschter `X-Forwarded-For`-Header → Spoofing-Vektor!
+  3. In `.env.prod` auf Server setzen:
+     ```bash
+     ssh root@87.106.8.111
+     echo 'TRUST_PROXY=loopback' >> /opt/gastro/.env.prod
+     # Backend neu starten:
+     cd /opt/gastro && docker compose -f docker-compose.prod.yml restart backend
+     ```
+  4. Smoke-Test nach Deploy: `curl https://api.prozesspilot.net/api/v1/health` mit `X-Forwarded-For: 1.2.3.4` → Logs müssen `1.2.3.4` als `req.ip` zeigen
+- **Output:** `TRUST_PROXY` env-var auf Production-Server gesetzt
+- **Hinweis:** Backend **crashed** beim Start in Production wenn `TRUST_PROXY` leer ist (Hard-Fail-Guard). Diese harte Linie ist absichtlich: Geschäftsführer-Notfall-Login wäre sonst aussperrbar.
 
 ### ⏳ IONOS-Server-Setup (teilweise erledigt durch T012)
 - **Priorität:** P0 (vor Pilot-Start)

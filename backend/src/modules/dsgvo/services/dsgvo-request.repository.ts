@@ -7,8 +7,24 @@
  *   * Audit-Log-Schreiben in derselben Tx wie Insert (GoBD-Atomicity).
  */
 
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { logAuditEvent } from '../../../core/audit/audit-log';
+
+/**
+ * T010 Review-Fix B4: typed Error für Rate-Limit-Verletzung,
+ * damit der Handler differenzieren kann (429 vs. 500).
+ */
+export class DsgvoRateLimitError extends Error {
+  readonly currentCount: number;
+  readonly limit: number;
+  constructor(currentCount: number, limit: number) {
+    super(`DSGVO-Rate-Limit erreicht (${currentCount}/${limit} in 24h)`);
+    this.name = 'DsgvoRateLimitError';
+    this.currentCount = currentCount;
+    this.limit = limit;
+  }
+}
 
 export type DsgvoRequestType = 'auskunft' | 'loeschung';
 
@@ -54,15 +70,45 @@ async function setTenantContext(client: PoolClient, tenantId: string): Promise<v
 
 /**
  * Legt eine neue DSGVO-Anfrage an (status='pending'). Audit-Log in derselben Tx.
+ *
+ * T010 Review-Fix B4: Rate-Limit-Check + Insert in EINER Transaktion mit
+ * Advisory-Lock. Vorher waren count + insert nicht atomar — 5 parallele
+ * Requests konnten alle Limit umgehen (alle sahen denselben Count vor
+ * Insert). Lock-Key = hash('dsgvo-rate-' + tenantId), pro-Tenant serialisiert.
+ *
+ * Wirft DsgvoRateLimitError wenn Limit erreicht — Handler kann darauf
+ * mit HTTP 429 antworten.
  */
 export async function createDsgvoRequest(
   pool: Pool,
   input: CreateDsgvoRequestInput,
+  rateLimit: number,
 ): Promise<DsgvoRequest> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await setTenantContext(client, input.tenantId);
+
+    // Tx-Advisory-Lock: pro Tenant serialisiert. hashtext gibt int4, wir
+    // nehmen zwei Werte (Klassifikator + Tenant) für pg_advisory_xact_lock(int, int).
+    // Lock wird automatisch am Tx-Ende (COMMIT/ROLLBACK) freigegeben.
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext('dsgvo-rate-limit'), hashtext($1::text))",
+      [input.tenantId],
+    );
+
+    const countResult = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+         FROM dsgvo_requests
+        WHERE tenant_id = $1
+          AND created_at >= now() - interval '24 hours'`,
+      [input.tenantId],
+    );
+    const currentCount = Number.parseInt(countResult.rows[0].count, 10);
+    if (currentCount >= rateLimit) {
+      await client.query('ROLLBACK');
+      throw new DsgvoRateLimitError(currentCount, rateLimit);
+    }
 
     const insertResult = await client.query<DsgvoRequest>(
       `INSERT INTO dsgvo_requests
@@ -105,10 +151,11 @@ export async function createDsgvoRequest(
   }
 }
 
-/** SHA256-Hash der Email fuer Audit-Log — PII darf nicht im Klartext im Log stehen. */
-function hashEmail(email: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { createHash } = require('node:crypto') as typeof import('node:crypto');
+/**
+ * SHA256-Hash der Email fuer Audit-Log — PII darf nicht im Klartext im Log stehen.
+ * T010 Review-Fix N1: aus require() zu top-level import migriert.
+ */
+export function hashEmail(email: string): string {
   return createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
 }
 

@@ -16,7 +16,7 @@ import type Redis from 'ioredis';
 import { z } from 'zod';
 import { config } from '../../../core/config';
 import {
-  countRecentDsgvoRequests,
+  DsgvoRateLimitError,
   createDsgvoRequest,
   updateDsgvoRequestStatus,
 } from '../services/dsgvo-request.repository';
@@ -49,24 +49,30 @@ export async function loeschungHandler(req: FastifyRequest, reply: FastifyReply)
     });
   }
 
-  // Rate-Limit
-  const recentCount = await countRecentDsgvoRequests(req.server.db, tenantId);
-  if (recentCount >= config.DSGVO_REQUESTS_PER_DAY_LIMIT) {
-    return reply.code(429).send({
-      error: 'rate_limit',
-      message: `Max ${config.DSGVO_REQUESTS_PER_DAY_LIMIT} DSGVO-Antraege pro 24h erreicht.`,
-      retry_after_hours: 24,
-    });
+  // 1. Request anlegen — Rate-Limit-Check atomar in der Tx (Review-Fix B4).
+  let request: Awaited<ReturnType<typeof createDsgvoRequest>>;
+  try {
+    request = await createDsgvoRequest(
+      req.server.db,
+      {
+        tenantId,
+        type: 'loeschung',
+        subjectEmail: parsed.data.email,
+        subjectDescription: parsed.data.description,
+        requestedByUserId: staff.userId,
+      },
+      config.DSGVO_REQUESTS_PER_DAY_LIMIT,
+    );
+  } catch (err) {
+    if (err instanceof DsgvoRateLimitError) {
+      return reply.code(429).send({
+        error: 'rate_limit',
+        message: `Max ${err.limit} DSGVO-Antraege pro 24h erreicht.`,
+        retry_after_hours: 24,
+      });
+    }
+    throw err;
   }
-
-  // 1. Request anlegen
-  const request = await createDsgvoRequest(req.server.db, {
-    tenantId,
-    type: 'loeschung',
-    subjectEmail: parsed.data.email,
-    subjectDescription: parsed.data.description,
-    requestedByUserId: staff.userId,
-  });
 
   // 2. Status auf 'confirming' setzen — Subject muss bestaetigen
   await updateDsgvoRequestStatus(req.server.db, tenantId, request.id, { status: 'confirming' });

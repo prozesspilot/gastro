@@ -42,6 +42,10 @@ describe('createDsgvoRequest', () => {
     const sqlCalls: string[] = [];
     const pool = makePoolWithQueryFn((sql) => {
       sqlCalls.push(sql);
+      // T010 Review-Fix B4: COUNT-Check muss { count: '0' } liefern (unter Limit).
+      if (sql.includes('SELECT COUNT(*)::text AS count')) {
+        return { rows: [{ count: '0' }] };
+      }
       if (sql.includes('INSERT INTO dsgvo_requests')) {
         return {
           rows: [
@@ -69,12 +73,16 @@ describe('createDsgvoRequest', () => {
       return { rows: [] };
     });
 
-    const result = await createDsgvoRequest(pool as unknown as Pool, {
-      tenantId: TENANT_UUID,
-      type: 'auskunft',
-      subjectEmail: 'subject@example.com',
-      requestedByUserId: USER_UUID,
-    });
+    const result = await createDsgvoRequest(
+      pool as unknown as Pool,
+      {
+        tenantId: TENANT_UUID,
+        type: 'auskunft',
+        subjectEmail: 'subject@example.com',
+        requestedByUserId: USER_UUID,
+      },
+      5, // rateLimit
+    );
 
     expect(result.id).toBe(REQUEST_UUID);
     expect(result.type).toBe('auskunft');
@@ -98,6 +106,9 @@ describe('createDsgvoRequest', () => {
     const sqlCalls: string[] = [];
     const pool = makePoolWithQueryFn((sql) => {
       sqlCalls.push(sql);
+      if (sql.includes('SELECT COUNT(*)::text AS count')) {
+        return { rows: [{ count: '0' }] };
+      }
       if (sql.includes('INSERT INTO dsgvo_requests')) {
         throw new Error('DB unavailable');
       }
@@ -105,12 +116,16 @@ describe('createDsgvoRequest', () => {
     });
 
     await expect(
-      createDsgvoRequest(pool as unknown as Pool, {
-        tenantId: TENANT_UUID,
-        type: 'auskunft',
-        subjectEmail: 'subject@example.com',
-        requestedByUserId: USER_UUID,
-      }),
+      createDsgvoRequest(
+        pool as unknown as Pool,
+        {
+          tenantId: TENANT_UUID,
+          type: 'auskunft',
+          subjectEmail: 'subject@example.com',
+          requestedByUserId: USER_UUID,
+        },
+        5,
+      ),
     ).rejects.toThrow('DB unavailable');
     expect(sqlCalls.find((s) => s === 'ROLLBACK')).toBe('ROLLBACK');
   });

@@ -13,7 +13,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../../../core/config';
 import { enqueueDsgvoZipJob } from '../../../core/queue/dsgvo-queue';
-import { countRecentDsgvoRequests, createDsgvoRequest } from '../services/dsgvo-request.repository';
+import { DsgvoRateLimitError, createDsgvoRequest } from '../services/dsgvo-request.repository';
 
 const bodySchema = z.object({
   email: z.string().email({ message: 'Gueltige E-Mail-Adresse erforderlich' }),
@@ -41,23 +41,31 @@ export async function auskunftHandler(req: FastifyRequest, reply: FastifyReply):
     });
   }
 
-  // Rate-Limit-Check
-  const recentCount = await countRecentDsgvoRequests(req.server.db, tenantId);
-  if (recentCount >= config.DSGVO_REQUESTS_PER_DAY_LIMIT) {
-    return reply.code(429).send({
-      error: 'rate_limit',
-      message: `Max ${config.DSGVO_REQUESTS_PER_DAY_LIMIT} DSGVO-Antraege pro 24h erreicht. Spaeter erneut versuchen.`,
-      retry_after_hours: 24,
-    });
+  // T010 Review-Fix B4: Rate-Limit-Check ist jetzt atomar in createDsgvoRequest
+  // (Postgres-Advisory-Lock pro Tenant). Verhindert Race bei parallelen Requests.
+  let request: Awaited<ReturnType<typeof createDsgvoRequest>>;
+  try {
+    request = await createDsgvoRequest(
+      req.server.db,
+      {
+        tenantId,
+        type: 'auskunft',
+        subjectEmail: parsed.data.email,
+        subjectDescription: parsed.data.description,
+        requestedByUserId: staff.userId,
+      },
+      config.DSGVO_REQUESTS_PER_DAY_LIMIT,
+    );
+  } catch (err) {
+    if (err instanceof DsgvoRateLimitError) {
+      return reply.code(429).send({
+        error: 'rate_limit',
+        message: `Max ${err.limit} DSGVO-Antraege pro 24h erreicht. Spaeter erneut versuchen.`,
+        retry_after_hours: 24,
+      });
+    }
+    throw err;
   }
-
-  const request = await createDsgvoRequest(req.server.db, {
-    tenantId,
-    type: 'auskunft',
-    subjectEmail: parsed.data.email,
-    subjectDescription: parsed.data.description,
-    requestedByUserId: staff.userId,
-  });
 
   // Job in die Queue legen — Worker baut ZIP + verschickt Mail.
   try {

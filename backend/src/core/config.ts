@@ -128,7 +128,11 @@ const envSchema = z.object({
   // TTL des Loeschungs-Confirm-Tokens in Sekunden (Default 30 min).
   DSGVO_CONFIRM_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   // ZIP-Export wird nach N Tagen aus MinIO geloescht (Auto-Expire).
-  DSGVO_EXPORT_TTL_DAYS: z.coerce.number().int().positive().default(14),
+  // T010 Review-Fix M2: von 14 auf 3 gesenkt. Signed-URL mit voller PII soll
+  // nicht 2 Wochen rumliegen — Leak in Mail-Logs/Browser-History exponiert
+  // sonst die Daten dauerhaft. Status-Endpoint regeneriert Signed-URL bei
+  // Bedarf (siehe auskunft-status.handler.ts).
+  DSGVO_EXPORT_TTL_DAYS: z.coerce.number().int().positive().default(3),
   // BullMQ-Queue fuer DSGVO-Auskunfts-ZIP-Builds. '0' deaktiviert das Auto-
   // Enqueue (z. B. in Tests). Standard: aktiv.
   DSGVO_QUEUE_ENABLED: z

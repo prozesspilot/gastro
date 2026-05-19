@@ -27,7 +27,26 @@ import { loeschungHandler } from './handlers-v2/loeschung.handler';
 
 export async function dsgvoV2Routes(app: FastifyInstance): Promise<void> {
   // OEFFENTLICHER Endpoint zuerst (KEIN Auth-Hook!)
-  app.post('/loeschung/confirm', loeschungConfirmHandler);
+  //
+  // T010 Review-Fix B5: IP-Rate-Limit zwingend für anonymen Endpoint.
+  // Token ist zwar 256-bit (kryptographisch sicher), aber ohne Rate-Limit
+  // ist der Endpoint ein offenes Tor für Brute-Force / Müll-Floods.
+  // Limit: 20/min/IP — großzügig genug für legitime Subjects mit Tippfehlern,
+  // schmal genug um Angriffe abzubrechen. trustProxy (T017) muss aktiv sein,
+  // damit req.ip die echte Client-IP zeigt (sonst werden alle Clients
+  // gemeinsam gelocked → DoS-Vektor).
+  app.post(
+    '/loeschung/confirm',
+    {
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    loeschungConfirmHandler,
+  );
 
   // Geschuetzte Endpoints in eigener Sub-Plugin-Registrierung,
   // damit Hooks nur dort greifen.

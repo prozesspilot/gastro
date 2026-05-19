@@ -20,6 +20,7 @@ import type Redis from 'ioredis';
 import { z } from 'zod';
 import {
   getDsgvoRequestById,
+  hashEmail,
   updateDsgvoRequestStatus,
 } from '../services/dsgvo-request.repository';
 import { executeLoeschung } from '../services/loeschung.service';
@@ -68,6 +69,23 @@ export async function loeschungConfirmHandler(
   if (!request) {
     return reply.code(404).send({ error: 'not_found', message: 'Antrag nicht gefunden.' });
   }
+
+  // T010 Review-Fix M4: Defense-in-Depth — verifiziere dass der Email-Hash
+  // im Token-Payload zur DB-Row passt. Falls Token + Request-Row durch
+  // Manipulation divergieren (z.B. Token aus altem Request, Request neu
+  // angelegt), wird hier abgebrochen statt mit falschen Daten zu löschen.
+  const dbHash = hashEmail(request.subject_email);
+  if (tokenPayload.subject_email_hash !== dbHash) {
+    req.log.warn(
+      { request_id: request.id, token_hash_mismatch: true },
+      '[dsgvo-loeschung-confirm] Email-Hash zwischen Token und DB-Row passt nicht',
+    );
+    return reply.code(400).send({
+      error: 'token_db_mismatch',
+      message: 'Token passt nicht zum gespeicherten Antrag.',
+    });
+  }
+
   if (request.status !== 'confirming') {
     return reply.code(409).send({
       error: 'wrong_status',

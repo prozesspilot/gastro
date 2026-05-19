@@ -4,10 +4,24 @@ name: Task Tracker
 # tasks/_backlog/, tasks/_in_progress/ und tasks/_done/ verschiebt
 # (via `git mv`). Erkennt Renames via `git diff --name-status -M`.
 #
-# Drei Übergänge werden erkannt:
+# Trigger-Strategie:
+#   * main-Branch     → alle Übergänge melden (final-state)
+#   * Feature-Branch  → NUR Start-Übergänge melden (_backlog → _in_progress
+#                       oder _backlog → _done). "X startet Task Y" passiert
+#                       im Feature-Branch, nicht im Merge.
+#                       Verhindert Doppel-Posts: wenn auf Feature-Branch
+#                       schon "startet" gepostet wurde, postet main beim
+#                       Merge nichts mehr (gleiche Übergang-Detection
+#                       greift dort nicht — Task ist auf main jetzt
+#                       _in_progress oder _done, kein erneuter Rename).
+#
+# Übergänge:
 #   _backlog        → _in_progress   → 🟢 "X startet Task Y"
 #   _in_progress    → _done          → ✅ "Task Y abgeschlossen"
 #   _backlog        → _done          → ✅ "Task Y direkt erledigt"
+#   _done           → _in_progress   → 🔄 "X hat wieder geöffnet"
+#   _in_progress    → _backlog       → ↩️ "X hat zurückgestellt"
+#   _done           → _backlog       → ↩️ "X hat zurück ins Backlog gestellt"
 #
 # Owner-Erkennung:
 #   1. Aus Filename-Convention: TXXX-<owner>-<rest>.md → <owner>
@@ -18,7 +32,12 @@ name: Task Tracker
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'andreas/**'
+      - 'steve/**'
+      - 'gemeinsam/**'
+      - 'server/**'
     paths:
       - 'tasks/_backlog/**'
       - 'tasks/_in_progress/**'
@@ -37,6 +56,7 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }}
           COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
           COMMIT_URL: ${{ github.event.head_commit.url }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
           set -e
 
@@ -44,6 +64,17 @@ jobs:
             echo "DISCORD_DEV_LOG_WEBHOOK nicht gesetzt — überspringe."
             exit 0
           fi
+
+          # Auf Feature-Branches melden wir NUR Start-Übergänge.
+          # Auf main melden wir alle Übergänge.
+          # Verhindert Doppel-Posts: Start-Post passiert beim Feature-Branch-Push,
+          # nicht nochmal beim Merge auf main (weil dort kein neuer Rename ist).
+          if [ "$BRANCH_NAME" = "main" ]; then
+            scope="main"
+          else
+            scope="feature"
+          fi
+          echo "Branch: $BRANCH_NAME | Scope: $scope"
 
           # Renames im letzten Commit ermitteln. Format:
           # R100<TAB>tasks/_backlog/T015-...md<TAB>tasks/_in_progress/T015-andreas-...md
@@ -76,6 +107,17 @@ jobs:
                 continue ;;
             esac
 
+            # Auf Feature-Branches: nur Start-Übergänge melden.
+            # Alles andere (done, reopen, cancel) ist erst nach Merge auf main relevant.
+            if [ "$scope" = "feature" ]; then
+              case "$transition" in
+                "_backlog→_in_progress"|"_backlog→_done") ;; # erlaubt
+                *)
+                  echo "  Übergang $transition auf Feature-Branch wird übersprungen (kommt beim main-Merge)."
+                  continue ;;
+              esac
+            fi
+
             # Task-Titel aus erster Markdown-Zeile (# TXXX — Titel)
             title=$(head -1 "$new_path" | sed -E 's/^# *//' || echo "(unbekannt)")
 
@@ -88,9 +130,16 @@ jobs:
               owner="$COMMIT_AUTHOR"
             fi
 
+            # Branch-Info nur auf Feature-Branches — auf main redundant
+            if [ "$scope" = "feature" ]; then
+              branch_line="\nBranch: \`$BRANCH_NAME\`"
+            else
+              branch_line=""
+            fi
+
             # Discord-Post
-            content=$(printf "@everyone %s **%s %s**: %s\n%s" \
-              "$emoji" "$owner" "$verb" "$title" "$COMMIT_URL")
+            content=$(printf "@everyone %s **%s %s**: %s%s\n%s" \
+              "$emoji" "$owner" "$verb" "$title" "$branch_line" "$COMMIT_URL")
             payload=$(jq -nc \
               --arg c "$content" \
               '{content: $c, allowed_mentions: {parse: ["everyone"]}}')

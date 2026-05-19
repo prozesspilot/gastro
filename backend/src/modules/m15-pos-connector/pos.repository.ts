@@ -325,3 +325,58 @@ export async function deletePosCredentials(
   );
   return { deleted: (result.rowCount ?? 0) > 0 };
 }
+
+// ── T018: DSGVO-Cleanup ────────────────────────────────────────────────
+
+export interface PurgedPosCredential {
+  id: string;
+  tenant_id: string;
+  pos_system: PosSystem;
+  pos_account_id: string;
+  inactive_reason: string | null;
+  inactive_since: Date;
+}
+
+/**
+ * T018: Loescht alle pos_credentials, die seit `retentionDays` deaktiviert sind.
+ *
+ * Pattern:
+ *   * Token sind kein Geschaeftsdaten-Bestandteil — die 10-Jahres-Aufbewahrungs-
+ *     pflicht (§ 147 AO) gilt fuer Belege/Buchungen, NICHT fuer OAuth-Tokens.
+ *   * Bei Disconnect oder Refresh-Fail wird `active=false` + `updated_at`
+ *     gesetzt. Nach Ablauf der Retention (Default 30 Tage) Hard-Delete.
+ *
+ * Audit:
+ *   * RETURNING * liefert alle geloeschten Rows zurueck → Caller schreibt pro
+ *     Row einen auth_audit_log-Eintrag mit eventType 'pos_credentials_purged'.
+ *   * Wir loggen NICHT im SQL — separieren Concerns, kein Trigger.
+ *
+ * Idempotent: bei wiederholtem Aufruf ohne neue inactive-Rows nichts zu tun.
+ */
+export async function purgeInactivePosCredentials(
+  pool: Pool,
+  retentionDays: number,
+): Promise<PurgedPosCredential[]> {
+  const result = await pool.query<{
+    id: string;
+    tenant_id: string;
+    pos_system: PosSystem;
+    pos_account_id: string;
+    inactive_reason: string | null;
+    updated_at: Date;
+  }>(
+    `DELETE FROM pos_credentials
+      WHERE active = false
+        AND updated_at < now() - ($1::int * INTERVAL '1 day')
+      RETURNING id, tenant_id, pos_system, pos_account_id, inactive_reason, updated_at`,
+    [retentionDays],
+  );
+  return result.rows.map((r) => ({
+    id: r.id,
+    tenant_id: r.tenant_id,
+    pos_system: r.pos_system,
+    pos_account_id: r.pos_account_id,
+    inactive_reason: r.inactive_reason,
+    inactive_since: r.updated_at,
+  }));
+}

@@ -102,6 +102,12 @@ const envSchema = z.object({
   // OAuth-Redirects genutzt (z.B. SumUp-Callback → Webapp-Tenant-Seite).
   WEBAPP_URL: z.string().default('http://localhost:5173'),
 
+  // ── T018: DSGVO-Cleanup fuer POS-Credentials ───────────────────────────
+  // Inaktive pos_credentials werden nach dieser Frist (Tage) endgueltig
+  // geloescht. Default 30 Tage. Token sind kein Geschaeftsdaten-Bestandteil,
+  // fallen nicht unter 10-Jahres-Aufbewahrungspflicht (§ 147 AO).
+  POS_CREDENTIALS_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+
   // ── T017: trustProxy für Reverse-Proxy-Setups (IONOS, Caddy) ─────────────
   // Fastify-Konfig fuer req.ip + X-Forwarded-For-Verarbeitung.
   // Akzeptiert:

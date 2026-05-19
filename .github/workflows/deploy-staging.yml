@@ -8,6 +8,14 @@ jobs:
   # ── Build-Job: Images bauen + in Registry pushen ───────────────────────────
   build:
     runs-on: ubuntu-latest
+    # Fix: GITHUB_TOKEN braucht packages:write um Org-Packages anzulegen/pushen.
+    # Ohne diesen Block scheitert der erste GHCR-Push mit
+    # "denied: installation not allowed to Create organization package".
+    # Voraussetzung zusätzlich: Repo-Settings → Actions → General →
+    # Workflow permissions = "Read and write permissions" (sollte default sein).
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 

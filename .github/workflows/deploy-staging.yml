@@ -65,14 +65,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build & Push Discord-Bot Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./discord-bot
-          push: true
-          tags: ghcr.io/${{ github.repository }}/discord-bot:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # Discord-Bot-Build entfernt (2026-05-19): ./discord-bot existiert noch
+      # nicht im Repo, Build-Step crashte mit "path not found" und blockte den
+      # Deploy-Job. Wird wieder aktiviert, sobald der Discord-Bot-Service
+      # implementiert ist (siehe Modulkonzept/.../Discord_Integration.md).
 
       # T012: Caddy-Konfiguration syntax-prüfen
       - name: Caddy Config Syntax-Check

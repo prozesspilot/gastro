@@ -197,9 +197,6 @@ export function buildBuildHandler() {
         }),
       );
     }
-
-    // Type sat:
-    void report;
   };
 }
 

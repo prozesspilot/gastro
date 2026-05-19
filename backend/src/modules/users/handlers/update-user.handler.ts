@@ -1,9 +1,9 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { presetPermissions, validatePermissionList } from '../../../core/auth/permissions';
+import { UpdateUserSchema } from '../schemas/user.schema';
 import { AuthEventLogger } from '../services/auth-event.logger';
 import { publicUserView } from '../services/auth.service';
 import { UserRepository } from '../services/user.repository';
-import { UpdateUserSchema } from '../schemas/user.schema';
 
 export async function updateUserHandler(
   req: FastifyRequest<{ Params: { id: string } }>,
@@ -63,12 +63,10 @@ export async function updateUserHandler(
   if (parsed.data.permissions !== undefined) {
     const v = validatePermissionList(parsed.data.permissions);
     if (!v.ok) {
-      await reply
-        .code(400)
-        .send({
-          ok: false,
-          error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
-        });
+      await reply.code(400).send({
+        ok: false,
+        error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
+      });
       return;
     }
     // Wildcard "*" nur durch super_admin-Caller

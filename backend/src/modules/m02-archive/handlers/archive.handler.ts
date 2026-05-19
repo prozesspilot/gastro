@@ -135,16 +135,20 @@ export function buildArchiveHandler(deps: ArchiveHandlerDeps = {}) {
 
       // 5) Upload
       const fullPath = joinPath(targetDir, finalName);
+      const docDate = documentDate(receipt);
+      const metadata: Record<string, string> = {
+        receipt_id: receipt.receipt_id,
+        sha256: receipt.file.sha256,
+      };
+      if (docDate) {
+        metadata.document_date = docDate;
+      }
       const result = await adapter.upload({
         customerId,
         path: fullPath,
         bytes: pdfBytes,
         mime: 'application/pdf',
-        metadata: {
-          receipt_id: receipt.receipt_id,
-          sha256: receipt.file.sha256,
-          ...(documentDate(receipt) ? { document_date: documentDate(receipt)! } : {}),
-        },
+        metadata,
       });
 
       // 6) Receipt patchen

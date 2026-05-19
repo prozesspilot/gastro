@@ -18,15 +18,17 @@
  *   3. Prefix ist /api/v1/belege, nicht /api/v1/receipts
  *
  * M7: m14TenantContextHook als preHandler registriert — löst Duplikation in
- *   den drei Handlern auf. Handler lesen req.tenantId! statt Header zu parsen.
+ *   den drei Handlern auf. Handler lesen `requireTenantId(req)` statt Header zu parsen.
  */
 
 import type { FastifyInstance } from 'fastify';
 import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
+import { deleteBelegHandler } from './handlers/delete.handler';
 import { detailHandler } from './handlers/detail.handler';
 import { listHandler } from './handlers/list.handler';
 import { reprocessHandler } from './handlers/reprocess.handler';
+import { updateBelegHandler } from './handlers/update.handler';
 import { uploadHandler } from './handlers/upload.handler';
 
 export async function belegeRoutes(app: FastifyInstance): Promise<void> {
@@ -44,6 +46,13 @@ export async function belegeRoutes(app: FastifyInstance): Promise<void> {
 
   // Detail + Signed-URL
   app.get('/:id', detailHandler);
+
+  // T015: Mitarbeiter korrigiert OCR-Felder (Lieferant, Datum, Betrag, ...)
+  app.patch<{ Params: { id: string } }>('/:id', updateBelegHandler);
+
+  // T015: Soft-Delete (geschaeftsfuehrer only) — setzt deleted_at,
+  // Aufbewahrungspflicht bleibt erhalten (Hart-Loeschung via Cleanup-Cron).
+  app.delete<{ Params: { id: string } }>('/:id', deleteBelegHandler);
 
   // T007: Manueller Re-Run der OCR-Pipeline für einen Beleg.
   // Verwendung u. a. nach 'error'-Status (Discord-Alert hat operator

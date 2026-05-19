@@ -29,12 +29,15 @@ export interface OverrideResolverInput {
 }
 
 function normalize(s: string): string {
-  return s
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036F]/g, '') // Diakritika
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    s
+      .normalize('NFKD')
+      // biome-ignore lint/suspicious/noMisleadingCharacterClass: Diakritika-Range (U+0300\u2013036F), bewusst per Codepoint
+      .replace(/[\u0300-\u036F]/g, '') // Diakritika
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 /**

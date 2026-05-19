@@ -2,10 +2,10 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hashPassword, validatePasswordStrength } from '../../../core/auth/password';
 import { presetPermissions, validatePermissionList } from '../../../core/auth/permissions';
-import { AuthEventLogger } from '../services/auth-event.logger';
-import { newUserId, UserRepository } from '../services/user.repository';
-import { publicUserView } from '../services/auth.service';
 import { CreateUserSchema } from '../schemas/user.schema';
+import { AuthEventLogger } from '../services/auth-event.logger';
+import { publicUserView } from '../services/auth.service';
+import { UserRepository, newUserId } from '../services/user.repository';
 
 function generateTempPassword(): string {
   // 16 Zeichen base64url ≈ 21 Bytes Entropie → > 128 Bit
@@ -42,12 +42,10 @@ export async function createUserHandler(req: FastifyRequest, reply: FastifyReply
     }
     const v = validatePermissionList(input.permissions);
     if (!v.ok) {
-      await reply
-        .code(400)
-        .send({
-          ok: false,
-          error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
-        });
+      await reply.code(400).send({
+        ok: false,
+        error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
+      });
       return;
     }
     perms = input.permissions;

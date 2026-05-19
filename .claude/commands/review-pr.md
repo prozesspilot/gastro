@@ -63,11 +63,14 @@ Der Agent gibt zurück:
 
 ## Schritt 8: Discord-Notification
 
+Pingt @everyone — Reviews sollen für alle sichtbar sein.
+
 ```bash
 curl -X POST $DISCORD_DEV_WEBHOOK_URL \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "🔍 **Review von <Reviewer>** auf PR #<Nummer>: **<APPROVE/CHANGES/REJECT>**\n<Summary in 1 Satz>\n<URL>"
+    "content": "@everyone 🔍 **Review von <Reviewer>** auf PR #<Nummer>: **<APPROVE/CHANGES/REJECT>**\n<Summary in 1 Satz>\n<URL>",
+    "allowed_mentions": { "parse": ["everyone"] }
   }'
 ```
 

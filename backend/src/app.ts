@@ -29,6 +29,7 @@ import { categoriesRoutes } from './modules/m03-categorization/categories.routes
 import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
 import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
 import { m04DatevRoutes } from './modules/m04-datev/routes';
+import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
 import {
   m05CustomerLexofficeRoutes,
   m05IntegrationRoutes,
@@ -50,8 +51,6 @@ import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
-import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
-import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';

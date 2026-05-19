@@ -28,7 +28,7 @@ import { config } from '../../../core/config';
 import { enqueueOcrJob } from '../../../core/queue/ocr-queue';
 import { uploadObject } from '../../../core/storage/storage.service';
 import { tenantExists } from '../../tenants/tenant.repository';
-import { getBelegBySha256, insertBeleg } from '../services/beleg.repository';
+import { getBelegBySha256, insertBeleg, undeleteBelegBySha256 } from '../services/beleg.repository';
 
 // ── Konstanten ─────────────────────────────────────────────────────────────
 
@@ -219,6 +219,29 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
   const existing = await getBelegBySha256(req.server.db, tenantId, fileSha256);
 
   if (existing) {
+    // T015 Review-Fix B1: Soft-Delete-Reupload erlauben (Undelete).
+    // Wenn der existierende Beleg soft-gelöscht ist, reaktivieren wir ihn
+    // statt einen neuen Insert zu versuchen (würde UNIQUE-Constraint
+    // brechen). Audit-Trail behält ID + History.
+    if (existing.deleted_at !== null) {
+      const undeleted = await undeleteBelegBySha256(req.server.db, tenantId, fileSha256, {
+        type: 'staff',
+        id: staff.userId,
+      });
+      if (undeleted !== null) {
+        req.log.info(
+          { belegId: undeleted.id, tenantId: tenantId.substring(0, 8) },
+          '[m01] Soft-deleted Beleg via SHA256-Reupload reaktiviert',
+        );
+        return reply.code(200).send({
+          beleg_id: undeleted.id,
+          storage_key: undeleted.file_object_key,
+          status: undeleted.status,
+          is_undeleted: true,
+        });
+      }
+      // Falls Undelete fehlschlug (Race: parallel-undeleted): wie normales Duplikat behandeln
+    }
     // M9: PII-sicher — kein vollständiger Storage-Key im Response
     return reply.code(200).send({
       beleg_id: existing.id,

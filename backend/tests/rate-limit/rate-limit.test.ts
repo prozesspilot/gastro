@@ -46,7 +46,7 @@ describe('rate-limit checkAndIncrement', () => {
 
   it('lehnt über dem Limit ab', async () => {
     const redis = createFakeRedis();
-    let last;
+    let last: Awaited<ReturnType<typeof checkAndIncrement>> | undefined;
     for (let i = 0; i < 21; i++) {
       last = await checkAndIncrement({ redis, now: () => 1_700_000_000_000 }, 't1', 'receipts_ocr');
     }

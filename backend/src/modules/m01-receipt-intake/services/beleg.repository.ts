@@ -62,6 +62,8 @@ export interface DbBeleg {
   category: string | null;
   created_at: Date;
   updated_at: Date;
+  /** T015: Soft-Delete-Timestamp. NULL = aktiv, gesetzt = "geloescht". */
+  deleted_at: Date | null;
 }
 
 /**
@@ -89,6 +91,7 @@ const LIST_COLUMNS = [
   'category',
   'created_at',
   'updated_at',
+  'deleted_at',
 ].join(', ');
 
 // ── Zod-Schema für InsertBelegInput (M2) ──────────────────────────────────
@@ -246,11 +249,13 @@ export async function listBelege(
     await setTenantContext(client, tenantId);
 
     // M8: Window-Function statt 2 Queries, explizite Spalten statt SELECT *
+    // T015: Soft-deleted Belege (deleted_at IS NOT NULL) werden NICHT gelistet.
     const result = await client.query<DbBelegListItem & { total_count: string }>(
       `SELECT ${LIST_COLUMNS},
               COUNT(*) OVER() AS total_count
        FROM belege
        WHERE tenant_id = $1
+         AND deleted_at IS NULL
          AND ($2::text IS NULL OR status = $2::text)
        ORDER BY received_at DESC
        LIMIT $3 OFFSET $4`,
@@ -286,13 +291,28 @@ export async function getBelegBySha256(
   pool: Pool,
   tenantId: string,
   sha256: string,
-): Promise<{ id: string; file_object_key: string; status: BelegStatus } | null> {
+): Promise<{
+  id: string;
+  file_object_key: string;
+  status: BelegStatus;
+  deleted_at: Date | null;
+} | null> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await setTenantContext(client, tenantId);
-    const result = await client.query<{ id: string; file_object_key: string; status: string }>(
-      'SELECT id, file_object_key, status FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
+    // T015 Review-Fix B1: deleted_at jetzt MIT zurückgegeben statt gefiltert.
+    // Soft-deleted Belege müssen erkannt werden, damit der Upload-Handler sie
+    // "undelete"n kann (siehe undeleteBelegBySha256). Hartes Filtern hier würde
+    // dazu führen, dass ein wieder hochgeladener Beleg neu insertet wird —
+    // aber der UNIQUE-Constraint (tenant_id, file_sha256) bricht dann.
+    const result = await client.query<{
+      id: string;
+      file_object_key: string;
+      status: string;
+      deleted_at: Date | null;
+    }>(
+      'SELECT id, file_object_key, status, deleted_at FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
       [tenantId, sha256],
     );
     await client.query('COMMIT');
@@ -301,7 +321,67 @@ export async function getBelegBySha256(
       id: result.rows[0].id,
       file_object_key: result.rows[0].file_object_key,
       status: result.rows[0].status as BelegStatus,
+      deleted_at: result.rows[0].deleted_at,
     };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T015 Review-Fix B1: "Undelete" eines soft-gelöschten Belegs.
+ *
+ * Wenn ein Wirt eine bereits gelöschte Datei (gleicher SHA256) erneut hochlädt,
+ * wird der existierende Eintrag reaktiviert (deleted_at = NULL) statt eines
+ * neuen Inserts. Sonst bricht der UNIQUE-Constraint (tenant_id, file_sha256).
+ *
+ * GoBD-sauber: keine neue Beleg-ID, Audit-Trail behält alle bisherigen
+ * Korrekturen + Soft-Delete-Event + jetzt das Undelete-Event.
+ *
+ * Atomar in derselben Tx wie das UPDATE + audit_log-Insert.
+ */
+export async function undeleteBelegBySha256(
+  pool: Pool,
+  tenantId: string,
+  sha256: string,
+  actor: { type: 'staff' | 'system' | 'customer'; id: string },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+          SET deleted_at = NULL, updated_at = now()
+        WHERE tenant_id = $1
+          AND file_sha256 = $2
+          AND deleted_at IS NOT NULL
+       RETURNING *`,
+      [tenantId, sha256],
+    );
+
+    if (updateResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const beleg = updateResult.rows[0];
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: beleg.id,
+      eventType: 'beleg.undeleted',
+      actor,
+      payloadAfter: { reason: 'sha256_reupload_after_soft_delete' },
+    });
+
+    await client.query('COMMIT');
+    return beleg;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
@@ -326,13 +406,260 @@ export async function getBelegById(
     await client.query('BEGIN');
     await setTenantContext(client, tenantId);
 
+    // T015: Soft-deleted Belege werden im Detail-Endpoint NICHT mehr zurueck-
+    // gegeben (UI soll sie nicht oeffnen koennen). Hart-Loeschung erfolgt
+    // erst nach Aufbewahrungsfrist via separater Cron-Job.
     const result = await client.query<DbBeleg>(
-      'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2',
+      'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
       [id, tenantId],
     );
 
     await client.query('COMMIT');
     return result.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ── T015: Manual-Edit-Operationen ──────────────────────────────────────────
+
+/**
+ * Felder, die ein Mitarbeiter via PATCH editieren darf (Korrektur des
+ * OCR-Ergebnisses). Andere Felder (status, file_*, payload-Intern) sind
+ * tabu — die werden vom System/Worker gesetzt.
+ *
+ * T015-Akzeptanz: Lieferant, Datum, Betrag, MwSt-Satz, Kategorie + Bewirtungs-
+ * Felder (Anlass, Teilnehmer) bei Kategorie 'bewirtung'.
+ */
+export interface UpdateBelegFieldsInput {
+  supplier_name?: string | null;
+  document_date?: string | null; // ISO YYYY-MM-DD
+  total_gross?: number | null;
+  currency?: string | null;
+  category?: string | null;
+  /** MwSt-Satz in Prozent (z. B. 19, 7, 0). Landet in payload.extraction.fields.tax_rate. */
+  tax_rate?: number | null;
+  /** Bewirtungs-Anlass (Pflicht bei category='bewirtung'). Payload-Feld. */
+  bewirtung_anlass?: string | null;
+  /** Komma-getrennte Teilnehmer (Pflicht bei category='bewirtung'). Payload-Feld. */
+  bewirtung_teilnehmer?: string | null;
+}
+
+/**
+ * Patcht editierbare Felder eines Belegs.
+ *
+ * Trennt klar:
+ *   * Top-Level-Spalten (supplier_name, document_date, total_gross,
+ *     currency, category) werden direkt auf der Row gesetzt.
+ *   * Payload-Felder (tax_rate, bewirtung_*) landen in
+ *     payload.extraction.fields per jsonb_set.
+ *
+ * Audit: jede Korrektur erzeugt einen audit_log-Eintrag `beleg.corrected`
+ * mit payload_before + payload_after der geaenderten Felder.
+ */
+export async function updateBelegFields(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  patch: UpdateBelegFieldsInput,
+  actorUserId: string,
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    // 1. Aktuellen Stand laden (fuer audit + um existierendes payload zu mergen)
+    const current = await client.query<DbBeleg>(
+      'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+      [belegId, tenantId],
+    );
+    if (current.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const before = current.rows[0];
+
+    // 2. Top-Level-Spalten — dynamische SET-Klausel
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let p = 1;
+    if (patch.supplier_name !== undefined) {
+      sets.push(`supplier_name = $${p++}`);
+      values.push(patch.supplier_name);
+    }
+    if (patch.document_date !== undefined) {
+      sets.push(`document_date = $${p++}::date`);
+      values.push(patch.document_date);
+    }
+    if (patch.total_gross !== undefined) {
+      sets.push(`total_gross = $${p++}`);
+      values.push(patch.total_gross);
+    }
+    if (patch.currency !== undefined) {
+      sets.push(`currency = $${p++}`);
+      values.push(patch.currency);
+    }
+    if (patch.category !== undefined) {
+      sets.push(`category = $${p++}`);
+      values.push(patch.category);
+    }
+
+    // 3. Payload-Felder via jsonb_set (chained falls mehrere)
+    const payloadPatches: Array<{ path: string; value: unknown }> = [];
+    if (patch.tax_rate !== undefined) {
+      payloadPatches.push({ path: '{extraction,fields,tax_rate}', value: patch.tax_rate });
+    }
+    if (patch.bewirtung_anlass !== undefined) {
+      payloadPatches.push({
+        path: '{extraction,fields,bewirtung_anlass}',
+        value: patch.bewirtung_anlass,
+      });
+    }
+    if (patch.bewirtung_teilnehmer !== undefined) {
+      payloadPatches.push({
+        path: '{extraction,fields,bewirtung_teilnehmer}',
+        value: patch.bewirtung_teilnehmer,
+      });
+    }
+
+    if (payloadPatches.length > 0) {
+      // Build nested jsonb_set call: jsonb_set(jsonb_set(payload, p1, v1), p2, v2), ...
+      let expr = "COALESCE(payload, '{}'::jsonb)";
+      for (const pp of payloadPatches) {
+        expr = `jsonb_set(${expr}, $${p++}, $${p++}::jsonb, true)`;
+        values.push(pp.path);
+        values.push(JSON.stringify(pp.value));
+      }
+      sets.push(`payload = ${expr}`);
+    }
+
+    if (sets.length === 0) {
+      // Nichts zu patchen — return aktuellen Stand
+      await client.query('COMMIT');
+      return before;
+    }
+
+    values.push(belegId, tenantId);
+    const updated = await client.query<DbBeleg>(
+      `UPDATE belege SET ${sets.join(', ')}
+        WHERE id = $${p++} AND tenant_id = $${p++} AND deleted_at IS NULL
+        RETURNING *`,
+      values,
+    );
+
+    // 4. Audit-Log
+    // T015 Review-Fix M4: PII-Sanitization im Audit-Log.
+    // CLAUDE.md § 6.6 verlangt "NIE PII in Logs". Felder wie
+    // `bewirtung_teilnehmer` enthalten echte Personen-Klarnamen — die wir
+    // im Audit-Log redacten. Lieferanten-Felder bleiben im Klartext
+    // (Geschäftspartner-Daten, GoBD-Nachvollziehbarkeit wichtiger als PII).
+    // DSGVO-Auskunft (T010) exportiert audit_log-Einträge mit subject_email,
+    // damit ist die Subject-Side abgedeckt.
+    const beforePatch: Record<string, unknown> = {};
+    const afterPatch: Record<string, unknown> = {};
+    for (const key of Object.keys(patch) as Array<keyof UpdateBelegFieldsInput>) {
+      if (patch[key] === undefined) continue;
+      beforePatch[key] = sanitizeFieldForAudit(key, readBelegField(before, key));
+      afterPatch[key] = sanitizeFieldForAudit(key, patch[key]);
+    }
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.corrected',
+      actor: { type: 'staff', id: actorUserId },
+      payloadBefore: beforePatch,
+      payloadAfter: afterPatch,
+    });
+
+    await client.query('COMMIT');
+    return updated.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+function readBelegField(beleg: DbBeleg, key: keyof UpdateBelegFieldsInput): unknown {
+  if (
+    key === 'supplier_name' ||
+    key === 'document_date' ||
+    key === 'total_gross' ||
+    key === 'currency' ||
+    key === 'category'
+  ) {
+    return beleg[key];
+  }
+  const payload = beleg.payload as { extraction?: { fields?: Record<string, unknown> } };
+  return payload.extraction?.fields?.[key] ?? null;
+}
+
+/**
+ * T015 Review-Fix M4: PII-Felder im Audit-Log redacten.
+ *
+ * Felder die echte Personen-Klarnamen enthalten dürfen NICHT im Audit-Log
+ * im Klartext landen (CLAUDE.md § 6.6 + DSGVO-Datenminimierung). Wir loggen
+ * dass das Feld geändert wurde (für GoBD-Nachvollziehbarkeit), aber nicht
+ * mit welchem Wert.
+ *
+ * Liste der PII-Felder bewusst klein gehalten. supplier_name bleibt Klartext
+ * (meist Firmenname = keine PII im strikten Sinn).
+ */
+const PII_FIELDS = new Set(['bewirtung_teilnehmer', 'bewirtung_anlass']);
+
+function sanitizeFieldForAudit(key: string, value: unknown): unknown {
+  if (PII_FIELDS.has(key) && value !== null && value !== undefined) {
+    const length = typeof value === 'string' ? value.length : 0;
+    return { redacted: true, type: typeof value, length };
+  }
+  return value;
+}
+
+/**
+ * Soft-Delete: setzt deleted_at, behaelt die Row fuer GoBD-Aufbewahrungspflicht.
+ * Audit-Log: beleg.soft_deleted.
+ */
+export async function softDeleteBeleg(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  actorUserId: string,
+  reason?: string,
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const result = await client.query<DbBeleg>(
+      `UPDATE belege
+          SET deleted_at = now()
+        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+        RETURNING *`,
+      [belegId, tenantId],
+    );
+    if (result.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.soft_deleted',
+      actor: { type: 'staff', id: actorUserId },
+      payloadAfter: { reason: reason ?? null },
+    });
+
+    await client.query('COMMIT');
+    return result.rows[0];
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

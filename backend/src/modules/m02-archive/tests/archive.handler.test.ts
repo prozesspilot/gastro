@@ -48,7 +48,8 @@ function makeMockAdapter(state: MockAdapterState): ArchiveStorageAdapter {
   return {
     id: 'google_drive',
     async exists(_path: string, _cust: string): Promise<boolean> {
-      return state.existsResponses.length > 0 ? state.existsResponses.shift()! : false;
+      const next = state.existsResponses.shift();
+      return next ?? false;
     },
     async upload(input: UploadInput): Promise<UploadResult> {
       state.uploads.push(input);

@@ -54,3 +54,27 @@ export async function m14TenantContextHook(
 
   req.tenantId = headerValue;
 }
+
+// ── Helper ─────────────────────────────────────────────────────────────────
+
+/**
+ * Liefert die `tenantId` aus dem Request und garantiert per Type-Guard,
+ * dass sie gesetzt ist. Ersetzt `req.tenantId!` in Handlern.
+ *
+ * Wirft eine `TenantContextMissingError`, wenn der `m14TenantContextHook`
+ * nicht als preHandler eingehängt wurde — das ist ein Programmier-Fehler
+ * (Route falsch verdrahtet), keine Client-Eingabe.
+ */
+export class TenantContextMissingError extends Error {
+  constructor() {
+    super('tenant context not set — m14TenantContextHook missing on route');
+    this.name = 'TenantContextMissingError';
+  }
+}
+
+export function requireTenantId(req: FastifyRequest): string {
+  if (!req.tenantId) {
+    throw new TenantContextMissingError();
+  }
+  return req.tenantId;
+}

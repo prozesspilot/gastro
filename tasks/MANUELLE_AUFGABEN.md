@@ -142,6 +142,13 @@
 - **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
 - **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
 
+### ✅ Migration 090 — Soft-Delete für Belege (T015)
+- **Status:** Wird automatisch durch Auto-Deploy-Pipeline angewendet (`migrate:prod` in `deploy-staging.yml`, seit T012)
+- **Was:** `belege` bekommt `deleted_at TIMESTAMPTZ` für Soft-Delete (GoBD-konform)
+- **Verifikation:** `SELECT version FROM schema_migrations WHERE version = '090'` auf Production-DB
+- **Rollback:** `090_belege_soft_delete_rollback.sql` griffbereit (entfernt Spalte + Partial-Index)
+- **Hinweis:** NICHT manuell via psql ausführen — dann läuft sie nochmal automatisch und gibt schema_migrations-Duplikat-Error.
+
 ### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
 - **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
 - **Was:** Steuerberaterin von Almaz kontaktieren, Lexware-Office-API-Token (Public-API-Schluessel) anfordern, in DB hinterlegen

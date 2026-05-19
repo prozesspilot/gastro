@@ -72,7 +72,7 @@ export class RefreshTokenRepository {
   async findByPlainToken(plain: string): Promise<RefreshTokenRow | null> {
     const hash = hashRefreshToken(plain);
     const res = await this.pool.query<RefreshTokenRow>(
-      `SELECT * FROM refresh_tokens WHERE token_hash = $1 LIMIT 1`,
+      'SELECT * FROM refresh_tokens WHERE token_hash = $1 LIMIT 1',
       [hash],
     );
     return res.rows[0] ?? null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchPermission, presetPermissions, PRESETS, validatePermissionList } from './permissions';
+import { PRESETS, matchPermission, presetPermissions, validatePermissionList } from './permissions';
 
 describe('permissions', () => {
   describe('matchPermission', () => {
@@ -62,21 +62,23 @@ describe('permissions', () => {
 
     it('admin kann users.manage und settings.edit', () => {
       const perms = presetPermissions('admin');
-      expect(perms).not.toBeNull();
-      expect(matchPermission(perms!, 'users.manage')).toBe(true);
-      expect(matchPermission(perms!, 'settings.edit')).toBe(true);
+      if (!perms) throw new Error('admin-Preset muss existieren');
+      expect(matchPermission(perms, 'users.manage')).toBe(true);
+      expect(matchPermission(perms, 'settings.edit')).toBe(true);
     });
 
     it('operator kann KEINE users.manage', () => {
       const perms = presetPermissions('operator');
-      expect(matchPermission(perms!, 'users.manage')).toBe(false);
-      expect(matchPermission(perms!, 'receipts.write')).toBe(true);
+      if (!perms) throw new Error('operator-Preset muss existieren');
+      expect(matchPermission(perms, 'users.manage')).toBe(false);
+      expect(matchPermission(perms, 'receipts.write')).toBe(true);
     });
 
     it('viewer kann nur lesen', () => {
       const perms = presetPermissions('viewer');
-      expect(matchPermission(perms!, 'receipts.read')).toBe(true);
-      expect(matchPermission(perms!, 'receipts.write')).toBe(false);
+      if (!perms) throw new Error('viewer-Preset muss existieren');
+      expect(matchPermission(perms, 'receipts.read')).toBe(true);
+      expect(matchPermission(perms, 'receipts.write')).toBe(false);
     });
   });
 });

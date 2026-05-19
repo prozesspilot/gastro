@@ -17,6 +17,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 
+import { requireTenantId } from '../../core/auth/m14-tenant-context';
 import { config } from '../../core/config';
 import { logger } from '../../core/logger';
 import { apiError, apiOk, zodToApiError } from '../../core/schemas/common';
@@ -90,7 +91,7 @@ export function buildOcrHandler(deps: OcrHandlerDeps = {}) {
     }
     const receiptId = parsed.data.id;
     const db: Pool = req.server.db;
-    const tenantId = req.tenantId!;
+    const tenantId = requireTenantId(req);
 
     // 1) Receipt laden
     const receipt = await getReceipt(db, tenantId, receiptId);

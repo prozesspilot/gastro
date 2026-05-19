@@ -101,7 +101,10 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d
 
             # DB-Migrationen ausfuehren
-            docker compose -f docker-compose.prod.yml exec -T backend npm run migrate
+            # T012 Review-Fix B2b: migrate:prod nutzt das kompilierte dist/-Output
+            # (kein tsx im Prod-Image, weil --omit=dev). Lock via pg_advisory_lock
+            # ist im Skript schon vorhanden (siehe migrate.ts).
+            docker compose -f docker-compose.prod.yml exec -T backend npm run migrate:prod
 
             # T012: Caddyfile aus Repo deployen + Caddy reloaden
             # (nur wenn sich das Caddyfile veraendert hat oder als Sicherheit)

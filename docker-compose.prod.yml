@@ -97,6 +97,11 @@ services:
 
   # ── Backend ────────────────────────────────────────────────────────────────
   backend:
+    # T012 Review-Fix B2a: image:-Direktive ergänzt, damit `docker compose pull`
+    # im Deploy-Workflow das frisch in CI gebaute Image zieht (statt No-Op).
+    # build:-Direktive bleibt für lokale Builds & Fallback.
+    image: ghcr.io/prozesspilot/gastro/backend:latest
+    pull_policy: always
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -135,6 +140,9 @@ services:
 
   # ── Webapp / Nginx ─────────────────────────────────────────────────────────
   webapp:
+    # T012 Review-Fix B2a: image:-Direktive ergänzt (analog backend).
+    image: ghcr.io/prozesspilot/gastro/webapp:latest
+    pull_policy: always
     build:
       context: ./webapp
       dockerfile: Dockerfile
@@ -163,6 +171,9 @@ services:
 
   # ── Healthcheck-Stub: Onboarding-Wizard (Platzhalter bis T016) ────────────
   setup-stub:
+    # T012 Review-Fix B2a: image:-Direktive ergänzt.
+    image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
+    pull_policy: always
     build:
       context: ./infra/healthcheck-stub
       dockerfile: Dockerfile
@@ -184,6 +195,9 @@ services:
 
   # ── Healthcheck-Stub: Web-Chat-Widget (Platzhalter bis Widget-Task) ────────
   chat-stub:
+    # T012 Review-Fix B2a: image:-Direktive ergänzt (gleiches Image wie setup-stub).
+    image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
+    pull_policy: always
     build:
       context: ./infra/healthcheck-stub
       dockerfile: Dockerfile
@@ -207,8 +221,11 @@ services:
   n8n:
     image: n8nio/n8n:latest
     restart: always
+    # T012 Review-Fix B1: NUR auf Localhost binden — kein Public-Exposure.
+    # n8n hat per Default keinen Auth-Zwang und Workflows enthalten Secrets.
+    # Wenn externer Zugriff nötig wird: eigene Subdomain via Caddy mit Auth.
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
       N8N_HOST: ${N8N_HOST:-0.0.0.0}
       N8N_PORT: 5678

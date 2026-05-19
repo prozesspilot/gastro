@@ -152,32 +152,57 @@
   3. Vision API aktivieren: `gcloud services enable vision.googleapis.com`
   4. Service-Account erstellen: `prozesspilot-vision-prod@...`, Rolle "Cloud Vision AI Service Agent"
   5. JSON-Key herunterladen, sicher ablegen (NIE ins Repo committen)
-  6. Auf IONOS-Server unter `/etc/prozesspilot/gcp-vision.json` ablegen, Permissions `600`
+  6. Auf IONOS-Server unter `/etc/prozesspilot/gcp-vision.json` ablegen: `chown gastro:gastro`, `chmod 600`
 - **Output:** `GOOGLE_VISION_KEY_FILE=/etc/prozesspilot/gcp-vision.json`
 - **Dependencies:** IONOS-Server-Setup muss laufen
 
 ### ⏳ Migration 070 in Production laufen lassen (T007)
 - **Priorität:** P0 (vor erstem Echt-Upload — sonst stürzt OCR-Worker beim ocr_cost_log-Insert ab)
-- **Was:** `npm run migrate` auf Production für `070_ocr_cost_log.sql`
-- **Schritte:**
-  1. Backup ziehen (`pg_dump`)
-  2. `cd backend && npm run migrate`
-  3. Verifizieren: `SELECT * FROM schema_migrations WHERE filename = '070_ocr_cost_log.sql'`
-  4. Rollback-Skript griffbereit: `070_ocr_cost_log_rollback.sql`
+- **Was:** Wird automatisch durch Auto-Deploy ausgeführt (`migrate:prod` via DATABASE_URL_MIGRATE).
+- **Manuelle Verifikation:** `SELECT version FROM schema_migrations WHERE version = '070'` auf Production-DB
 
 ### ⏳ Neue ENV-Variablen für T007 in GitHub-Secrets + IONOS-Env (T007)
 - **Priorität:** P1 (Defaults sind sinnvoll, aber Ops-Alerts brauchen Discord-Webhook)
-- **Was:** Vier neue ENV-Vars für OCR-Pipeline
 - **Liste:**
   - `OCR_QUEUE_ENABLED` (Default `1` — auf `0` setzen wenn Worker temporär deaktiviert werden soll)
-  - `OCR_DAILY_LIMIT_PER_TENANT` (Default `1000` — anpassen wenn Pilot mehr Volumen braucht)
+  - `OCR_DAILY_LIMIT_PER_TENANT` (Default `1000` — anpassen wenn Pilot mehr Volumen braucht; Empfehlung: 10% Sicherheitspuffer wegen Race bei Concurrency=2)
   - `OCR_MAX_ATTEMPTS` (Default `3` — selten ändern)
   - `DISCORD_OPS_WEBHOOK_URL` — Webhook für Ops-Channel im Gastro-Team-Discord, wird beim finalen OCR-Fail aufgerufen
 - **Schritte für DISCORD_OPS_WEBHOOK_URL:**
   1. Im Gastro-Team-Discord einen Channel `#ops-alerts` anlegen (falls nicht vorhanden)
   2. Kanal-Einstellungen → Integrationen → Webhooks → Neuer Webhook "ProzessPilot Ops"
-  3. URL kopieren, als GitHub-Secret + in `.env.prod` auf IONOS hinterlegen
+  3. URL als GitHub-Secret + in `.env.prod` auf IONOS hinterlegen
 - **Output:** Discord-Alert in #ops-alerts wenn ein Beleg nach 3 OCR-Versuchen failed
+
+### ⏳ SMTP-Account für ausgehende DSGVO-Mails (T010) — NUR EU-HOSTING!
+- **Priorität:** P0 (vor Pilot — sonst können DSGVO-Auskünfte + Lösch-Confirms nicht versendet werden)
+- **Was:** Transaktionalen SMTP-Versand-Service einrichten — **AUSSCHLIESSLICH EU-Anbieter** (DSGVO!)
+- **Erlaubte Anbieter:**
+  - IONOS-Mail (kostenlos beim Hosting, am einfachsten)
+  - Mailjet EU (https://www.mailjet.com/legal/dpa/) — EU-Hosting + DPA
+  - **NICHT erlaubt:** Postmark, SendGrid, AWS SES (US-Hosting → DSGVO-Subunternehmer-Problem)
+- **Schritte:**
+  1. IONOS-Mail wählen (für Pilot ausreichend)
+  2. Mailbox `noreply@prozesspilot.net` einrichten
+  3. SPF/DKIM/DMARC für `prozesspilot.net` setzen (sonst landen Mails im Spam)
+  4. SMTP-Credentials notieren
+- **Output:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- **Subunternehmer-Liste:** Nach Wahl ggf. in AVV/Datenschutzerklärung als Subunternehmer aufnehmen
+- **Dry-Run-Verhalten:** Wenn `SMTP_HOST` leer ist, läuft der Backend-Mailversand im Log-Only-Modus (kein Crash, aber Subject erhält keine Mail).
+
+### ⏳ Migration 080 in Production laufen lassen (T010)
+- **Priorität:** P0 (Backend crasht beim ersten DSGVO-Antrag ohne diese Tabelle)
+- **Was:** Wird automatisch durch Auto-Deploy ausgeführt (`migrate:prod` via DATABASE_URL_MIGRATE).
+- **Manuelle Verifikation:** `SELECT version FROM schema_migrations WHERE version = '080'` auf Production-DB
+
+### ⏳ Neue ENV-Variablen für T010 in GitHub-Secrets + IONOS-Env (T010)
+- **Priorität:** P1 (Defaults sind sinnvoll, aber SMTP ist zwingend)
+- **Liste:**
+  - `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` — siehe vorigen Eintrag
+  - `DSGVO_REQUESTS_PER_DAY_LIMIT` (Default 5 — nur ändern wenn ein Tenant rechtlich begründet mehr braucht)
+  - `DSGVO_CONFIRM_TOKEN_TTL_SECONDS` (Default 1800 = 30 min — selten ändern)
+  - `DSGVO_EXPORT_TTL_DAYS` (Default **3** — von 14 auf 3 gesenkt, Review-Fix M2; ZIP-Download-Link mit voller PII soll nicht 2 Wochen rumliegen)
+  - `DSGVO_QUEUE_ENABLED` (Default `1` — auf `0` setzen wenn Worker temporär deaktiviert)
 
 ---
 

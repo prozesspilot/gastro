@@ -8,8 +8,10 @@ import { buildApp } from './app';
 import { config } from './core/config';
 import { assertNonPrivilegedDbRole } from './core/db/role-check';
 import { logger } from './core/logger';
+import { closeDsgvoQueue } from './core/queue/dsgvo-queue';
 import { closeOcrQueue } from './core/queue/ocr-queue';
 import { createS3Client } from './core/storage/storage.service';
+import { startDsgvoWorker, stopDsgvoWorker } from './workers/dsgvo-worker';
 import { startOcrWorker, stopOcrWorker } from './workers/ocr-worker';
 
 async function main(): Promise<void> {
@@ -52,10 +54,27 @@ async function main(): Promise<void> {
     }
   }
 
+  // T010: BullMQ-DSGVO-Worker für Auskunfts-ZIP-Builds im selben Prozess.
+  if (config.DSGVO_QUEUE_ENABLED) {
+    try {
+      const s3 = createS3Client();
+      const db = (app as unknown as { db: Pool }).db;
+      await startDsgvoWorker({ db, s3 });
+      logger.info('[dsgvo-worker] gestartet');
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[dsgvo-worker] Start fehlgeschlagen — Backend läuft ohne DSGVO-Worker weiter',
+      );
+    }
+  }
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Graceful Shutdown eingeleitet');
     await stopOcrWorker().catch(() => undefined);
     await closeOcrQueue().catch(() => undefined);
+    await stopDsgvoWorker().catch(() => undefined);
+    await closeDsgvoQueue().catch(() => undefined);
     await app.close();
     process.exit(0);
   };

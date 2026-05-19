@@ -52,8 +52,11 @@ function makeBelegRow(overrides: Record<string, unknown> = {}) {
 
 function makeMockPool(opts: { belegRow?: Record<string, unknown> | null } = {}) {
   const belegRow = opts.belegRow === undefined ? makeBelegRow() : opts.belegRow;
+  // T015 Review-Fix M5: queryLog erlaubt Tests Audit-Log-Inserts zu inspecten.
+  const queryLog: Array<{ sql: string; params: unknown[] }> = [];
   const mockClient = {
-    query: vi.fn(async (sql: string) => {
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      queryLog.push({ sql, params: params ?? [] });
       if (sql.includes('SELECT * FROM belege')) {
         return { rows: belegRow ? [belegRow] : [] };
       }
@@ -63,20 +66,25 @@ function makeMockPool(opts: { belegRow?: Record<string, unknown> | null } = {}) 
       return { rows: [] };
     }),
     release: vi.fn(),
-  } as unknown as PoolClient;
-  return {
+  } as unknown as PoolClient & { queryLog?: typeof queryLog };
+  const pool = {
     connect: vi.fn(async () => mockClient),
     query: vi.fn(async () => ({ rows: [] })),
-  } as unknown as Pool;
+  } as unknown as Pool & { queryLog?: typeof queryLog };
+  pool.queryLog = queryLog;
+  return pool;
 }
 
 async function buildTestApp(opts: { belegRow?: Record<string, unknown> | null } = {}) {
   const app = Fastify({ logger: false });
-  app.decorate('db', makeMockPool(opts));
+  const pool = makeMockPool(opts);
+  app.decorate('db', pool);
   app.decorate('s3', { send: vi.fn() } as unknown as import('@aws-sdk/client-s3').S3Client);
   await app.register(fastifyCookie);
   await app.register(belegeRoutes, { prefix: '/api/v1/belege' });
   await app.ready();
+  // Pool für Test-Inspection zugänglich machen
+  (app as unknown as { _mockPool: typeof pool })._mockPool = pool;
   return app;
 }
 
@@ -195,6 +203,76 @@ describe('PATCH /api/v1/belege/:id', () => {
       headers: { 'x-pp-tenant-id': TENANT_UUID, 'content-type': 'application/json' },
     });
     expect(r.statusCode).toBe(200);
+  });
+
+  // T015 Review-Fix M5: Verifiziere dass logAuditEvent mit beleg.corrected gerufen wird
+  it('schreibt audit_log-Eintrag mit beleg.corrected bei Korrektur', async () => {
+    currentApp = await buildTestApp({
+      belegRow: makeBelegRow({ supplier_name: 'Korrigiert GmbH' }),
+    });
+    await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/belege/${BELEG_UUID}`,
+      payload: { supplier_name: 'Korrigiert GmbH' },
+      cookies: { pp_auth: makeToken() },
+      headers: { 'x-pp-tenant-id': TENANT_UUID, 'content-type': 'application/json' },
+    });
+    const log = (
+      currentApp as unknown as {
+        _mockPool: { queryLog: Array<{ sql: string; params: unknown[] }> };
+      }
+    )._mockPool.queryLog;
+    const auditInsert = log.find((q) => q.sql.includes('INSERT INTO audit_log'));
+    expect(auditInsert).toBeDefined();
+    const params = auditInsert?.params ?? [];
+    // event_type ist meistens in den Params — wir prüfen dass 'beleg.corrected' irgendwo vorkommt.
+    const allParamsString = JSON.stringify(params);
+    expect(allParamsString).toContain('beleg.corrected');
+  });
+
+  // T015 Review-Fix M4: PII (bewirtung_teilnehmer) muss im Audit-Log redacted sein
+  it('redacted PII (bewirtung_teilnehmer) im audit_log-Eintrag', async () => {
+    currentApp = await buildTestApp({
+      belegRow: makeBelegRow({ category: 'bewirtung_kunden' }),
+    });
+    await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/belege/${BELEG_UUID}`,
+      payload: {
+        category: 'bewirtung_kunden',
+        bewirtung_anlass: 'Geschaeftsessen mit XY',
+        bewirtung_teilnehmer: 'Max Mueller, Anna Schmidt',
+      },
+      cookies: { pp_auth: makeToken() },
+      headers: { 'x-pp-tenant-id': TENANT_UUID, 'content-type': 'application/json' },
+    });
+    const log = (
+      currentApp as unknown as {
+        _mockPool: { queryLog: Array<{ sql: string; params: unknown[] }> };
+      }
+    )._mockPool.queryLog;
+    const auditInsert = log.find((q) => q.sql.includes('INSERT INTO audit_log'));
+    expect(auditInsert).toBeDefined();
+    const allParamsString = JSON.stringify(auditInsert?.params ?? []);
+    // Klarnamen dürfen NICHT im Audit landen
+    expect(allParamsString).not.toContain('Max Mueller');
+    expect(allParamsString).not.toContain('Anna Schmidt');
+    expect(allParamsString).not.toContain('Geschaeftsessen mit XY');
+    // Stattdessen Redacted-Marker
+    expect(allParamsString).toContain('redacted');
+  });
+
+  // T015 Review-Fix Nice-to-Have: Whitelist-Negative — verbotene Felder werden mit 422 abgelehnt
+  it('422 bei Forbidden-Field im Body (tenant_id im Patch)', async () => {
+    currentApp = await buildTestApp();
+    const r = await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/belege/${BELEG_UUID}`,
+      payload: { tenant_id: '99999999-9999-9999-9999-999999999999' },
+      cookies: { pp_auth: makeToken() },
+      headers: { 'x-pp-tenant-id': TENANT_UUID, 'content-type': 'application/json' },
+    });
+    expect(r.statusCode).toBe(422);
   });
 });
 

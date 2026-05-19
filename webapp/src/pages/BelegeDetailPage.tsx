@@ -250,13 +250,16 @@ export default function BelegeDetailPage() {
       return;
     }
     setSaving(true);
+    // T015 Review-Fix M2: 'in'-Check statt ?? — sonst geht Reset auf null
+    // verloren (user löscht Lieferant-Name → optimistische UI zeigt weiter
+    // den alten Wert, weil null ?? alterWert = alterWert).
     const optimisticBeleg: Beleg = {
       ...beleg,
-      supplier_name: patch.supplier_name ?? beleg.supplier_name,
-      document_date: patch.document_date ?? beleg.document_date,
-      total_gross: patch.total_gross ?? beleg.total_gross,
-      currency: patch.currency ?? beleg.currency,
-      category: patch.category ?? beleg.category,
+      supplier_name: 'supplier_name' in patch ? patch.supplier_name : beleg.supplier_name,
+      document_date: 'document_date' in patch ? patch.document_date : beleg.document_date,
+      total_gross: 'total_gross' in patch ? patch.total_gross : beleg.total_gross,
+      currency: 'currency' in patch ? patch.currency : beleg.currency,
+      category: 'category' in patch ? patch.category : beleg.category,
     };
     const previousBeleg = beleg;
     const previousBaseline = baseline;

@@ -142,16 +142,12 @@
 - **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
 - **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
 
-### ⏳ Migration 090 in Production laufen lassen (T015)
-- **Priorität:** P0 (Webapp-Detail-View crashed beim Edit ohne diese Spalte)
+### ✅ Migration 090 — Soft-Delete für Belege (T015)
+- **Status:** Wird automatisch durch Auto-Deploy-Pipeline angewendet (`migrate:prod` in `deploy-staging.yml`, seit T012)
 - **Was:** `belege` bekommt `deleted_at TIMESTAMPTZ` für Soft-Delete (GoBD-konform)
-- **Schritte:**
-  1. Backup ziehen (`pg_dump`)
-  2. SQL via psql ausführen: `\i /opt/gastro/migrations/090_belege_soft_delete.sql`
-  3. Verifizieren: `\d belege` zeigt `deleted_at` Spalte + Partial-Index `idx_belege_tenant_active`
-  4. `INSERT INTO schema_migrations(filename) VALUES ('090_belege_soft_delete.sql')`
-  5. Backend-Container neu starten (Code erwartet jetzt die Spalte in der Repository-Query)
-- **Rollback:** `090_belege_soft_delete_rollback.sql` (entfernt Spalte + Index)
+- **Verifikation:** `SELECT version FROM schema_migrations WHERE version = '090'` auf Production-DB
+- **Rollback:** `090_belege_soft_delete_rollback.sql` griffbereit (entfernt Spalte + Partial-Index)
+- **Hinweis:** NICHT manuell via psql ausführen — dann läuft sie nochmal automatisch und gibt schema_migrations-Duplikat-Error.
 
 ### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
 - **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)

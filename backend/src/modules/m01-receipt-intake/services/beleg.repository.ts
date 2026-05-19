@@ -291,13 +291,28 @@ export async function getBelegBySha256(
   pool: Pool,
   tenantId: string,
   sha256: string,
-): Promise<{ id: string; file_object_key: string; status: BelegStatus } | null> {
+): Promise<{
+  id: string;
+  file_object_key: string;
+  status: BelegStatus;
+  deleted_at: Date | null;
+} | null> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await setTenantContext(client, tenantId);
-    const result = await client.query<{ id: string; file_object_key: string; status: string }>(
-      'SELECT id, file_object_key, status FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
+    // T015 Review-Fix B1: deleted_at jetzt MIT zurückgegeben statt gefiltert.
+    // Soft-deleted Belege müssen erkannt werden, damit der Upload-Handler sie
+    // "undelete"n kann (siehe undeleteBelegBySha256). Hartes Filtern hier würde
+    // dazu führen, dass ein wieder hochgeladener Beleg neu insertet wird —
+    // aber der UNIQUE-Constraint (tenant_id, file_sha256) bricht dann.
+    const result = await client.query<{
+      id: string;
+      file_object_key: string;
+      status: string;
+      deleted_at: Date | null;
+    }>(
+      'SELECT id, file_object_key, status, deleted_at FROM belege WHERE tenant_id = $1 AND file_sha256 = $2',
       [tenantId, sha256],
     );
     await client.query('COMMIT');
@@ -306,7 +321,67 @@ export async function getBelegBySha256(
       id: result.rows[0].id,
       file_object_key: result.rows[0].file_object_key,
       status: result.rows[0].status as BelegStatus,
+      deleted_at: result.rows[0].deleted_at,
     };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T015 Review-Fix B1: "Undelete" eines soft-gelöschten Belegs.
+ *
+ * Wenn ein Wirt eine bereits gelöschte Datei (gleicher SHA256) erneut hochlädt,
+ * wird der existierende Eintrag reaktiviert (deleted_at = NULL) statt eines
+ * neuen Inserts. Sonst bricht der UNIQUE-Constraint (tenant_id, file_sha256).
+ *
+ * GoBD-sauber: keine neue Beleg-ID, Audit-Trail behält alle bisherigen
+ * Korrekturen + Soft-Delete-Event + jetzt das Undelete-Event.
+ *
+ * Atomar in derselben Tx wie das UPDATE + audit_log-Insert.
+ */
+export async function undeleteBelegBySha256(
+  pool: Pool,
+  tenantId: string,
+  sha256: string,
+  actor: { type: 'staff' | 'system' | 'customer'; id: string },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+          SET deleted_at = NULL, updated_at = now()
+        WHERE tenant_id = $1
+          AND file_sha256 = $2
+          AND deleted_at IS NOT NULL
+       RETURNING *`,
+      [tenantId, sha256],
+    );
+
+    if (updateResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const beleg = updateResult.rows[0];
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: beleg.id,
+      eventType: 'beleg.undeleted',
+      actor,
+      payloadAfter: { reason: 'sha256_reupload_after_soft_delete' },
+    });
+
+    await client.query('COMMIT');
+    return beleg;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
@@ -477,12 +552,19 @@ export async function updateBelegFields(
     );
 
     // 4. Audit-Log
+    // T015 Review-Fix M4: PII-Sanitization im Audit-Log.
+    // CLAUDE.md § 6.6 verlangt "NIE PII in Logs". Felder wie
+    // `bewirtung_teilnehmer` enthalten echte Personen-Klarnamen — die wir
+    // im Audit-Log redacten. Lieferanten-Felder bleiben im Klartext
+    // (Geschäftspartner-Daten, GoBD-Nachvollziehbarkeit wichtiger als PII).
+    // DSGVO-Auskunft (T010) exportiert audit_log-Einträge mit subject_email,
+    // damit ist die Subject-Side abgedeckt.
     const beforePatch: Record<string, unknown> = {};
     const afterPatch: Record<string, unknown> = {};
     for (const key of Object.keys(patch) as Array<keyof UpdateBelegFieldsInput>) {
       if (patch[key] === undefined) continue;
-      beforePatch[key] = readBelegField(before, key);
-      afterPatch[key] = patch[key];
+      beforePatch[key] = sanitizeFieldForAudit(key, readBelegField(before, key));
+      afterPatch[key] = sanitizeFieldForAudit(key, patch[key]);
     }
     await logAuditEvent(client, {
       tenantId,
@@ -516,6 +598,27 @@ function readBelegField(beleg: DbBeleg, key: keyof UpdateBelegFieldsInput): unkn
   }
   const payload = beleg.payload as { extraction?: { fields?: Record<string, unknown> } };
   return payload.extraction?.fields?.[key] ?? null;
+}
+
+/**
+ * T015 Review-Fix M4: PII-Felder im Audit-Log redacten.
+ *
+ * Felder die echte Personen-Klarnamen enthalten dürfen NICHT im Audit-Log
+ * im Klartext landen (CLAUDE.md § 6.6 + DSGVO-Datenminimierung). Wir loggen
+ * dass das Feld geändert wurde (für GoBD-Nachvollziehbarkeit), aber nicht
+ * mit welchem Wert.
+ *
+ * Liste der PII-Felder bewusst klein gehalten. supplier_name bleibt Klartext
+ * (meist Firmenname = keine PII im strikten Sinn).
+ */
+const PII_FIELDS = new Set(['bewirtung_teilnehmer', 'bewirtung_anlass']);
+
+function sanitizeFieldForAudit(key: string, value: unknown): unknown {
+  if (PII_FIELDS.has(key) && value !== null && value !== undefined) {
+    const length = typeof value === 'string' ? value.length : 0;
+    return { redacted: true, type: typeof value, length };
+  }
+  return value;
 }
 
 /**

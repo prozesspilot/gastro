@@ -25,7 +25,8 @@ export function clearRefreshCookie(reply: FastifyReply): void {
 }
 
 export function getRefreshCookie(req: FastifyRequest): string | null {
-  const cookies = (req as FastifyRequest & { cookies?: Record<string, string | undefined> }).cookies;
+  const cookies = (req as FastifyRequest & { cookies?: Record<string, string | undefined> })
+    .cookies;
   const val = cookies?.[config.AUTH_REFRESH_COOKIE_NAME];
   return val ?? null;
 }

@@ -4,7 +4,9 @@ import { UserRepository } from '../services/user.repository';
 
 export async function listUsersHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const repo = new UserRepository(req.server.db);

@@ -48,11 +48,7 @@ describe('rate-limit checkAndIncrement', () => {
     const redis = createFakeRedis();
     let last;
     for (let i = 0; i < 21; i++) {
-      last = await checkAndIncrement(
-        { redis, now: () => 1_700_000_000_000 },
-        't1',
-        'receipts_ocr',
-      );
+      last = await checkAndIncrement({ redis, now: () => 1_700_000_000_000 }, 't1', 'receipts_ocr');
     }
     expect(last?.allowed).toBe(false);
     expect(last?.current).toBe(21);
@@ -61,11 +57,7 @@ describe('rate-limit checkAndIncrement', () => {
   it('zählt verschiedene Tenants unabhängig', async () => {
     const redis = createFakeRedis();
     for (let i = 0; i < 20; i++) {
-      await checkAndIncrement(
-        { redis, now: () => 1_700_000_000_000 },
-        't1',
-        'receipts_ocr',
-      );
+      await checkAndIncrement({ redis, now: () => 1_700_000_000_000 }, 't1', 'receipts_ocr');
     }
     const t2 = await checkAndIncrement(
       { redis, now: () => 1_700_000_000_000 },
@@ -78,11 +70,7 @@ describe('rate-limit checkAndIncrement', () => {
 
   it('zählt verschiedene Endpoint-Gruppen unabhängig', async () => {
     const redis = createFakeRedis();
-    await checkAndIncrement(
-      { redis, now: () => 1_700_000_000_000 },
-      't1',
-      'receipts_ocr',
-    );
+    await checkAndIncrement({ redis, now: () => 1_700_000_000_000 }, 't1', 'receipts_ocr');
     const r = await checkAndIncrement(
       { redis, now: () => 1_700_000_000_000 },
       't1',

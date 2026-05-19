@@ -9,18 +9,24 @@ export async function deleteUserHandler(
   reply: FastifyReply,
 ): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const repo = new UserRepository(req.server.db);
   const target = await repo.findById(req.params.id);
   if (!target) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
   const isSuperAdminCaller = req.authUser.tenant_id === null;
   if (!isSuperAdminCaller && target.tenant_id !== req.authUser.tenant_id) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
   // Schutz: letzten super_admin schützen
@@ -29,7 +35,10 @@ export async function deleteUserHandler(
     if (remaining <= 1) {
       await reply.code(409).send({
         ok: false,
-        error: { code: 'LAST_SUPER_ADMIN', message: 'Letzter aktiver super_admin kann nicht deaktiviert werden' },
+        error: {
+          code: 'LAST_SUPER_ADMIN',
+          message: 'Letzter aktiver super_admin kann nicht deaktiviert werden',
+        },
       });
       return;
     }
@@ -55,7 +64,9 @@ export async function deleteUserHandler(
     details: { target_user_id: target.id },
   });
   if (!updated) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
   await reply.code(200).send({ ok: true, data: { user: publicUserView(updated) } });

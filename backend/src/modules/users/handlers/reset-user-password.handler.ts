@@ -12,7 +12,9 @@ export async function resetUserPasswordHandler(
   reply: FastifyReply,
 ): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const parsed = ResetPasswordSchema.safeParse(req.body ?? {});
@@ -27,16 +29,21 @@ export async function resetUserPasswordHandler(
   const repo = new UserRepository(req.server.db);
   const target = await repo.findById(req.params.id);
   if (!target) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
   const isSuperAdminCaller = req.authUser.tenant_id === null;
   if (!isSuperAdminCaller && target.tenant_id !== req.authUser.tenant_id) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
 
-  const tempPassword = parsed.data.temporary_password ?? randomBytes(16).toString('base64url').slice(0, 18);
+  const tempPassword =
+    parsed.data.temporary_password ?? randomBytes(16).toString('base64url').slice(0, 18);
   const strength = validatePasswordStrength(tempPassword);
   if (!strength.ok) {
     await reply.code(400).send({

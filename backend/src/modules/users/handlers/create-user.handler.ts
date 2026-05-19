@@ -14,7 +14,9 @@ function generateTempPassword(): string {
 
 export async function createUserHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const parsed = CreateUserSchema.safeParse(req.body);
@@ -40,14 +42,21 @@ export async function createUserHandler(req: FastifyRequest, reply: FastifyReply
     }
     const v = validatePermissionList(input.permissions);
     if (!v.ok) {
-      await reply.code(400).send({ ok: false, error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' } });
+      await reply
+        .code(400)
+        .send({
+          ok: false,
+          error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
+        });
       return;
     }
     perms = input.permissions;
   } else {
     const p = presetPermissions(input.preset);
     if (!p) {
-      await reply.code(400).send({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Unbekanntes Preset' } });
+      await reply
+        .code(400)
+        .send({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Unbekanntes Preset' } });
       return;
     }
     perms = p;
@@ -68,7 +77,7 @@ export async function createUserHandler(req: FastifyRequest, reply: FastifyReply
   // - Tenant-Admin: tenant_id wird auf den eigenen erzwungen.
   let tenantId: string | null;
   if (isSuperAdminCaller) {
-    tenantId = wantsSuperAdmin ? null : input.tenant_id ?? null;
+    tenantId = wantsSuperAdmin ? null : (input.tenant_id ?? null);
     if (!wantsSuperAdmin && tenantId === null) {
       await reply.code(400).send({
         ok: false,

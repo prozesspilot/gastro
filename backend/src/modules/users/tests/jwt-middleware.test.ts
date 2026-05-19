@@ -1,10 +1,7 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { signAccessToken } from '../../../core/auth/jwt';
-import {
-  jwtAuthMiddleware,
-  requirePermission,
-} from '../../../core/auth/jwt.middleware';
+import { jwtAuthMiddleware, requirePermission } from '../../../core/auth/jwt.middleware';
 
 function buildAppWithMiddleware(perm?: string) {
   const app = Fastify({ logger: false });

@@ -10,7 +10,9 @@ export async function updateUserHandler(
   reply: FastifyReply,
 ): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const parsed = UpdateUserSchema.safeParse(req.body);
@@ -25,13 +27,17 @@ export async function updateUserHandler(
   const repo = new UserRepository(req.server.db);
   const target = await repo.findById(req.params.id);
   if (!target) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
 
   const isSuperAdminCaller = req.authUser.tenant_id === null;
   if (!isSuperAdminCaller && target.tenant_id !== req.authUser.tenant_id) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
 
@@ -46,7 +52,9 @@ export async function updateUserHandler(
     if (parsed.data.preset !== 'custom') {
       const p = presetPermissions(parsed.data.preset);
       if (!p) {
-        await reply.code(400).send({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Unbekanntes Preset' } });
+        await reply
+          .code(400)
+          .send({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Unbekanntes Preset' } });
         return;
       }
       patch.permissions = p;
@@ -55,7 +63,12 @@ export async function updateUserHandler(
   if (parsed.data.permissions !== undefined) {
     const v = validatePermissionList(parsed.data.permissions);
     if (!v.ok) {
-      await reply.code(400).send({ ok: false, error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' } });
+      await reply
+        .code(400)
+        .send({
+          ok: false,
+          error: { code: 'VALIDATION_FAILED', message: v.reason ?? 'Ungültige Permissions' },
+        });
       return;
     }
     // Wildcard "*" nur durch super_admin-Caller
@@ -75,7 +88,10 @@ export async function updateUserHandler(
     if (remaining <= 1 && target.is_active) {
       await reply.code(409).send({
         ok: false,
-        error: { code: 'LAST_SUPER_ADMIN', message: 'Letzter aktiver super_admin kann nicht deaktiviert werden' },
+        error: {
+          code: 'LAST_SUPER_ADMIN',
+          message: 'Letzter aktiver super_admin kann nicht deaktiviert werden',
+        },
       });
       return;
     }
@@ -83,7 +99,9 @@ export async function updateUserHandler(
 
   const updated = await repo.update(target.id, patch);
   if (!updated) {
-    await reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
+    await reply
+      .code(404)
+      .send({ ok: false, error: { code: 'NOT_FOUND', message: 'User nicht gefunden' } });
     return;
   }
   await new AuthEventLogger(req.server.db).log({

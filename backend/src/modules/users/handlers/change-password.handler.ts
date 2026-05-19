@@ -1,13 +1,22 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { hashPassword, validatePasswordStrength, verifyPassword } from '../../../core/auth/password';
+import {
+  hashPassword,
+  validatePasswordStrength,
+  verifyPassword,
+} from '../../../core/auth/password';
 import { AuthEventLogger } from '../services/auth-event.logger';
 import { RefreshTokenRepository } from '../services/refresh-token.repository';
 import { UserRepository } from '../services/user.repository';
 import { ChangePasswordSchema } from '../schemas/login.schema';
 
-export async function changePasswordHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function changePasswordHandler(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
   if (!req.authUser) {
-    await reply.code(401).send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Kein Auth-Kontext' } });
     return;
   }
   const parsed = ChangePasswordSchema.safeParse(req.body);
@@ -31,7 +40,9 @@ export async function changePasswordHandler(req: FastifyRequest, reply: FastifyR
   const users = new UserRepository(pool);
   const user = await users.findById(req.authUser.sub);
   if (!user) {
-    await reply.code(401).send({ ok: false, error: { code: 'USER_GONE', message: 'User nicht aktiv' } });
+    await reply
+      .code(401)
+      .send({ ok: false, error: { code: 'USER_GONE', message: 'User nicht aktiv' } });
     return;
   }
 

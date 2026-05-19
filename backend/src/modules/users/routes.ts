@@ -50,7 +50,11 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   app.post('/', { preHandler: requirePermission('users.manage') }, createUserHandler);
   app.get<IdParams>('/:id', { preHandler: requirePermission('users.read') }, getUserHandler);
   app.patch<IdParams>('/:id', { preHandler: requirePermission('users.manage') }, updateUserHandler);
-  app.delete<IdParams>('/:id', { preHandler: requirePermission('users.manage') }, deleteUserHandler);
+  app.delete<IdParams>(
+    '/:id',
+    { preHandler: requirePermission('users.manage') },
+    deleteUserHandler,
+  );
   app.post<IdParams>(
     '/:id/reset-password',
     { preHandler: requirePermission('users.manage') },

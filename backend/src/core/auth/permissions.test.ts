@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  matchPermission,
-  presetPermissions,
-  PRESETS,
-  validatePermissionList,
-} from './permissions';
+import { matchPermission, presetPermissions, PRESETS, validatePermissionList } from './permissions';
 
 describe('permissions', () => {
   describe('matchPermission', () => {

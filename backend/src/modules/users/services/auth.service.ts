@@ -8,11 +8,7 @@ import { signAccessToken } from '../../../core/auth/jwt';
 import { verifyPassword } from '../../../core/auth/password';
 import { config } from '../../../core/config';
 import { AuthEventLogger } from './auth-event.logger';
-import {
-  isCurrentlyLocked,
-  registerFailedLogin,
-  resetOnSuccess,
-} from './lockout.service';
+import { isCurrentlyLocked, registerFailedLogin, resetOnSuccess } from './lockout.service';
 import {
   generateRefreshTokenPlain,
   newFamilyId,
@@ -35,7 +31,12 @@ export type LoginResult =
       refreshPlain: string;
       user: UserRow;
     }
-  | { ok: false; code: 'INVALID_CREDENTIALS' | 'LOCKED' | 'DISABLED'; message: string; unlockAt?: Date };
+  | {
+      ok: false;
+      code: 'INVALID_CREDENTIALS' | 'LOCKED' | 'DISABLED';
+      message: string;
+      unlockAt?: Date;
+    };
 
 export class AuthService {
   constructor(

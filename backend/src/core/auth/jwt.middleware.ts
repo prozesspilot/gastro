@@ -28,10 +28,7 @@ function extractBearer(req: FastifyRequest): string | null {
   return token.length > 0 ? token : null;
 }
 
-export async function jwtAuthMiddleware(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
+export async function jwtAuthMiddleware(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const token = extractBearer(req);
   if (!token) {
     await reply.code(401).send({
@@ -44,7 +41,10 @@ export async function jwtAuthMiddleware(
   if (!result.ok) {
     await reply.code(401).send({
       ok: false,
-      error: { code: result.code === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'UNAUTHORIZED', message: result.message },
+      error: {
+        code: result.code === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'UNAUTHORIZED',
+        message: result.message,
+      },
     });
     return;
   }
@@ -63,7 +63,11 @@ export function requirePermission(permission: string) {
     if (!matchPermission(req.authUser.permissions, permission)) {
       await reply.code(403).send({
         ok: false,
-        error: { code: 'FORBIDDEN', message: 'Berechtigung fehlt', details: { required: permission } },
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Berechtigung fehlt',
+          details: { required: permission },
+        },
       });
       return;
     }

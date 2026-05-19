@@ -33,7 +33,10 @@ export interface RegisterFailedLoginResult {
   justLocked: boolean;
 }
 
-export function registerFailedLogin(state: LockoutState, now: Date = new Date()): RegisterFailedLoginResult {
+export function registerFailedLogin(
+  state: LockoutState,
+  now: Date = new Date(),
+): RegisterFailedLoginResult {
   // Wenn Lock abgelaufen: Counter zurücksetzen, dann neu zählen
   const base = state.lockedUntil && state.lockedUntil <= now ? 0 : state.failedAttempts;
   const nextFailedAttempts = base + 1;

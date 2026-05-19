@@ -7,15 +7,15 @@ import type { Pool } from 'pg';
 import { signAccessToken } from '../../../core/auth/jwt';
 import { verifyPassword } from '../../../core/auth/password';
 import { config } from '../../../core/config';
-import { AuthEventLogger } from './auth-event.logger';
+import type { AuthEventLogger } from './auth-event.logger';
 import { isCurrentlyLocked, registerFailedLogin, resetOnSuccess } from './lockout.service';
 import {
+  type RefreshTokenRepository,
+  type RefreshTokenRow,
   generateRefreshTokenPlain,
   newFamilyId,
-  RefreshTokenRepository,
-  type RefreshTokenRow,
 } from './refresh-token.repository';
-import { UserRepository, type UserRow } from './user.repository';
+import type { UserRepository, UserRow } from './user.repository';
 
 export interface LoginContext {
   email: string;

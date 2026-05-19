@@ -31,9 +31,9 @@ describe('lockout.service', () => {
     const fifth = registerFailedLogin(state, now);
     expect(fifth.justLocked).toBe(true);
     expect(fifth.nextFailedAttempts).toBe(5);
-    expect(fifth.nextLockedUntil).not.toBeNull();
+    if (!fifth.nextLockedUntil) throw new Error('expected nextLockedUntil to be set');
     // 15 min Lock per default
-    expect(fifth.nextLockedUntil!.getTime() - now.getTime()).toBe(15 * 60 * 1000);
+    expect(fifth.nextLockedUntil.getTime() - now.getTime()).toBe(15 * 60 * 1000);
   });
 
   it('registerFailedLogin: reset wenn Lock abgelaufen', () => {

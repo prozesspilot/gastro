@@ -11,7 +11,7 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { verifyAccessToken, type AccessTokenPayload } from './jwt';
+import { type AccessTokenPayload, verifyAccessToken } from './jwt';
 import { matchPermission } from './permissions';
 
 declare module 'fastify' {

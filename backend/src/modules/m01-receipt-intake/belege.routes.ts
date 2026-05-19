@@ -18,7 +18,7 @@
  *   3. Prefix ist /api/v1/belege, nicht /api/v1/receipts
  *
  * M7: m14TenantContextHook als preHandler registriert — löst Duplikation in
- *   den drei Handlern auf. Handler lesen req.tenantId! statt Header zu parsen.
+ *   den drei Handlern auf. Handler lesen `requireTenantId(req)` statt Header zu parsen.
  */
 
 import type { FastifyInstance } from 'fastify';

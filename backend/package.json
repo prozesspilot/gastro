@@ -6,17 +6,17 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "tsx watch --env-file=../.env src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=../.env src/server.ts",
     "build": "tsc --project tsconfig.json",
-    "start": "node --env-file=../.env dist/server.js",
+    "start": "node --env-file-if-exists=../.env dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check src tests",
     "format": "biome format --write src tests",
-    "migrate": "tsx --env-file=../.env src/core/db/migrate.ts",
+    "migrate": "tsx --env-file-if-exists=../.env src/core/db/migrate.ts",
     "migrate:prod": "node dist/core/db/migrate.js",
-    "seed:dev": "tsx --env-file=../.env src/core/db/seed-dev.ts",
-    "bootstrap-admin": "tsx --env-file=../.env scripts/bootstrap-admin.ts",
+    "seed:dev": "tsx --env-file-if-exists=../.env src/core/db/seed-dev.ts",
+    "bootstrap-admin": "tsx --env-file-if-exists=../.env scripts/bootstrap-admin.ts",
     "test:integration": "TEST_DATABASE_URL=postgresql://pp:pp@localhost:5432/pp_test vitest run src/__tests__/integration"
   },
   "dependencies": {

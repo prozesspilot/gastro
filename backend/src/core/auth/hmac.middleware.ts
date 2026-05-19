@@ -1,27 +1,32 @@
 /**
- * D3 — HMAC-Middleware mit Dual-Auth (ersetzt den Stub aus D1)
+ * D3 — HMAC-Middleware mit Triple-Auth (Bearer + Cookie + HMAC)
  *
  * Registriert als preHandler-Hook auf allen /api/v1/*-Routen.
  *
  * Auth-Reihenfolge:
  *   1. PP_AUTH_DISABLED=1 → immer durchlassen (Dev-Bypass)
- *   2. Authorization: Bearer <token> vorhanden → JWT-Pfad (Webapp-Sessions)
+ *   2. Authorization: Bearer <token> vorhanden → JWT-Pfad (Mobile / API-Clients)
  *      - Gültiger Token: req.authUser setzen, HMAC überspringen
  *      - Ungültiger/abgelaufener Token: 401, KEIN HMAC-Fallback
  *        (Security: verhindert Bypass-Versuche durch kaputte Bearer-Header)
- *   3. Kein Bearer-Header → HMAC-Pfad (n8n → Backend, Service-to-Service)
+ *   3. Cookie pp_auth vorhanden → M14-Cookie-Pfad (Mitarbeiter-Webapp-Sessions)
+ *      - Gültiger M14-JWT: req.m14Staff setzen + req.authUser synthetisch
+ *      - Ungültiger: 401, KEIN HMAC-Fallback (gleicher Security-Grund)
+ *   4. Weder Bearer noch Cookie → HMAC-Pfad (n8n → Backend, Service-to-Service)
  *
- * Spec: M14 §5.6 — HMAC bleibt für n8n, Bearer für Webapp.
+ * Spec: M14 §5.6 — HMAC für n8n, Bearer für API-Clients, Cookie für Webapp.
  *
  * Im Dev-Modus (PP_AUTH_DISABLED=1) wird die Prüfung übersprungen.
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { verifyM14Token } from '../../modules/m14-auth/m14-jwt';
 import { config } from '../config';
 import { logger } from '../logger';
 import { verifyHmac } from './hmac';
 import { verifyAccessToken } from './jwt';
 import type { AccessTokenPayload } from './jwt';
+import type { M14Staff } from './m14-staff-auth';
 
 /**
  * Fastify speichert den geparsten Body in req.body, aber wir brauchen den
@@ -35,6 +40,8 @@ declare module 'fastify' {
     // DECISION: authUser deklariert hier und in jwt.middleware.ts — beide
     // module-augmentations mergen sich in TypeScript zu einem Interface.
     authUser?: AccessTokenPayload;
+    // M14 Staff-Auth (Cookie-Pfad) — siehe m14-staff-auth.ts
+    m14Staff?: M14Staff;
   }
 }
 
@@ -53,7 +60,7 @@ export async function hmacMiddleware(req: FastifyRequest, reply: FastifyReply): 
     return;
   }
 
-  // ── Bearer-Pfad (Webapp → Backend) ──────────────────────────────────────
+  // ── Bearer-Pfad (Mobile / API-Clients → Backend) ────────────────────────
   const bearerToken = extractBearer(req);
   if (bearerToken !== null) {
     const jwtResult = verifyAccessToken(bearerToken);
@@ -73,6 +80,47 @@ export async function hmacMiddleware(req: FastifyRequest, reply: FastifyReply): 
     await reply.code(401).send({
       ok: false,
       error: { code, message: jwtResult.message },
+    });
+    return;
+  }
+
+  // ── Cookie-Pfad (Mitarbeiter-Webapp → Backend) ──────────────────────────
+  // M14: pp_auth ist ein HttpOnly-JWT-Cookie, das nach erfolgreichem Login
+  // (Discord-OAuth oder Notfall-Login) gesetzt wird. Webapp sendet es via
+  // `credentials: include` automatisch mit; Bearer-Header ist nicht möglich,
+  // da httpOnly-Cookies nicht aus JS lesbar sind.
+  const cookieToken = req.cookies?.pp_auth;
+  if (cookieToken) {
+    const m14Result = verifyM14Token(cookieToken);
+    if (m14Result.ok) {
+      const payload = m14Result.payload;
+      req.m14Staff = {
+        userId: payload.sub,
+        role: payload.role,
+        displayName: payload.display_name,
+      };
+      // Synthetischer authUser für Routen, die das Interface lesen.
+      // Staff sind tenant-agnostisch (sehen alle Mandanten), daher tenant_id=null.
+      req.authUser = {
+        sub: payload.sub,
+        tenant_id: null,
+        permissions: [],
+        preset: null,
+        iat: payload.iat,
+        exp: payload.exp,
+        jti: payload.jti,
+      };
+      return;
+    }
+    // Cookie vorhanden aber ungültig → 401, KEIN HMAC-Fallback.
+    const code = m14Result.code === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'UNAUTHORIZED';
+    logger.warn(
+      { code, url: req.url, method: req.method },
+      `Cookie-Auth fehlgeschlagen: ${m14Result.message}`,
+    );
+    await reply.code(401).send({
+      ok: false,
+      error: { code, message: m14Result.message },
     });
     return;
   }

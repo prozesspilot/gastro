@@ -16,40 +16,65 @@ jobs:
     steps:
       - name: Push auf main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }} \
+          if [ -z "$WEBHOOK" ]; then
+            echo "DISCORD_DEV_LOG_WEBHOOK nicht gesetzt — überspringe."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{
               "content": "@everyone 🟢 **Push auf main**\nCommit: `${{ github.event.head_commit.id }}`\nMessage: ${{ github.event.head_commit.message }}\nAuthor: ${{ github.event.head_commit.author.name }}\n${{ github.event.head_commit.url }}",
               "allowed_mentions": { "parse": ["everyone"] }
-            }'
+            }' || echo "Discord-Post fehlgeschlagen — Workflow läuft trotzdem weiter."
 
       - name: PR opened
         if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        env:
+          # Fallback auf DEV_LOG wenn DEV_COORDINATION nicht gesetzt ist.
+          WEBHOOK: ${{ secrets.DISCORD_DEV_COORDINATION_WEBHOOK || secrets.DISCORD_DEV_LOG_WEBHOOK }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_DEV_COORDINATION_WEBHOOK }} \
+          if [ -z "$WEBHOOK" ]; then
+            echo "Weder DISCORD_DEV_COORDINATION_WEBHOOK noch DISCORD_DEV_LOG_WEBHOOK gesetzt — überspringe."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{
               "content": "@everyone 🔵 **Neuer PR #${{ github.event.pull_request.number }}**: ${{ github.event.pull_request.title }}\nVon: ${{ github.event.pull_request.user.login }}\n${{ github.event.pull_request.html_url }}\n\nReviewer bitte: `/review-pr ${{ github.event.pull_request.number }}`",
               "allowed_mentions": { "parse": ["everyone"] }
-            }'
+            }' || echo "Discord-Post fehlgeschlagen — Workflow läuft trotzdem weiter."
 
       - name: PR merged
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_DEV_LOG_WEBHOOK }} \
+          if [ -z "$WEBHOOK" ]; then
+            echo "DISCORD_DEV_LOG_WEBHOOK nicht gesetzt — überspringe."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{
               "content": "@everyone ✅ **PR #${{ github.event.pull_request.number }} gemerged**: ${{ github.event.pull_request.title }}\n${{ github.event.pull_request.html_url }}",
               "allowed_mentions": { "parse": ["everyone"] }
-            }'
+            }' || echo "Discord-Post fehlgeschlagen — Workflow läuft trotzdem weiter."
 
       - name: CI Failure
         if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_ALERTS_WEBHOOK || secrets.DISCORD_DEV_LOG_WEBHOOK }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_ALERTS_WEBHOOK }} \
+          if [ -z "$WEBHOOK" ]; then
+            echo "Weder DISCORD_ALERTS_WEBHOOK noch DISCORD_DEV_LOG_WEBHOOK gesetzt — überspringe."
+            exit 0
+          fi
+          curl -fsS -X POST "$WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{
               "content": "@everyone 🚨 **CI fehlgeschlagen** auf Branch `${{ github.event.workflow_run.head_branch }}`\nCommit: `${{ github.event.workflow_run.head_sha }}`\n${{ github.event.workflow_run.html_url }}",
               "allowed_mentions": { "parse": ["everyone"] }
-            }'
+            }' || echo "Discord-Post fehlgeschlagen — Workflow läuft trotzdem weiter."

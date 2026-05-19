@@ -1,7 +1,7 @@
 # Manuelle Aufgaben (Steve / Andreas)
 
 > Sammlung aller manuellen Schritte, die NICHT per Code lösbar sind und außerhalb des Repos passieren müssen.
-> Letzte Aktualisierung: 2026-05-18
+> Letzte Aktualisierung: 2026-05-19
 >
 > **Format:** Jede Aufgabe hat Owner, Priorität, Status, Quelle (welche Task/PR sie ausgelöst hat).
 > **Status-Werte:** ⏳ offen · 🔄 in Arbeit · ✅ erledigt · ❌ blockiert
@@ -81,15 +81,6 @@
 
 ## 🔧 Andreas — Backend / Infrastructure / DB
 
-### 🔄 Caddy-Setup (T012, in Arbeit — andreas/T012-caddy-setup)
-- **Priorität:** P0 (blockiert ersten echten Deploy)
-- **Was:** Reverse-Proxy mit TLS-Zertifikaten
-- **Schritte:**
-  1. Caddyfile schreiben
-  2. DNS-Records für `api.prozesspilot.net`, `admin.prozesspilot.net`, `setup.prozesspilot.net` setzen
-  3. Caddy auf IONOS deployen
-  4. Auto-TLS via Let's Encrypt verifizieren
-
 ### ⏳ trustProxy IONOS konfigurieren (T017)
 - **Priorität:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht)
 - **Dependencies:** T012 (Caddy-Setup) muss laufen
@@ -100,19 +91,19 @@
   3. Caddy-Config prüfen: `X-Forwarded-For` muss korrekt geforwarded werden
   4. Smoke-Test: `req.ip` zeigt echte Client-IP
 
-### ⏳ IONOS-Server-Setup
+### ⏳ IONOS-Server-Setup (teilweise erledigt durch T012)
 - **Priorität:** P0 (vor Pilot-Start)
 - **Was:** Production-Server bereitstellen
 - **Schritte:**
-  1. IONOS-Server mieten (Dedicated oder Cloud)
-  2. Postgres 16 installieren + konfigurieren
-  3. Redis 7 installieren
-  4. MinIO (S3-kompatibel) installieren
-  5. **MinIO-Bucket `prozesspilot-raw` anlegen** (für Beleg-Uploads, T006)
-  6. Node.js 20 installieren
-  7. Docker / docker-compose installieren
-  8. SSH-Keys von Steve + Andreas hinterlegen
-  9. UFW / Firewall konfigurieren (nur 22/80/443 offen)
+  - [x] IONOS-Server gemietet (87.106.8.111)
+  - [x] Postgres 16 läuft als Docker-Container
+  - [x] Redis 7 läuft als Docker-Container
+  - [x] MinIO läuft als Docker-Container
+  - [ ] **MinIO-Bucket `prozesspilot-raw` anlegen** (für Beleg-Uploads, T006) — noch offen
+  - [x] Docker / docker-compose installiert
+  - [x] SSH-Key von Steve hinterlegt
+  - [ ] SSH-Key von Andreas hinterlegen — noch offen
+  - [x] UFW / Firewall konfiguriert (22/80/443 offen)
 
 ### ⏳ GitHub-Secrets pflegen (alle Tasks mit ENV-Vars)
 - **Priorität:** P0 (vor Production-Deploy)
@@ -130,14 +121,11 @@
   - `CLAUDE_API_KEY` (für M03 OCR)
   - `GOOGLE_VISION_KEY_FILE` (für M02 OCR)
 
-### ⏳ Postgres-Migrations auf Production laufen lassen
-- **Priorität:** P0 (vor erstem User-Login)
-- **Was:** `npm run migrate` auf Production
-- **Schritte:**
-  1. Backup vor Migration ziehen
-  2. `npm run migrate` ausführen
-  3. Migrations 001-022 verifizieren (`SELECT * FROM schema_migrations`)
-  4. `setup-app-role.sql` einmalig laufen lassen (gastro_app-Rolle)
+### ✅ Postgres-Migrations auf Production laufen lassen (erledigt 2026-05-19)
+- **Was:** Alle Migrations 001-022 manuell via psql auf Production angewendet, schema_migrations gepflegt
+- **Bonus:** `gastro_app`-Rolle angelegt (NOSUPERUSER NOBYPASSRLS NOINHERIT)
+- **Hinweis:** Reguläres `npm run migrate` über Production-Image scheiterte an fehlendem `tsx`-Binary
+  → Backend muss in CI vor Deploy migrieren ODER via `node dist/core/db/migrate.js` (Build-Output)
 
 ### ⏳ DB-Cleanup-Cron einrichten (T018 Backlog)
 - **Priorität:** P1 (DSGVO)
@@ -148,11 +136,11 @@
 
 ## 🤝 Beide gemeinsam
 
-### ⏳ T012-Caddy-Setup reviewen (Andreas hat PR vorbereitet)
+### ⏳ T012-Caddy-Setup reviewen
 - **Priorität:** P0
-- **Wer:** Steve reviewt Andreas' PR (erstes Cross-Author-Review!)
+- **Wer:** Andreas reviewt Steves PR (Steve hatte T012 übernommen, weil Andreas' Branch nur Task-Move war)
 - **Befehl:** `/review-pr <nr>` sobald PR offen ist
-- **Branch:** `andreas/T012-caddy-setup` ist gepusht aber noch kein PR
+- **Branch:** `steve/T012-caddy-setup`
 
 ### ⏳ Erste Pilot-Test-Session mit Almaz
 - **Priorität:** P0 (KW22-Ziel)
@@ -181,6 +169,12 @@
 - ✅ **T013 Mitarbeiter-Webapp Login-Screen** — PR #24 gemerged
 - ✅ **T003 Bootstrap-Admin-Skript** — PR #27 gemerged
 - ✅ **T004 SumUp OAuth-Flow + Token-Storage** — PR #29 gemerged
+- ✅ **T006 Beleg-Upload-Endpoint** — PR #34 gemerged
+- ✅ **T014 Webapp Beleg-Upload** — PR #36 gemerged
+- ✅ **T012 Caddy-Setup + Production-Stack** — manuell durch Steve abgeschlossen, PR in Arbeit
+  - 4 Subdomains live mit Let's Encrypt-TLS
+  - Production-Stack hochgefahren (Postgres, Redis, MinIO, Backend, Webapp)
+  - DB-Migrations 001-022 angewendet, `gastro_app`-Rolle gehärtet
 
 ---
 

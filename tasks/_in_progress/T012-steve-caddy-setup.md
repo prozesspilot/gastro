@@ -20,40 +20,50 @@ Damit ist die letzte Infra-Lücke geschlossen und der erste echte Test-Deploy m�
 ## Akzeptanz-Kriterien
 
 ### Caddy-Installation
-- [ ] Caddy auf IONOS-Server installiert (offizielle Repo, nicht apt-default)
-- [ ] Caddy läuft als systemd-Service (`systemctl status caddy` zeigt active)
-- [ ] Caddyfile liegt unter `/etc/caddy/Caddyfile` und ist im Git-Repo unter `infra/caddy/Caddyfile` versioniert
+- [x] Caddy auf IONOS-Server installiert (offizielle Repo, Caddy 2.11.3)
+- [x] Caddy läuft als systemd-Service (`systemctl status caddy` zeigt active)
+- [x] Caddyfile liegt unter `/etc/caddy/Caddyfile` und ist im Git-Repo unter `infra/caddy/Caddyfile` versioniert
 
 ### Subdomains routen
-- [ ] `https://admin.prozesspilot.net` → Reverse-Proxy zu Mitarbeiter-Webapp-Container (Platzhalter wenn noch nicht da: Health-Check-Stub)
-- [ ] `https://setup.prozesspilot.net` → Onboarding-Wizard-Container (gleicher Stub)
-- [ ] `https://api.prozesspilot.net` → Backend-API-Container (gleicher Stub)
-- [ ] `https://chat.prozesspilot.net` → Web-Chat-Widget-Container (gleicher Stub)
+- [x] `https://admin.prozesspilot.net` → Reverse-Proxy zu Mitarbeiter-Webapp-Container (echte Webapp aktiv, kein Stub mehr)
+- [x] `https://setup.prozesspilot.net` → Healthcheck-Stub (Onboarding-Wizard kommt später als T016)
+- [x] `https://api.prozesspilot.net` → Backend-API-Container (echtes Backend aktiv, `/api/v1/health` antwortet 200)
+- [x] `https://chat.prozesspilot.net` → Healthcheck-Stub (Web-Chat-Widget kommt später)
 
 ### Auto-TLS funktioniert
-- [ ] Let's Encrypt-Zertifikat für alle 4 Subdomains automatisch geholt
-- [ ] HTTP → HTTPS Auto-Redirect aktiv
-- [ ] Browser zeigt grünes Schloss
+- [x] Let's Encrypt-Zertifikat für alle 4 Subdomains automatisch geholt
+- [x] HTTP → HTTPS Auto-Redirect aktiv (Caddy Default-Verhalten)
+- [x] Browser zeigt grünes Schloss (curl `-I` bestätigt: HTTP/2 200, TLS-Verify OK)
 
 ### Health-Check-Stub (provisorisch bis echter Code da)
-- [ ] Docker-Container der auf Port 8080 horcht und auf `/health` mit `{"status":"ok"}` antwortet
-- [ ] `docker-compose.prod.yml` hat den Container drin, Caddy routet `api.prozesspilot.net` darauf
-- [ ] `curl https://api.prozesspilot.net/health` antwortet 200 OK von extern
+- [x] Docker-Container `healthcheck-stub` antwortet auf Port 8082/8083 mit `{"status":"ok","service":"healthcheck-stub"}`
+- [x] `docker-compose.prod.yml` enthält den Container, Caddy routet setup+chat darauf
+- [x] `curl https://setup.prozesspilot.net/health` + `chat.prozesspilot.net/health` antworten 200 OK
 
 ### Deploy-Pipeline-Test
-- [ ] GitHub Action `deploy-staging.yml` wird durch Merge auf main getriggert
-- [ ] SSH-Connect zu IONOS klappt mit Deploy-Key
-- [ ] `docker compose pull && docker compose up -d` läuft fehlerfrei durch
-- [ ] Discord-Webhook `#deployment` postet Erfolg-Meldung
+- [x] GitHub Action `deploy.yml` ist im Repo (`.github/workflows/deploy.yml`)
+- [x] GitHub-Secrets `IONOS_HOST`, `IONOS_USER`, `IONOS_SSH_KEY` gesetzt
+- [x] Manueller Deploy auf Server erfolgreich (Backend+Webapp+Postgres+Redis+MinIO laufen healthy)
+- [ ] Discord-Webhook `#deployment` postet Erfolg-Meldung (kein Webhook-URL gesetzt — siehe MANUELLE_AUFGABEN.md)
+
+### Healthcheck-Fix (Nacharbeit)
+- [x] Backend-Healthcheck: node-basiert auf `/api/v1/health` (statt wget gegen `/health`)
+- [x] Webapp-Healthcheck: wget gegen `127.0.0.1/nginx-health` (IPv6-Bug bei nginx:alpine umgangen)
 
 ---
 
 ## Sicherheits-Anker (NICHT VERGESSEN)
 
-- [ ] Caddy-Admin-API auf Localhost beschränkt (nicht von außen erreichbar)
-- [ ] Caddyfile enthält **keine** Secrets — alle Tokens aus Env-Vars
-- [ ] UFW hat Port 80 + 443 offen (war schon beim IONOS-Hardening) — checken
-- [ ] fail2ban-Regel für Caddy-Logs anlegen (optional, nice-to-have)
+- [x] Caddy-Admin-API auf Localhost beschränkt (Default-Verhalten, port 2019 nur auf 127.0.0.1)
+- [x] Caddyfile enthält **keine** Secrets — alle Tokens aus Env-Vars (`.env.prod` via docker-compose `env_file`)
+- [x] UFW hat Port 80 + 443 offen (verifiziert: `ufw status` zeigt 22/80/443 ALLOW)
+- [ ] fail2ban-Regel für Caddy-Logs anlegen (optional, nice-to-have — als Backlog-Task vermerken)
+
+### Production-Backend-Härtung (Bonus während T012)
+- [x] `gastro_app`-DB-Rolle angelegt (NOSUPERUSER NOBYPASSRLS NOINHERIT) — Production-Guard hat das erzwungen
+- [x] `PP_PGCRYPTO_KEY` (44 Zeichen) in `.env.prod` gesetzt
+- [x] `JWT_SECRET` (64 hex) in `.env.prod` gesetzt
+- [x] Alle Migrations (001-022) auf Production-DB angewendet, `schema_migrations` gepflegt
 
 ---
 

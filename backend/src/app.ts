@@ -21,6 +21,7 @@ import { receiptsCompleteRoutes } from './modules/_shared/receipts/complete.rout
 import { customerRoutes } from './modules/customers/customer.routes';
 import { documentRoutes } from './modules/documents/document.routes';
 import { dsgvoRoutes } from './modules/dsgvo/routes';
+import { dsgvoV2Routes } from './modules/dsgvo/dsgvo-v2.routes';
 import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
 import { m02ArchiveRoutes } from './modules/m02-archive/routes';
 import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
@@ -230,6 +231,10 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M01 Belege-Routes — VOR HMAC-Block (JWT-geschützt, nicht HMAC)
   // /api/v1/belege/upload, /api/v1/belege, /api/v1/belege/:id
   await app.register(belegeRoutes, { prefix: '/api/v1/belege' });
+  // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
+  // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
+  // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm
+  await app.register(dsgvoV2Routes, { prefix: '/api/v1/dsgvo' });
   await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
   await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
   await app.register(usersRoutes, { prefix: '/api/v1/users' });

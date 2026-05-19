@@ -122,6 +122,29 @@ const envSchema = z.object({
   // TTL für Presigned-Download-URLs in Sekunden (Default 15 Min).
   SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 
+  // ── T010 / M12: DSGVO ───────────────────────────────────────────────────
+  // Max DSGVO-Anträge pro Tenant pro 24h (Missbrauchs-/DoS-Schutz).
+  DSGVO_REQUESTS_PER_DAY_LIMIT: z.coerce.number().int().positive().default(5),
+  // TTL des Loeschungs-Confirm-Tokens in Sekunden (Default 30 min).
+  DSGVO_CONFIRM_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
+  // ZIP-Export wird nach N Tagen aus MinIO geloescht (Auto-Expire).
+  DSGVO_EXPORT_TTL_DAYS: z.coerce.number().int().positive().default(14),
+  // BullMQ-Queue fuer DSGVO-Auskunfts-ZIP-Builds. '0' deaktiviert das Auto-
+  // Enqueue (z. B. in Tests). Standard: aktiv.
+  DSGVO_QUEUE_ENABLED: z
+    .string()
+    .transform((v) => v !== '0' && v.toLowerCase() !== 'false')
+    .default('1'),
+
+  // ── SMTP (geteilt von M04 DATEV-Mail, M09 Lieferanten-Comm, M12 DSGVO) ──
+  // Pflicht in Production fuer DSGVO-Auskunfts-Versand. In Dev/Test leer
+  // lassen -> Mail wird nur geloggt (Dry-Run-Mode).
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default('noreply@prozesspilot.de'),
+
   // ── M15: SumUp OAuth 2.0 ────────────────────────────────────────────────
   // SumUp Developer Portal → Apps → ProzessPilot POS-Connector
   // Setup: https://developer.sumup.com (App registrieren, Redirect-URI eintragen)

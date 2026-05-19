@@ -27,9 +27,16 @@ CREATE TABLE booking_credentials (
   -- Kanzlei Mustermann"), nur Anzeige in der Webapp.
   display_name             VARCHAR(200),
 
+  -- T009-Phase-2 PLACEHOLDER (aktuell vom Code NICHT konsumiert):
   -- Auto-Push aktiv? false = Mitarbeiter triggert manuell via UI-Button.
-  -- Wenn true: nach Beleg-Status='extracted' (+ category) wird automatisch
-  -- ein Export-Job in die Queue gelegt (T009-Phase-2, aktuell nur Single+Batch).
+  -- Wenn true (zukuenftig): nach Beleg-Status='extracted' (+ category) wird
+  -- automatisch ein Export-Job in die Queue gelegt. Aktueller Code-Stand:
+  -- Single-Push + Batch-Endpoint manuell durch Mitarbeiter. Worker-Hook auf
+  -- diese Spalte folgt mit M05-Phase-2.
+  --
+  -- Begruendung fuer Schema-Mitnahme: nachtraegliche Column-Adds sind in
+  -- Production weniger schmerzfrei (Lock-Surface). Mit dabei + Default
+  -- 'false' macht es zu einem No-op bis der Consumer implementiert ist.
   auto_push                BOOLEAN      NOT NULL DEFAULT false,
 
   -- Status: false = deaktiviert (Token zurueckgezogen, Steuerberater-Wechsel, ...).

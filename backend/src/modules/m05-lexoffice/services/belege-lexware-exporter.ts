@@ -137,6 +137,19 @@ async function loadBeleg(pool: Pool, tenantId: string, belegId: string): Promise
 /**
  * Setzt belege.status auf 'exported' + ergaenzt payload.exports.lexware_office.
  * Wird nach erfolgreichem Push aufgerufen.
+ *
+ * T009-Review-Fix #4 (FSM-Sprung): Die Migration-030 FSM-Doku sieht den
+ * Status-Lebenszyklus
+ *   received → extracted → categorized → archived → exported
+ * vor. T009 ueberspringt 'categorized' und 'archived', weil M02-Archivierung
+ * im Pilot noch nicht implementiert ist (kein Drive/Dropbox-Adapter gegen
+ * Migration-030-Belege). Der CHECK-Constraint in Migration 030 erlaubt den
+ * Direkt-Sprung — semantisch sind die uebersprungenen Stufen "wurden
+ * gleichzeitig erledigt" zu interpretieren. Wenn M02 nachgezogen wird,
+ * muss hier ein Pre-Check ergaenzt werden (z.B. nur exportieren wenn schon
+ * archiviert), und der Sprung 'extracted -> exported' wird zu
+ * 'archived -> exported'. Backlog-Task: "T-?: FSM-Guard fuer Lexware-Export
+ * nach M02-Archiv-Hook".
  */
 async function markBelegExported(
   pool: Pool,

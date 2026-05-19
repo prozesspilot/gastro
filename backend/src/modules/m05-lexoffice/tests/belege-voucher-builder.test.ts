@@ -158,3 +158,57 @@ describe('buildBelegVoucher — Edge-Cases', () => {
     expect(v.voucherDate).toBe('2026-05-15');
   });
 });
+
+describe('buildBelegVoucher — Memo-Length-Limit (Review-Fix #7)', () => {
+  it('truncated auf 250 Zeichen wenn Teilnehmer-Liste sehr lang', () => {
+    const longTeilnehmer = Array.from({ length: 30 }, (_, i) => `Person${i} Lastname${i}`).join(
+      ', ',
+    );
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({
+        category: 'bewirtung',
+        payload: {
+          extraction: {
+            fields: {
+              bewirtung_anlass: 'Geschaeftsessen mit sehr langer Beschreibung der Anlass-Details',
+              bewirtung_teilnehmer: longTeilnehmer,
+            },
+          },
+        },
+      }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.memo).toBeDefined();
+    expect((v.memo ?? '').length).toBeLessThanOrEqual(250);
+    expect(v.memo).toMatch(/…$/); // Ellipsis am Ende signalisiert Truncate
+  });
+
+  it('Memo unter Limit wird NICHT truncated (kein Ellipsis)', () => {
+    const v = buildBelegVoucher({
+      beleg: makeBeleg(),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.memo).toBeDefined();
+    expect((v.memo ?? '').length).toBeLessThan(250);
+    expect((v.memo ?? '').endsWith('…')).toBe(false);
+  });
+
+  it('Beleg-ID-Praefix bleibt auch bei Truncate erhalten', () => {
+    const longTeilnehmer = 'x'.repeat(500);
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({
+        category: 'bewirtung',
+        payload: {
+          extraction: {
+            fields: {
+              bewirtung_anlass: 'Anlass',
+              bewirtung_teilnehmer: longTeilnehmer,
+            },
+          },
+        },
+      }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect((v.memo ?? '').startsWith('ProzessPilot b-001')).toBe(true);
+  });
+});

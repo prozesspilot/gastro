@@ -93,6 +93,15 @@ export function buildBelegVoucher(input: BuildVoucherInput): LexofficeVoucher {
   if (fields.bewirtung_anlass) memoParts.push(`Anlass: ${fields.bewirtung_anlass}`);
   if (fields.bewirtung_teilnehmer) memoParts.push(`Teilnehmer: ${fields.bewirtung_teilnehmer}`);
 
+  // T009-Review-Fix #7: Lexoffice-API hat ein Memo-Length-Limit (~250 Zeichen
+  // laut OpenAPI-Spec). Bei langen Teilnehmer-Listen sonst HTTP 400. Wir
+  // truncen hart auf MEMO_MAX_CHARS — Inhalt geht zwar verloren, aber die
+  // Anlass/Teilnehmer-Details stehen ohnehin auch in payload.extraction.fields
+  // und im Beleg-Detail-View (T015). Lexoffice-Memo ist nur Kontext-Hinweis.
+  const fullMemo = memoParts.join(' · ');
+  const memo =
+    fullMemo.length > MEMO_MAX_CHARS ? `${fullMemo.slice(0, MEMO_MAX_CHARS - 1)}…` : fullMemo;
+
   return {
     type: 'purchaseinvoice',
     voucherNumber: fields.document_number ?? beleg.id,
@@ -104,9 +113,12 @@ export function buildBelegVoucher(input: BuildVoucherInput): LexofficeVoucher {
     useCollectiveContact: !contactId,
     ...(contactId ? { contactId } : {}),
     voucherItems: [item],
-    memo: memoParts.join(' · '),
+    memo,
   };
 }
+
+/** T009: Lexoffice-Memo-API-Limit. Quelle: Lexoffice OpenAPI v1 (voucher.memo). */
+export const MEMO_MAX_CHARS = 250;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

@@ -149,23 +149,23 @@
   1. Steuerberaterin per Mail/Anruf: „Wir brauchen einen Lexware-Office-API-Token, um Almaz' Belege automatisch in deinen Posteingang zu schieben."
   2. Token unter https://app.lexoffice.de → Einstellungen → Öffentliche API erzeugen lassen
   3. Token sicher uebergeben (1Password Share, NIEMALS per Mail-Klartext)
-  4. Token in DB via Bootstrap-Script ablegen (verschluesselt via pgcrypto):
+  4. Token via Bootstrap-Script ablegen — **WICHTIG: nicht via `node -e` mit
+     Token in der Command-Line!** Der Token wuerde sonst in Shell-History,
+     docker-exec-Audit-Log und syslog landen.
+     Stattdessen das interaktive Script aus T009-Review-Fix nutzen:
      ```bash
      ssh root@87.106.8.111
-     docker compose exec backend node -e "
-       const { upsertBookingCredential } = require('./dist/modules/m05-lexoffice/services/booking-credentials.repository.js');
-       const { Pool } = require('pg');
-       const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-       await upsertBookingCredential(pool, {
-         tenantId: '<almaz-tenant-uuid>',
-         provider: 'lexware_office',
-         apiTokenPlaintext: '<token-from-steuerberaterin>',
-         displayName: 'Steuerkanzlei <Name>',
-         actorUserId: '<steve-user-uuid>',
-       });
-     "
+     cd /opt/gastro
+     # Interaktiver Prompt — Token-Eingabe ist echo-muted (kein History-Leak)
+     docker compose -f docker-compose.prod.yml exec backend \
+       node dist/scripts/bootstrap-lexware-token.js
      ```
-     Alternativ: kleines Setup-Skript schreiben (kann ich liefern wenn Token da ist).
+     Das Script fragt nacheinander ab:
+     - Tenant-UUID (Almaz)
+     - Mitarbeiter-User-UUID (wer setzt den Token ein — fuer Audit-Log)
+     - Display-Name (z.B. "Steuerkanzlei Mustermann")
+     - Lexware-API-Token (Eingabe wird mit `*` maskiert)
+     Bei Erfolg: `booking_credentials`-Row + Audit-Log-Event geschrieben.
   5. Smoke-Test: `curl -X POST https://api.prozesspilot.net/api/v1/belege/<beleg-id>/exports/lexware -H "Cookie: pp_auth=..." -H "X-PP-Tenant-ID: ..."`
 - **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
 - **Dependencies:** Migration 100 muss vorher gelaufen sein.

@@ -17,6 +17,7 @@
     "migrate:prod": "node dist/core/db/migrate.js",
     "seed:dev": "tsx --env-file=../.env src/core/db/seed-dev.ts",
     "bootstrap-admin": "tsx --env-file=../.env scripts/bootstrap-admin.ts",
+    "bootstrap-lexware-token": "tsx --env-file=../.env scripts/bootstrap-lexware-token.ts",
     "test:integration": "TEST_DATABASE_URL=postgresql://pp:pp@localhost:5432/pp_test vitest run src/__tests__/integration"
   },
   "dependencies": {

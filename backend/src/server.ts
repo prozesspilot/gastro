@@ -8,6 +8,9 @@ import { buildApp } from './app';
 import { config } from './core/config';
 import { assertNonPrivilegedDbRole } from './core/db/role-check';
 import { logger } from './core/logger';
+import { closeOcrQueue } from './core/queue/ocr-queue';
+import { createS3Client } from './core/storage/storage.service';
+import { startOcrWorker, stopOcrWorker } from './workers/ocr-worker';
 
 async function main(): Promise<void> {
   // T011 B4: vor allem anderen prüfen, dass die DB-Rolle nicht Superuser
@@ -31,8 +34,28 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // T007: BullMQ-OCR-Worker im selben Prozess starten. Bei höherer Last lässt
+  // sich der Worker später in einen eigenen Container auslagern — der Code
+  // funktioniert in beiden Setups.
+  if (config.OCR_QUEUE_ENABLED) {
+    try {
+      const s3 = createS3Client();
+      // Reuse den DB-Pool von Fastify (decorate 'db' aus app.ts)
+      const db = (app as unknown as { db: Pool }).db;
+      await startOcrWorker({ db, s3 });
+      logger.info('[ocr-worker] gestartet');
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[ocr-worker] Start fehlgeschlagen — Backend läuft ohne OCR-Worker weiter',
+      );
+    }
+  }
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Graceful Shutdown eingeleitet');
+    await stopOcrWorker().catch(() => undefined);
+    await closeOcrQueue().catch(() => undefined);
     await app.close();
     process.exit(0);
   };

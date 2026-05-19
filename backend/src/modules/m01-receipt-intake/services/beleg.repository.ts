@@ -340,3 +340,326 @@ export async function getBelegById(
     client.release();
   }
 }
+
+/**
+ * T007/M01 — Status-Update für FSM-Übergänge (received → extracting → extracted/
+ * requires_review/error). Schreibt zusätzlich einen audit_log-Eintrag in
+ * derselben Transaktion (GoBD-Atomicity).
+ *
+ * Kein Side-Effect auf payload — dafür gibt es updateBelegOcrResult.
+ *
+ * Akzeptierte Zielstatus: 'extracting', 'extracted', 'requires_review', 'error'.
+ * Wird ein anderer Übergang angefragt, wirft die Funktion (defensive Absicherung
+ * gegen falsche Verwendung).
+ */
+export async function updateBelegStatus(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  newStatus: BelegStatus,
+  audit: { actorType: 'system' | 'staff'; actorId: string; reason?: string } = {
+    actorType: 'system',
+    actorId: 'module:M01-OCR',
+  },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const current = await client.query<{ status: BelegStatus }>(
+      'SELECT status FROM belege WHERE id = $1 AND tenant_id = $2',
+      [belegId, tenantId],
+    );
+    if (current.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const oldStatus = current.rows[0].status;
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+         SET status = $3
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [belegId, tenantId, newStatus],
+    );
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.status_changed',
+      actor: { type: audit.actorType, id: audit.actorId },
+      payloadBefore: { status: oldStatus },
+      payloadAfter: { status: newStatus, reason: audit.reason ?? null },
+    });
+
+    await client.query('COMMIT');
+    return updateResult.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T007/M01 — Schreibt das OCR-Ergebnis in belege.payload und setzt den
+ * Folge-Status (extracted / requires_review). Optional werden denormalisierte
+ * Felder (supplier_name, document_date, total_gross) auf dem Row mit-aktualisiert.
+ *
+ * Idempotenz: zweimal mit demselben Ergebnis aufrufen erzeugt zwei Audit-Einträge
+ * mit identischer payload_after — der Aufrufer (OCRService) prüft vorher per
+ * Status, ob ein Re-Run nötig ist.
+ */
+export async function updateBelegOcrResult(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  input: {
+    newStatus: 'extracted' | 'requires_review';
+    extraction: {
+      engine: string;
+      engine_version: string;
+      confidence: number;
+      raw_text: string;
+      fields: Record<string, unknown>;
+      warnings: string[];
+    };
+    validation: {
+      is_valid: boolean;
+      issues: Array<{ code: string; field?: string; message: string }>;
+      checks: Record<string, boolean>;
+    };
+    denormalized?: {
+      supplier_name?: string | null;
+      document_date?: string | null;
+      total_gross?: number | null;
+      currency?: string | null;
+    };
+    audit: { actorType: 'system' | 'staff'; actorId: string };
+  },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const currentRow = await client.query<{
+      status: BelegStatus;
+      payload: Record<string, unknown>;
+    }>('SELECT status, payload FROM belege WHERE id = $1 AND tenant_id = $2', [belegId, tenantId]);
+    if (currentRow.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const oldStatus = currentRow.rows[0].status;
+    const existingPayload = currentRow.rows[0].payload ?? {};
+
+    const auditEvents = Array.isArray(
+      (existingPayload as { audit?: { events?: unknown[] } }).audit?.events,
+    )
+      ? (existingPayload as { audit: { events: unknown[] } }).audit.events
+      : [];
+
+    const newPayload = {
+      ...existingPayload,
+      extraction: input.extraction,
+      validation: input.validation,
+      audit: {
+        ...((existingPayload as { audit?: Record<string, unknown> }).audit ?? {}),
+        events: [
+          ...auditEvents,
+          {
+            at: new Date().toISOString(),
+            type: input.newStatus === 'extracted' ? 'beleg.extracted' : 'beleg.requires_review',
+            actor: { type: input.audit.actorType, id: input.audit.actorId },
+            engine: input.extraction.engine,
+            confidence: input.extraction.confidence,
+          },
+        ],
+      },
+    };
+
+    const denorm = input.denormalized ?? {};
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+         SET status = $3,
+             payload = $4::jsonb,
+             supplier_name = COALESCE($5, supplier_name),
+             document_date = COALESCE($6::date, document_date),
+             total_gross = COALESCE($7, total_gross),
+             currency = COALESCE($8, currency)
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [
+        belegId,
+        tenantId,
+        input.newStatus,
+        JSON.stringify(newPayload),
+        denorm.supplier_name ?? null,
+        denorm.document_date ?? null,
+        denorm.total_gross ?? null,
+        denorm.currency ?? null,
+      ],
+    );
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.ocr_completed',
+      actor: { type: input.audit.actorType, id: input.audit.actorId },
+      payloadBefore: { status: oldStatus },
+      payloadAfter: {
+        status: input.newStatus,
+        engine: input.extraction.engine,
+        confidence: input.extraction.confidence,
+        is_valid: input.validation.is_valid,
+      },
+    });
+
+    await client.query('COMMIT');
+    return updateResult.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T007/M01 — Schreibt einen OCR-Fehler in belege.payload und setzt Status='error'.
+ * Wird nach 3 Retries vom Worker aufgerufen.
+ */
+export async function markBelegOcrFailed(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  errorMessage: string,
+  attempts: number,
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const currentRow = await client.query<{
+      status: BelegStatus;
+      payload: Record<string, unknown>;
+    }>('SELECT status, payload FROM belege WHERE id = $1 AND tenant_id = $2', [belegId, tenantId]);
+    if (currentRow.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const oldStatus = currentRow.rows[0].status;
+    const existingPayload = currentRow.rows[0].payload ?? {};
+
+    const newPayload = {
+      ...existingPayload,
+      ocr_error: {
+        message: errorMessage,
+        attempts,
+        failed_at: new Date().toISOString(),
+      },
+    };
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+         SET status = 'error',
+             payload = $3::jsonb
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [belegId, tenantId, JSON.stringify(newPayload)],
+    );
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.ocr_failed',
+      actor: { type: 'system', id: 'module:M01-OCR' },
+      payloadBefore: { status: oldStatus },
+      payloadAfter: { status: 'error', error: errorMessage, attempts },
+    });
+
+    await client.query('COMMIT');
+    return updateResult.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T007/M01 — Cost-Tracking: zählt den OCR-API-Call pro Tenant pro Tag hoch
+ * und gibt den neuen Counter zurück. Schützt vor Runaway-Kosten.
+ *
+ * UPSERT auf (tenant_id, day, engine). Kein RLS-Konflikt: setTenantContext.
+ */
+export async function incrementOcrCallCount(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  engine: string,
+): Promise<{ call_count: number; day: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const result = await client.query<{ call_count: number; day: string }>(
+      `INSERT INTO ocr_cost_log (tenant_id, day, engine, call_count, last_beleg_id)
+       VALUES ($1, CURRENT_DATE, $2, 1, $3)
+       ON CONFLICT (tenant_id, day, engine)
+       DO UPDATE SET call_count = ocr_cost_log.call_count + 1,
+                     last_beleg_id = EXCLUDED.last_beleg_id
+       RETURNING call_count, day`,
+      [tenantId, engine, belegId],
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * T007/M01 — Liest den heutigen Counter ohne Hochzählen — für Vorab-Limit-Check
+ * (verhindert dass das 1001. Beleg-File überhaupt an Vision geschickt wird).
+ */
+export async function getOcrCallCountToday(
+  pool: Pool,
+  tenantId: string,
+  engine: string,
+): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const result = await client.query<{ call_count: number }>(
+      `SELECT COALESCE(call_count, 0) AS call_count
+         FROM ocr_cost_log
+        WHERE tenant_id = $1 AND day = CURRENT_DATE AND engine = $2`,
+      [tenantId, engine],
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0]?.call_count ?? 0;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

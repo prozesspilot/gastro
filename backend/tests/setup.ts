@@ -28,6 +28,11 @@ try {
 process.env.NODE_ENV = 'test';
 process.env.PP_AUTH_DISABLED = '1';
 process.env.LOG_LEVEL = 'silent';
+// T007 Review-Fix B1: OCR-Queue im Test deaktivieren. Sonst versucht der
+// upload.handler bei jedem 201-Response BullMQ-Redis-Connection aufzubauen
+// (kein Redis in CI) und Tests timeouten. config.ts liest die Env beim
+// Import → MUSS in Setup-File gesetzt werden, nicht im Test selbst.
+process.env.OCR_QUEUE_ENABLED = '0';
 
 // M10: feste Test-Werte, unabhängig von .env (Test berechnet Signatur mit diesen Werten)
 process.env.WHATSAPP_APP_SECRET = 'meta-app-secret-test';

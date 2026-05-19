@@ -9,6 +9,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
+import { requireTenantId } from '../../core/auth/m14-tenant-context';
 import { tenantContextHook } from '../../core/hooks/tenant-context';
 import { apiError, zodToApiError } from '../../core/schemas/common';
 import { type ReportReceipt, generateReceiptReport } from './report.generator';
@@ -96,7 +97,11 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const { receipts, tenantName } = await loadReportData(app.db, req.tenantId!, parsed.data);
+      const { receipts, tenantName } = await loadReportData(
+        app.db,
+        requireTenantId(req),
+        parsed.data,
+      );
       const pdf = await generateReceiptReport(receipts, tenantName);
       const filename = `belege-${new Date().toISOString().slice(0, 10)}.pdf`;
       return reply

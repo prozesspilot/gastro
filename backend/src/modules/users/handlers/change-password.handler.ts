@@ -4,10 +4,10 @@ import {
   validatePasswordStrength,
   verifyPassword,
 } from '../../../core/auth/password';
+import { ChangePasswordSchema } from '../schemas/login.schema';
 import { AuthEventLogger } from '../services/auth-event.logger';
 import { RefreshTokenRepository } from '../services/refresh-token.repository';
 import { UserRepository } from '../services/user.repository';
-import { ChangePasswordSchema } from '../schemas/login.schema';
 
 export async function changePasswordHandler(
   req: FastifyRequest,

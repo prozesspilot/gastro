@@ -15,6 +15,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import * as audit from '../../core/audit/audit.service';
+import { requireTenantId } from '../../core/auth/m14-tenant-context';
 import { tenantContextHook } from '../../core/hooks/tenant-context';
 import { triggerReceiptPipeline } from '../../core/n8n/client';
 import { rateLimit } from '../../core/rate-limit/rate-limit.middleware';
@@ -49,7 +50,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   // Muss VOR `/:id` registriert werden, damit Routing greift.
 
   app.get('/stats', async (req, reply) => {
-    const stats = await getReceiptStats(app.db, req.tenantId!);
+    const stats = await getReceiptStats(app.db, requireTenantId(req));
     return reply.send(apiOk(stats));
   });
 
@@ -62,16 +63,16 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = await bulkUpdateStatus(
       app.db,
-      req.tenantId!,
+      requireTenantId(req),
       parsed.data.ids,
       parsed.data.status,
     );
     for (const r of updated) {
-      void audit.log(app.db, req.tenantId!, 'receipt', r.id, 'status_changed', {
+      void audit.log(app.db, requireTenantId(req), 'receipt', r.id, 'status_changed', {
         new_status: parsed.data.status,
         bulk: true,
       });
-      sseManager.emit(req.tenantId!, 'receipt:status', {
+      sseManager.emit(requireTenantId(req), 'receipt:status', {
         id: r.id,
         status: r.status,
         updated_at: r.updated_at,
@@ -83,7 +84,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /receipts/export — CSV Export ──────────────────────────────────
 
   app.get('/export', async (req, reply) => {
-    const data = await listReceiptsForExport(app.db, req.tenantId!);
+    const data = await listReceiptsForExport(app.db, requireTenantId(req));
     const header = [
       'id',
       'status',
@@ -95,7 +96,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       'date',
       'created_at',
     ];
-    const escape = (v: unknown): string => {
+    const escapeCsv = (v: unknown): string => {
       if (v === null || v === undefined) return '';
       const s = String(v);
       if (/[",\n]/.test(s)) {
@@ -117,7 +118,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
           row.date,
           row.created_at,
         ]
-          .map(escape)
+          .map(escapeCsv)
           .join(','),
       );
     }
@@ -139,7 +140,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(422).send(zodToApiError(parsed.error));
     }
 
-    const { data, total } = await listReceipts(app.db, req.tenantId!, parsed.data);
+    const { data, total } = await listReceipts(app.db, requireTenantId(req), parsed.data);
 
     return reply.send(
       apiOk({
@@ -162,7 +163,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     // Prüfen, ob Customer im aktuellen Tenant existiert
     const customerCheck = await app.db.query<{ id: string }>(
       'SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND active = true',
-      [parsed.data.customer_id, req.tenantId!],
+      [parsed.data.customer_id, requireTenantId(req)],
     );
     if (customerCheck.rows.length === 0) {
       return reply
@@ -176,8 +177,8 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const receipt = await createReceipt(app.db, req.tenantId!, parsed.data);
-      sseManager.emit(req.tenantId!, 'receipt:created', receipt);
+      const receipt = await createReceipt(app.db, requireTenantId(req), parsed.data);
+      sseManager.emit(requireTenantId(req), 'receipt:created', receipt);
       return reply.code(201).send(apiOk(receipt));
     } catch (err: unknown) {
       if (err instanceof DuplicateReceiptError) {
@@ -207,7 +208,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(zodToApiError(paramsParsed.error));
     }
 
-    const receipt = await getReceipt(app.db, req.tenantId!, paramsParsed.data.id);
+    const receipt = await getReceipt(app.db, requireTenantId(req), paramsParsed.data.id);
 
     if (!receipt) {
       return reply
@@ -233,7 +234,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
 
     const receipt = await updateReceiptStatus(
       app.db,
-      req.tenantId!,
+      requireTenantId(req),
       paramsParsed.data.id,
       bodyParsed.data.status,
       bodyParsed.data.error_message,
@@ -245,11 +246,11 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
         .send(apiError('NOT_FOUND', `Receipt ${paramsParsed.data.id} nicht gefunden.`));
     }
 
-    void audit.log(app.db, req.tenantId!, 'receipt', receipt.id, 'status_changed', {
+    void audit.log(app.db, requireTenantId(req), 'receipt', receipt.id, 'status_changed', {
       new_status: bodyParsed.data.status,
       error_message: bodyParsed.data.error_message ?? null,
     });
-    sseManager.emit(req.tenantId!, 'receipt:status', {
+    sseManager.emit(requireTenantId(req), 'receipt:status', {
       id: receipt.id,
       status: receipt.status,
       updated_at: receipt.updated_at,
@@ -270,7 +271,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(zodToApiError(paramsParsed.error));
     }
 
-    const receipt = await getReceipt(app.db, req.tenantId!, paramsParsed.data.id);
+    const receipt = await getReceipt(app.db, requireTenantId(req), paramsParsed.data.id);
     if (!receipt) {
       return reply
         .code(404)
@@ -287,7 +288,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       .trim();
 
     // Storage-Key: tenantId/receiptId/original — eindeutig und nachvollziehbar
-    const storageKey = `${req.tenantId!}/${paramsParsed.data.id}/original`;
+    const storageKey = `${requireTenantId(req)}/${paramsParsed.data.id}/original`;
 
     try {
       const s3 = createS3Client();
@@ -302,7 +303,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     // DB aktualisieren: storage_key + file_size
     await updateReceiptStorageKey(
       app.db,
-      req.tenantId!,
+      requireTenantId(req),
       paramsParsed.data.id,
       storageKey,
       fileBuffer.length,
@@ -311,18 +312,18 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     // Status → 'received': signalisiert der Pipeline dass die Datei bereit ist
     const updated = await updateReceiptStatus(
       app.db,
-      req.tenantId!,
+      requireTenantId(req),
       paramsParsed.data.id,
       'received',
     );
 
-    void audit.log(app.db, req.tenantId!, 'receipt', paramsParsed.data.id, 'file_uploaded', {
+    void audit.log(app.db, requireTenantId(req), 'receipt', paramsParsed.data.id, 'file_uploaded', {
       storage_key: storageKey,
       size_bytes: fileBuffer.length,
       content_type: contentType,
     });
 
-    sseManager.emit(req.tenantId!, 'receipt:status', {
+    sseManager.emit(requireTenantId(req), 'receipt:status', {
       id: paramsParsed.data.id,
       status: 'received',
       storage_key: storageKey,
@@ -333,7 +334,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     void triggerReceiptPipeline({
       customer_id: receipt.customer_id,
       receipt_id: paramsParsed.data.id,
-      tenant_id: req.tenantId!,
+      tenant_id: requireTenantId(req),
       storage_key: storageKey,
       original_name: receipt.original_name ?? '',
       mime_type: contentType,
@@ -354,7 +355,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(zodToApiError(paramsParsed.error));
     }
 
-    const existing = await getReceipt(app.db, req.tenantId!, paramsParsed.data.id);
+    const existing = await getReceipt(app.db, requireTenantId(req), paramsParsed.data.id);
     if (!existing) {
       return reply
         .code(404)
@@ -365,17 +366,17 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     // und löscht error_message. n8n-Trigger reagiert auf SSE-Event.
     const receipt = await updateReceiptStatus(
       app.db,
-      req.tenantId!,
+      requireTenantId(req),
       paramsParsed.data.id,
       'received',
       null,
     );
 
-    void audit.log(app.db, req.tenantId!, 'receipt', paramsParsed.data.id, 'reprocessed', {
+    void audit.log(app.db, requireTenantId(req), 'receipt', paramsParsed.data.id, 'reprocessed', {
       previous_status: existing.status,
     });
 
-    sseManager.emit(req.tenantId!, 'receipt:reprocess', {
+    sseManager.emit(requireTenantId(req), 'receipt:reprocess', {
       id: paramsParsed.data.id,
       status: 'received',
       updated_at: receipt?.updated_at ?? new Date().toISOString(),
@@ -385,7 +386,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     void triggerReceiptPipeline({
       customer_id: existing.customer_id,
       receipt_id: paramsParsed.data.id,
-      tenant_id: req.tenantId!,
+      tenant_id: requireTenantId(req),
       storage_key: existing.storage_key ?? '',
       original_name: existing.original_name ?? '',
       mime_type: existing.mime_type ?? 'application/octet-stream',
@@ -406,7 +407,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(zodToApiError(paramsParsed.error));
     }
 
-    const receipt = await getReceipt(app.db, req.tenantId!, paramsParsed.data.id);
+    const receipt = await getReceipt(app.db, requireTenantId(req), paramsParsed.data.id);
     if (!receipt) {
       return reply
         .code(404)

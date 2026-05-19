@@ -33,6 +33,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/qrcode-terminal": "^0.12.2",
     "argon2": "^0.44.0",
+    "bullmq": "^5.76.10",
     "fastify": "^4.28.0",
     "google-auth-library": "^9.14.0",
     "googleapis": "^144.0.0",

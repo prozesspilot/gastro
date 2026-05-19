@@ -39,6 +39,21 @@ const envSchema = z.object({
   GOOGLE_VISION_KEY_FILE: z.string().default(''),
   // M01 §15 — Timeout für OCR-Adapter (Default 15 s).
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  // T007 — BullMQ-Worker für OCR. '0' deaktiviert das Auto-Enqueue beim Upload
+  // (z. B. in Tests). Standard: aktiv.
+  OCR_QUEUE_ENABLED: z
+    .string()
+    .transform((v) => v !== '0' && v.toLowerCase() !== 'false')
+    .default('1'),
+  // T007 — Wieviele Vision-API-Calls pro Tenant pro Kalendertag maximal.
+  // Schutz vor Runaway-Kosten (M01 Sicherheits-Anker).
+  OCR_DAILY_LIMIT_PER_TENANT: z.coerce.number().int().positive().default(1000),
+  // T007 — Max. Retry-Versuche pro OCR-Job (BullMQ attempts). Nach Erreichen
+  // wird der Beleg auf status='error' gesetzt + Discord-Alert.
+  OCR_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  // T007 — Discord-Webhook für OCR-Failure-Alerts (optional). Wenn leer, wird
+  // nur geloggt — kein extern sichtbarer Side-Effect.
+  DISCORD_OPS_WEBHOOK_URL: z.string().default(''),
 
   // D10: Opt-in Loki-Transport (npm install pino-loki, dann LOKI_URL setzen)
   LOKI_URL: z.string().optional(),

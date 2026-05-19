@@ -26,6 +26,7 @@ import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
 import { detailHandler } from './handlers/detail.handler';
 import { listHandler } from './handlers/list.handler';
+import { reprocessHandler } from './handlers/reprocess.handler';
 import { uploadHandler } from './handlers/upload.handler';
 
 export async function belegeRoutes(app: FastifyInstance): Promise<void> {
@@ -43,4 +44,9 @@ export async function belegeRoutes(app: FastifyInstance): Promise<void> {
 
   // Detail + Signed-URL
   app.get('/:id', detailHandler);
+
+  // T007: Manueller Re-Run der OCR-Pipeline für einen Beleg.
+  // Verwendung u. a. nach 'error'-Status (Discord-Alert hat operator
+  // benachrichtigt) oder nach Korrektur der Regex-Heuristik.
+  app.post<{ Params: { id: string } }>('/:id/reprocess', reprocessHandler);
 }

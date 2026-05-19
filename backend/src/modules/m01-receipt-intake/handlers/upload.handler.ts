@@ -25,6 +25,7 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { S3Client } from '@aws-sdk/client-s3';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../../../core/config';
+import { enqueueOcrJob } from '../../../core/queue/ocr-queue';
 import { uploadObject } from '../../../core/storage/storage.service';
 import { tenantExists } from '../../tenants/tenant.repository';
 import { getBelegBySha256, insertBeleg } from '../services/beleg.repository';
@@ -289,6 +290,22 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
     //     MinIO-Objekt aufräumen (Best-effort).
     await deleteOrphanedObject(s3Client, config.MINIO_BUCKET, storageKey, req.log);
     throw err; // Fastify-Error-Handler übernimmt
+  }
+
+  // T007: Bei neuem Beleg in die OCR-Queue einreihen. Duplikate werden NICHT
+  // re-enqueued — der Caller will den existierenden Stand sehen, kein neuer
+  // Verarbeitungs-Lauf. OCR_QUEUE_ENABLED=0 → No-op (z. B. in Tests).
+  if (!isDuplicate) {
+    try {
+      await enqueueOcrJob({ tenantId, belegId: beleg.id, reason: 'upload' });
+    } catch (err) {
+      // Enqueue-Fehler darf den Upload nicht failen. Operator sieht den Beleg
+      // im Status 'received' liegen und kann per /reprocess re-queuen.
+      req.log.warn(
+        { err: err instanceof Error ? err.message : String(err), belegId: beleg.id },
+        '[m01] OCR-Enqueue fehlgeschlagen — Beleg verbleibt im status=received',
+      );
+    }
   }
 
   // Response

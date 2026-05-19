@@ -6,6 +6,11 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'silent']).default('info'),
 
   DATABASE_URL: z.string().default('postgres://pp:pp@localhost:5432/prozesspilot'),
+  // Optional: separate Owner-Connection für Migrations. In Production läuft
+  // Backend-Runtime mit gastro_app-Rolle (non-privileged, kein CREATE auf
+  // public-Schema). Migrations brauchen aber CREATE — daher hier optional
+  // eine zweite URL mit pp-Owner-Credentials. Fallback: DATABASE_URL.
+  DATABASE_URL_MIGRATE: z.string().optional(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
   MINIO_ENDPOINT: z.string().default('http://localhost:9000'),

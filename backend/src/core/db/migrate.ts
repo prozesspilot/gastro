@@ -28,7 +28,17 @@ const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', 'migrations');
 const MIGRATION_ADVISORY_LOCK = BigInt('20094489948651264');
 
 async function migrate(): Promise<void> {
-  const pool = new Pool({ connectionString: config.DATABASE_URL });
+  // Migrations brauchen Schema-Owner-Rechte (CREATE TABLE, ALTER, etc.).
+  // In Production läuft die Backend-Runtime mit gastro_app (non-privileged),
+  // daher hier optionaler Override via DATABASE_URL_MIGRATE mit Owner-User
+  // (z.B. pp). Fallback: DATABASE_URL (für Dev/Test, wo Owner und App identisch).
+  const connectionString = config.DATABASE_URL_MIGRATE ?? config.DATABASE_URL;
+  const usingMigrateUrl = config.DATABASE_URL_MIGRATE != null;
+  logger.info(
+    { connection: usingMigrateUrl ? 'DATABASE_URL_MIGRATE (owner)' : 'DATABASE_URL (default)' },
+    'Migrations-Connection ausgewählt',
+  );
+  const pool = new Pool({ connectionString });
   const client = await pool.connect();
 
   try {

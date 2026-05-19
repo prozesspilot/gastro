@@ -142,6 +142,43 @@
 - **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
 - **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
 
+### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
+- **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)
+- **Was:** GCP-Projekt anlegen, Vision-API aktivieren, Service-Account erzeugen, JSON-Key herunterladen
+- **Wo:** https://console.cloud.google.com
+- **Schritte:**
+  1. Neues GCP-Projekt "prozesspilot-prod" anlegen (Region `europe-west3` für EU-Datenhaltung)
+  2. Billing-Account verknüpfen (1000 Vision-Calls/Monat = ~1,50 EUR — Daily-Limit pro Tenant ist auf 1000 gesetzt)
+  3. Vision API aktivieren: `gcloud services enable vision.googleapis.com`
+  4. Service-Account erstellen: `prozesspilot-vision-prod@...`, Rolle "Cloud Vision AI Service Agent"
+  5. JSON-Key herunterladen, sicher ablegen (NIE ins Repo committen)
+  6. Auf IONOS-Server unter `/etc/prozesspilot/gcp-vision.json` ablegen, Permissions `600`
+- **Output:** `GOOGLE_VISION_KEY_FILE=/etc/prozesspilot/gcp-vision.json`
+- **Dependencies:** IONOS-Server-Setup muss laufen
+
+### ⏳ Migration 070 in Production laufen lassen (T007)
+- **Priorität:** P0 (vor erstem Echt-Upload — sonst stürzt OCR-Worker beim ocr_cost_log-Insert ab)
+- **Was:** `npm run migrate` auf Production für `070_ocr_cost_log.sql`
+- **Schritte:**
+  1. Backup ziehen (`pg_dump`)
+  2. `cd backend && npm run migrate`
+  3. Verifizieren: `SELECT * FROM schema_migrations WHERE filename = '070_ocr_cost_log.sql'`
+  4. Rollback-Skript griffbereit: `070_ocr_cost_log_rollback.sql`
+
+### ⏳ Neue ENV-Variablen für T007 in GitHub-Secrets + IONOS-Env (T007)
+- **Priorität:** P1 (Defaults sind sinnvoll, aber Ops-Alerts brauchen Discord-Webhook)
+- **Was:** Vier neue ENV-Vars für OCR-Pipeline
+- **Liste:**
+  - `OCR_QUEUE_ENABLED` (Default `1` — auf `0` setzen wenn Worker temporär deaktiviert werden soll)
+  - `OCR_DAILY_LIMIT_PER_TENANT` (Default `1000` — anpassen wenn Pilot mehr Volumen braucht)
+  - `OCR_MAX_ATTEMPTS` (Default `3` — selten ändern)
+  - `DISCORD_OPS_WEBHOOK_URL` — Webhook für Ops-Channel im Gastro-Team-Discord, wird beim finalen OCR-Fail aufgerufen
+- **Schritte für DISCORD_OPS_WEBHOOK_URL:**
+  1. Im Gastro-Team-Discord einen Channel `#ops-alerts` anlegen (falls nicht vorhanden)
+  2. Kanal-Einstellungen → Integrationen → Webhooks → Neuer Webhook "ProzessPilot Ops"
+  3. URL kopieren, als GitHub-Secret + in `.env.prod` auf IONOS hinterlegen
+- **Output:** Discord-Alert in #ops-alerts wenn ein Beleg nach 3 OCR-Versuchen failed
+
 ---
 
 ## 🤝 Beide gemeinsam

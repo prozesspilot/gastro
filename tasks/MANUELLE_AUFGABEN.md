@@ -32,19 +32,16 @@
   4. Rollen-ID von "geschaeftsfuehrer" notieren (für `DISCORD_ROLE_ID_GF`)
   5. Bot mit Server-Manage-Berechtigungen hinzufügen
 
-### ⏳ Bootstrap-Admin lokal ausführen (T003)
-- **Priorität:** P0 (ohne ersten Admin kein Login möglich)
-- **Was:** Erster Geschäftsführer-Account in DB anlegen
-- **Befehl:** `cd backend && npm run bootstrap-admin`
-- **Eingaben:**
-  - Discord-Username (optional)
-  - Display-Name: "Steve Bernhardt"
-  - Notfall-Email (separate Mail empfohlen, nicht Discord-Email)
-  - Notfall-Passwort (≥16 Zeichen, Groß+Klein+Zahl+Sonderzeichen)
-- **Output speichern:**
-  - TOTP-Secret aus QR-Code → 1Password
-  - 10 Backup-Codes → 1Password
-- **Voraussetzung:** DB läuft (Postgres + Migrations 001-022), `PP_PGCRYPTO_KEY` in .env gesetzt
+### ✅ Bootstrap-Admin gegen Production-DB ausgeführt (2026-05-19)
+- **Was:** Erster Geschäftsführer-Account in Production-DB angelegt
+- **User:** Steve Bernhardt, role `geschaeftsfuehrer`, Notfall-Email `bernhardt@prozesspilot.net`
+- **Verfahren:** SSH-Tunnel zu Postgres-Container-IP, `npx tsx scripts/bootstrap-admin.ts` lokal
+- **Verifiziert:**
+  - `users`-Tabelle: 1 Eintrag ✅
+  - `auth_audit_log`: `bootstrap_admin_created` event geloggt ✅
+  - Notfall-Login-Endpoint: HTTP 401 bei falschem PW (kein 500) ✅
+- **In 1Password gespeichert:** TOTP-Secret + 10 Backup-Codes (durch Steve)
+- **Offen:** Discord-OAuth-Connect (separater Flow nach erstem Login)
 
 ### ⏳ SumUp Developer Portal — App registrieren (T004)
 - **Priorität:** P0 (Almaz nutzt SumUp Lite als Hauptkasse)

@@ -380,5 +380,30 @@ describe('hmacMiddleware — Triple-Auth (Bearer + Cookie + HMAC)', () => {
       expect(body.error.code).toBe('MISSING_TIMESTAMP');
       await app.close();
     });
+
+    it('ungültiger Bearer + gültiger Cookie: Bearer-401 (kein Cookie-Fallback)', async () => {
+      // Dokumentiert die Auth-Reihenfolge: Bearer wird vor Cookie geprüft.
+      // Ein kaputter Bearer-Header darf NICHT durch ein gültiges Cookie
+      // umgangen werden (Security-Anker, analog zum Bearer-vs-HMAC-Verhalten).
+      const app = buildApp();
+      const validCookie = signM14EmergencyToken({
+        userId: TEST_USER_ID,
+        role: 'geschaeftsfuehrer',
+        displayName: 'Should-Not-Be-Reached',
+      });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/test',
+        headers: {
+          authorization: 'Bearer this.is.not.a.valid.jwt',
+          cookie: `pp_auth=${validCookie}`,
+        },
+      });
+      expect(res.statusCode).toBe(401);
+      const body = res.json() as { ok: boolean; error: { code: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+      await app.close();
+    });
   });
 });

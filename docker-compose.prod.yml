@@ -5,9 +5,13 @@
 # T012: webapp-Ports von 80/443 auf 127.0.0.1:8081:80 geaendert,
 # damit Caddy die Ports 80+443 halten kann.
 #
+# T012 Review-Fix M1: `deploy.resources.limits` ersetzt durch Top-Level
+# `mem_limit` + `mem_reservation` — `deploy.*` wird im plain `docker compose`
+# (Non-Swarm) stillschweigend ignoriert.
+#
 # IONOS 4 GB RAM Budget (Phase 4):
 #   postgres 1G, n8n 800M, backend 768M, redis 256M, minio 256M, webapp 128M,
-#   setup-stub 32M, chat-stub 32M = ~3.3 GB Container + ~700 MB OS-Reserve.
+#   stubs 32M (1 Container für setup+chat) = ~3.3 GB Container + ~700 MB OS-Reserve.
 #   4G Swap als Notfall-Puffer.
 
 networks:
@@ -49,10 +53,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+    mem_limit: 1g
+    mem_reservation: 512m
 
   # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
@@ -68,10 +70,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+    mem_limit: 256m
+    mem_reservation: 128m
 
   # ── MinIO S3-kompatibler Objektspeicher ───────────────────────────────────
   minio:
@@ -90,10 +90,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+    mem_limit: 256m
+    mem_reservation: 128m
 
   # ── Backend ────────────────────────────────────────────────────────────────
   backend:
@@ -133,10 +131,8 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 768M
+    mem_limit: 768m
+    mem_reservation: 512m
 
   # ── Webapp / Nginx ─────────────────────────────────────────────────────────
   webapp:
@@ -164,13 +160,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 128M
+    mem_limit: 128m
+    mem_reservation: 64m
 
-  # ── Healthcheck-Stub: Onboarding-Wizard (Platzhalter bis T016) ────────────
-  setup-stub:
+  # ── Healthcheck-Stub: Platzhalter für setup.* + chat.* (NH2: konsolidiert) ──
+  # T012 Review-Fix NH2: setup-stub + chat-stub zu einem Service zusammengeführt.
+  # Container hört auf :8080 und bekommt zwei Port-Bindings (8082 + 8083).
+  # Caddy routet:
+  #   setup.prozesspilot.net → 127.0.0.1:8082 → Container :8080 (bis T016)
+  #   chat.prozesspilot.net  → 127.0.0.1:8083 → Container :8080 (bis Widget-Task)
+  stubs:
     # T012 Review-Fix B2a: image:-Direktive ergänzt.
     image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
     pull_policy: always
@@ -178,44 +177,20 @@ services:
       context: ./infra/healthcheck-stub
       dockerfile: Dockerfile
     restart: always
-    # T012: Caddy routet setup.prozesspilot.net → :8082
     ports:
       - "127.0.0.1:8082:8080"
-    networks:
-      - external
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 32M
-
-  # ── Healthcheck-Stub: Web-Chat-Widget (Platzhalter bis Widget-Task) ────────
-  chat-stub:
-    # T012 Review-Fix B2a: image:-Direktive ergänzt (gleiches Image wie setup-stub).
-    image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
-    pull_policy: always
-    build:
-      context: ./infra/healthcheck-stub
-      dockerfile: Dockerfile
-    restart: always
-    # T012: Caddy routet chat.prozesspilot.net → :8083
-    ports:
       - "127.0.0.1:8083:8080"
     networks:
       - external
+    # T012 Review-Fix M4: 127.0.0.1 statt localhost — musl-libc resolved
+    # localhost ggf. erst zu ::1 (IPv6), Caddy-Alpine bindet aber auf 0.0.0.0 IPv4.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 32M
+    mem_limit: 32m
+    mem_reservation: 16m
 
   # ── n8n Workflow-Engine ────────────────────────────────────────────────────
   n8n:
@@ -247,7 +222,5 @@ services:
     networks:
       - internal
       - external
-    deploy:
-      resources:
-        limits:
-          memory: 800M
+    mem_limit: 800m
+    mem_reservation: 512m

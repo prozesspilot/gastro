@@ -80,13 +80,30 @@ jobs:
 
       - name: SSH Deploy on IONOS
         uses: appleboy/ssh-action@v1
+        env:
+          # T012 Review-Fix M3: Webhook für Drift-Warning ans innere Skript reichen.
+          DISCORD_ALERTS_WEBHOOK: ${{ secrets.DISCORD_ALERTS_WEBHOOK }}
         with:
           host: ${{ secrets.IONOS_HOST }}
           username: ${{ secrets.IONOS_USER }}
           key: ${{ secrets.IONOS_SSH_KEY }}
+          envs: DISCORD_ALERTS_WEBHOOK
           script: |
             set -e
             cd /opt/gastro
+
+            # T012 Review-Fix M3: Drift-Warning bei verworfenen lokalen Änderungen.
+            # Wenn jemand auf dem Server einen Hotfix testet und vergisst zu committen,
+            # geht der beim nächsten Deploy verloren — wir warnen in Discord.
+            if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then
+              echo "WARN: lokale Änderungen in /opt/gastro werden verworfen"
+              if [ -n "$DISCORD_ALERTS_WEBHOOK" ]; then
+                curl -fsS -X POST "$DISCORD_ALERTS_WEBHOOK" \
+                  -H 'Content-Type: application/json' \
+                  -d '{"content":"⚠️ Deploy hat lokale Änderungen in `/opt/gastro` verworfen — bitte prüfen ob ein Hotfix in Git fehlt."}' \
+                  || true
+              fi
+            fi
 
             # Repo aktualisieren — fetch + reset --hard statt git pull.
             # Grund: pull bricht bei lokalen Modifikationen ab (Hotfixes,
@@ -95,6 +112,18 @@ jobs:
             # Deploy auch nach manuellen Server-Eingriffen robust.
             git fetch origin main
             git reset --hard origin/main
+
+            # T012 Review-Fix M2: pg_dump-Backup vor Migration.
+            # Falls migrate:prod fehlschlägt, kann manuell zurückgespielt werden:
+            #   docker compose exec -T postgres pg_restore -U pp -d prozesspilot -c <backup-file>
+            # Backup-Retention: 14 Tage (vor Migration, keine Stunden-Backups).
+            mkdir -p /opt/gastro/backups
+            BACKUP_FILE="/opt/gastro/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
+            echo "Erstelle Pre-Deploy-Backup: $BACKUP_FILE"
+            docker compose -f docker-compose.prod.yml exec -T postgres \
+              pg_dump -U pp -Fc prozesspilot > "$BACKUP_FILE"
+            # Alte Backups (>14 Tage) aufräumen
+            find /opt/gastro/backups -name 'pre-deploy-*.dump' -mtime +14 -delete || true
 
             # Images pullen + Container hochfahren
             docker compose -f docker-compose.prod.yml pull

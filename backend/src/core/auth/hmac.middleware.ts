@@ -101,6 +101,14 @@ export async function hmacMiddleware(req: FastifyRequest, reply: FastifyReply): 
       };
       // Synthetischer authUser für Routen, die das Interface lesen.
       // Staff sind tenant-agnostisch (sehen alle Mandanten), daher tenant_id=null.
+      //
+      // WARNUNG: permissions ist absichtlich leer. M14-Staff bedient Routen
+      // ausschließlich via req.m14Staff-Check (siehe m14-staff-auth.ts), nicht
+      // via permissions.includes(...). Wenn jemand requirePermission(...)-
+      // Middleware auf einer Staff-Route hinzufügt, würde Staff hier ausgesperrt
+      // werden. In dem Fall: entweder die Route nimmt req.m14Staff zusätzlich an,
+      // oder Permissions hier aus payload.role ableiten (z.B. 'geschaeftsfuehrer'
+      // → ['*']).
       req.authUser = {
         sub: payload.sub,
         tenant_id: null,

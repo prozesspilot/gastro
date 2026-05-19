@@ -36,6 +36,8 @@ admin.prozesspilot.net {
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# CSP: lädt nur eigene Assets + Backend-API
+		# wss://api.prozesspilot.net ist vorbereitet für späteres Live-Update-Feature
+		# (z.B. neue-Belege-Push) — aktuell gibt es noch keinen WebSocket-Endpoint.
 		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.prozesspilot.net wss://api.prozesspilot.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
 		# Permissions-Policy: keine unnötigen Browser-Features
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"

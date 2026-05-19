@@ -78,8 +78,10 @@ const CONTEXT_KEYWORDS = [
 ];
 
 /**
- * Position-Keywords — wenn 3+ unterschiedliche Speisen/Getraenke-Eintraege
- * im Text vorkommen (mehrere Zeilen), zaehlt Indikator 4.
+ * Position-Keywords — wenn 2+ unterschiedliche Speisen/Getraenke-Eintraege
+ * im Text vorkommen, zaehlt Indikator 4. (T008-Review-Fix #4: vorher
+ * Kommentar inkonsistent "3+" vs. Code "≥ 2" — Code-Verhalten ist die
+ * Quelle der Wahrheit.)
  */
 const POSITION_KEYWORDS = [
   'pizza',
@@ -159,10 +161,19 @@ export function analyze(input: BewirtungsInput): BewirtungsResult {
   const text = (input.rawText ?? '').toLowerCase();
   const supplier = (input.supplierName ?? '').toLowerCase();
 
-  // Indikator 1: Lieferant-Branchen-Check (Supplier-Name ODER Top-Zeilen)
-  const supplierMatch = SUPPLIER_KEYWORDS.some(
-    (kw) => supplier.includes(kw) || matchesInTopLines(text, kw, 3),
-  );
+  // Indikator 1: Lieferant-Branchen-Check (Supplier-Name ODER Top-Zeilen).
+  //
+  // T008-Review-Fix #2: Word-Boundary statt blossem `includes()`. Sonst
+  // matcht z.B. `bar` in `Bargeld`, `Lebensbar`, `Cocktailbar`, `Wundbar`.
+  // \b matcht an Wort-Grenzen — auch nach DE-Umlauten, weil `\b` in JS
+  // unicode-aware via `(?<![A-Za-zÄÖÜäöüß])`-Aequivalent ueber Unicode-
+  // Property-Escapes funktioniert. Wir bleiben pragmatisch bei \b — es
+  // matcht nicht 100% perfekt fuer Wortgrenzen-Detection an Umlauten,
+  // aber gut genug fuer die Keyword-Liste (alles ASCII).
+  const supplierMatch = SUPPLIER_KEYWORDS.some((kw) => {
+    const re = new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i');
+    return re.test(supplier) || re.test(topLinesText(text, 3));
+  });
 
   // Indikator 2: Kontext-Keywords im Volltext
   const contextMatch = CONTEXT_KEYWORDS.some((kw) => text.includes(kw));
@@ -223,10 +234,19 @@ export function analyze(input: BewirtungsInput): BewirtungsResult {
 }
 
 /**
- * Checkt ob ein Keyword in den ersten N Zeilen des Texts vorkommt — wichtig
- * fuer Indikator 1 (Lieferant): der Restaurant-Name steht meist oben.
+ * T008-Review-Fix #2: Liefert die ersten N Zeilen als String — Caller
+ * matcht dann mit \b-Word-Boundary-Regex statt simplem includes().
  */
-function matchesInTopLines(text: string, keyword: string, n: number): boolean {
-  const lines = text.split(/\r?\n/).slice(0, n).join(' ');
-  return lines.includes(keyword);
+function topLinesText(text: string, n: number): string {
+  return text.split(/\r?\n/).slice(0, n).join(' ');
+}
+
+/**
+ * Escaped einen String fuer den Einsatz in einem RegExp-Pattern.
+ * Verhindert dass Keywords mit Regex-Sonderzeichen (z.B. "café") falsch
+ * matchen — alle unsere Keywords sind ASCII ohne Sonderzeichen, aber
+ * defensive Code.
+ */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

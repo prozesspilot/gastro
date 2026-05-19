@@ -274,7 +274,14 @@ export async function processBeleg(
           ? { trinkgeld_cents: bewirtung.trinkgeld_cents }
           : {}),
       },
-      warnings: bewirtung.tax_split.splitting_required ? ['tax_split_required:7_19'] : [],
+      // T008-Review-Fix: warning nur bei Bewirtungs-Belegen. Sonst leakte das
+      // false-positive Splitting-Warning auch in non-Bewirtungs-Belege (Metro
+      // mit "7%" + "19%" im Volltext → splitting_required=true, aber kein
+      // Bewirtungs-Kontext, kein SKR04-Splitting noetig).
+      warnings:
+        bewirtung.is_bewirtung && bewirtung.tax_split.splitting_required
+          ? ['tax_split_required:7_19']
+          : [],
     },
     validation: { is_valid: isValid, issues, checks },
     denormalized: {

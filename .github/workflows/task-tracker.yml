@@ -62,12 +62,15 @@ jobs:
             old_bucket=$(echo "$old_path" | sed -E 's|tasks/(_[a-z_]+)/.*|\1|')
             new_bucket=$(echo "$new_path" | sed -E 's|tasks/(_[a-z_]+)/.*|\1|')
 
-            # Nur die drei relevanten Übergänge
+            # Relevante Übergänge — die häufigen 3 + Reopen + Cancel.
             transition="${old_bucket}→${new_bucket}"
             case "$transition" in
               "_backlog→_in_progress") emoji="🟢"; verb="startet" ;;
               "_in_progress→_done")    emoji="✅"; verb="hat abgeschlossen" ;;
               "_backlog→_done")        emoji="✅"; verb="hat direkt erledigt" ;;
+              "_done→_in_progress")    emoji="🔄"; verb="hat wieder geöffnet" ;;
+              "_in_progress→_backlog") emoji="↩️"; verb="hat zurückgestellt" ;;
+              "_done→_backlog")        emoji="↩️"; verb="hat zurück ins Backlog gestellt" ;;
               *)
                 echo "  Übergang $transition wird nicht beachtet."
                 continue ;;

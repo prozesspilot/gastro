@@ -31,6 +31,44 @@ export type BelegSourceChannel =
   | 'api'
   | 'sumup';
 
+/**
+ * T015: payload-Schema (vom Backend nach OCR befuellt). Felder unsicher —
+ * nicht alle Belege haben extraction+validation (z. B. nach Upload ohne OCR).
+ */
+export interface BelegPayload {
+  extraction?: {
+    engine?: string;
+    engine_version?: string;
+    confidence?: number;
+    raw_text?: string;
+    fields?: {
+      supplier_name?: string;
+      document_date?: string;
+      total_gross?: number;
+      currency?: string;
+      tax_rate?: number;
+      ocr_confidence?: number;
+      bewirtung_anlass?: string;
+      bewirtung_teilnehmer?: string;
+      /** Pro-Feld-Konfidenz vom OCR-Service (T007). */
+      fields_confidence?: {
+        supplier_name?: number;
+        document_date?: number;
+        total_gross?: number;
+      };
+    };
+  };
+  validation?: {
+    is_valid?: boolean;
+    issues?: Array<{ code: string; field?: string; message: string }>;
+  };
+  ocr_error?: {
+    message: string;
+    attempts: number;
+    failed_at: string;
+  };
+}
+
 export interface Beleg {
   id: string;
   status: BelegStatus;
@@ -44,6 +82,8 @@ export interface Beleg {
   total_gross: number | null;
   currency: string;
   category: string | null;
+  /** T015: vollständiges payload — nur im Detail-Response gesetzt, in der Liste optional. */
+  payload?: BelegPayload;
 }
 
 export interface BelegListResponse {
@@ -121,4 +161,51 @@ export async function listBelege(opts: {
 
 export async function getBeleg(id: string): Promise<BelegDetailResponse> {
   return apiRequest<BelegDetailResponse>(`/belege/${id}`);
+}
+
+// ── T015: Update / Reprocess / Delete ────────────────────────────────────
+
+/**
+ * Korrekturen, die ein Mitarbeiter im Detail-View schicken kann.
+ * Backend-Schema: keys exact (snake_case).
+ */
+export interface BelegUpdatePatch {
+  supplier_name?: string | null;
+  document_date?: string | null; // ISO YYYY-MM-DD
+  total_gross?: number | null;
+  currency?: string | null;
+  category?: string | null;
+  tax_rate?: number | null;
+  bewirtung_anlass?: string | null;
+  bewirtung_teilnehmer?: string | null;
+}
+
+export async function updateBeleg(
+  id: string,
+  patch: BelegUpdatePatch,
+): Promise<{ beleg: Beleg }> {
+  return apiRequest<{ beleg: Beleg }>(`/belege/${id}`, {
+    method: 'PATCH',
+    // apiRequest JSON.stringify'd das Object automatisch + setzt Content-Type.
+    body: patch,
+  });
+}
+
+export async function reprocessBeleg(
+  id: string,
+): Promise<{ beleg_id: string; status: string; queued: boolean }> {
+  return apiRequest<{ beleg_id: string; status: string; queued: boolean }>(
+    `/belege/${id}/reprocess`,
+    { method: 'POST' },
+  );
+}
+
+export async function deleteBeleg(
+  id: string,
+  reason?: string,
+): Promise<{ beleg_id: string; deleted_at: string }> {
+  return apiRequest<{ beleg_id: string; deleted_at: string }>(`/belege/${id}`, {
+    method: 'DELETE',
+    body: reason ? { reason } : undefined,
+  });
 }

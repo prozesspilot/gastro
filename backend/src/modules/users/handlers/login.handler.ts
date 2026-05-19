@@ -1,10 +1,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { LoginSchema } from '../schemas/login.schema';
 import { AuthEventLogger } from '../services/auth-event.logger';
 import { AuthService, publicUserView } from '../services/auth.service';
 import { setRefreshCookie } from '../services/cookie.helper';
 import { RefreshTokenRepository } from '../services/refresh-token.repository';
 import { UserRepository } from '../services/user.repository';
-import { LoginSchema } from '../schemas/login.schema';
 
 export async function loginHandler(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const parsed = LoginSchema.safeParse(req.body);

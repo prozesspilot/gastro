@@ -11,15 +11,17 @@
  *   await app.register(requestLoggingPlugin);
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import type { FastifyInstance } from 'fastify';
 import { getLogger } from '../logger';
 import { type TraceContext, newTraceId, traceStorage } from '../trace';
 
-// biome-ignore lint/suspicious/noExplicitAny: Fastify-Generics erfordern explizite any für custom Logger-Typ
-export async function requestLoggingPlugin(
-  app: FastifyInstance<any, any, any, any>,
-): Promise<void> {
+// Fastify-Plugin-Generics: Server, RawRequest, RawReply, Logger. Wir geben
+// keine spezifischen Typen vor und nutzen ein Type-Alias mit einer einzelnen
+// Suppression statt vier inline-any-Annotations.
+// biome-ignore lint/suspicious/noExplicitAny: Fastify-Plugin-Generics sind beim Konsumieren als `any` üblich, sonst muss man die genaue Server-Variante aus app.ts importieren.
+type AnyFastifyInstance = FastifyInstance<any, any, any, any>;
+
+export async function requestLoggingPlugin(app: AnyFastifyInstance): Promise<void> {
   // ── onRequest: TraceContext per enterWith() in den async-Kontext setzen ──
 
   app.addHook('onRequest', async (req, _reply) => {

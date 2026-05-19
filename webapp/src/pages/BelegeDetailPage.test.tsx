@@ -74,8 +74,9 @@ describe('BelegeDetailPage', () => {
       expect(screen.getAllByText('Test GmbH').length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText(/238/)).toBeInTheDocument();
-    expect(screen.getByText('wareneinkauf_food')).toBeInTheDocument();
+    // T015: Felder sind jetzt in Inputs — check via Input-Value statt Text
+    expect((screen.getByTestId('field-total_gross') as HTMLInputElement).value).toBe('238');
+    expect((screen.getByTestId('field-category') as HTMLInputElement).value).toBe('wareneinkauf_food');
   });
 
   it('zeigt Status-Badge mit korrektem Label', async () => {
@@ -269,6 +270,271 @@ describe('BelegeDetailPage', () => {
 
     const img = container.querySelector('img[data-testid="image-preview"]');
     expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
+  // ── T015 — Form / Konfidenz / Buttons / Confirm ─────────────────────────
+
+  it('T015: rendert Form-Felder editierbar (Lieferant, Datum, Betrag, ...)', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+    renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('field-supplier_name')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('field-document_date')).toBeInTheDocument();
+    expect(screen.getByTestId('field-total_gross')).toBeInTheDocument();
+    expect(screen.getByTestId('field-tax_rate')).toBeInTheDocument();
+    expect(screen.getByTestId('field-category')).toBeInTheDocument();
+  });
+
+  it('T015: Konfidenz-Indikator pro Feld aus payload', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg({
+            payload: {
+              extraction: {
+                confidence: 0.82,
+                fields: {
+                  fields_confidence: {
+                    supplier_name: 0.9,    // grün
+                    document_date: 0.5,    // gelb
+                    total_gross: 0.2,      // rot
+                  },
+                },
+              },
+            },
+          }),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+    renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('confidence-Lieferant')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('confidence-Lieferant').getAttribute('data-confidence')).toBe('0.90');
+    expect(screen.getByTestId('confidence-Belegdatum').getAttribute('data-confidence')).toBe('0.50');
+    expect(screen.getByTestId('confidence-Betrag (Brutto)').getAttribute('data-confidence')).toBe('0.20');
+  });
+
+  it('T015: Save-Button initial disabled (kein dirty), wird aktiv bei Änderung', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-save')).toBeInTheDocument();
+    });
+    const saveBtn = screen.getByTestId('btn-save') as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+
+    const supplierInput = screen.getByTestId('field-supplier_name') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(supplierInput, { target: { value: 'Neuer Lieferant' } });
+    });
+    expect(saveBtn.disabled).toBe(false);
+  });
+
+  it('T015: PATCH-Save sendet nur geänderte Felder', async () => {
+    let receivedPatch: Record<string, unknown> | null = null;
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+      http.patch(`${BASE}/belege/:id`, async ({ request }) => {
+        receivedPatch = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          beleg: makeBeleg({ supplier_name: 'Neuer Lieferant' }),
+        });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('field-supplier_name')).toBeInTheDocument();
+    });
+    const supplierInput = screen.getByTestId('field-supplier_name') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(supplierInput, { target: { value: 'Neuer Lieferant' } });
+    });
+    const saveBtn = screen.getByTestId('btn-save');
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+    await waitFor(() => expect(receivedPatch).not.toBeNull());
+    expect(receivedPatch).toEqual({ supplier_name: 'Neuer Lieferant' });
+  });
+
+  it('T015: Save-Fehler rollt UI zurück', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+      http.patch(`${BASE}/belege/:id`, () =>
+        HttpResponse.json(
+          { error: { message: 'Server-Fehler', code: 'INTERNAL_ERROR' } },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('field-supplier_name')).toBeInTheDocument();
+    });
+    const supplierInput = screen.getByTestId('field-supplier_name') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(supplierInput, { target: { value: 'Versucht' } });
+    });
+    const saveBtn = screen.getByTestId('btn-save');
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+    // Toast erscheint, Page bleibt offen
+    await waitFor(() => {
+      expect(screen.getByText(/Speichern fehlgeschlagen/i)).toBeInTheDocument();
+    });
+  });
+
+  it('T015: Bewirtungs-Felder erscheinen wenn Kategorie "bewirtung" enthält', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg({ category: 'bewirtung_kunden' }),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('field-bewirtung_anlass')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('field-bewirtung_teilnehmer')).toBeInTheDocument();
+  });
+
+  it('T015: Bewirtungs-Felder fehlen bei non-Bewirtung-Kategorie', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg({ category: 'wareneinkauf_food' }),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('field-category')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('field-bewirtung_anlass')).not.toBeInTheDocument();
+  });
+
+  it('T015: Re-OCR-Button löst POST /reprocess aus', async () => {
+    let called = false;
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+      http.post(`${BASE}/belege/:id/reprocess`, () => {
+        called = true;
+        return HttpResponse.json({ beleg_id: 'b-detail-001', status: 'received', queued: true });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-reprocess')).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-reprocess'));
+    });
+    await waitFor(() => expect(called).toBe(true));
+  });
+
+  it('T015: Löschen zeigt Confirm-Dialog, bestätigtes Löschen navigiert', async () => {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+      http.delete(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({ beleg_id: 'b-detail-001', deleted_at: '2026-05-19T12:00:00Z' }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-delete')).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-delete'));
+    });
+    expect(screen.getByTestId('delete-confirm')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-delete-confirm'));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('belege-list')).toBeInTheDocument();
+    });
+  });
+
+  it('T015: Löschen-Cancel schließt Dialog ohne API-Call', async () => {
+    let called = false;
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg: makeBeleg(),
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+      http.delete(`${BASE}/belege/:id`, () => {
+        called = true;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-delete')).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-delete'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-delete-cancel'));
+    });
+    expect(screen.queryByTestId('delete-confirm')).not.toBeInTheDocument();
+    expect(called).toBe(false);
   });
 
   it('zeigt Loading-Skeleton während fetch', async () => {

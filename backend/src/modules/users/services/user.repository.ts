@@ -39,8 +39,8 @@ export class UserRepository {
     // Bei null tenantId wird sowohl nach exakt-null gesucht (super_admin) als
     // auch nach allen Tenants (Login probiert beide Pfade über findByEmailAnyTenant).
     const sql = tenantId
-      ? `SELECT * FROM users WHERE email_lower = $1 AND tenant_id = $2 LIMIT 1`
-      : `SELECT * FROM users WHERE email_lower = $1 AND tenant_id IS NULL LIMIT 1`;
+      ? 'SELECT * FROM users WHERE email_lower = $1 AND tenant_id = $2 LIMIT 1'
+      : 'SELECT * FROM users WHERE email_lower = $1 AND tenant_id IS NULL LIMIT 1';
     const params = tenantId ? [emailLower, tenantId] : [emailLower];
     const res = await this.pool.query<UserRow>(sql, params);
     return res.rows[0] ?? null;
@@ -49,21 +49,21 @@ export class UserRepository {
   /** Login: über alle Tenants suchen (super_admin + Tenant-User). */
   async findByEmailAnyTenant(emailLower: string): Promise<UserRow | null> {
     const res = await this.pool.query<UserRow>(
-      `SELECT * FROM users WHERE email_lower = $1 ORDER BY tenant_id NULLS FIRST LIMIT 1`,
+      'SELECT * FROM users WHERE email_lower = $1 ORDER BY tenant_id NULLS FIRST LIMIT 1',
       [emailLower],
     );
     return res.rows[0] ?? null;
   }
 
   async findById(id: string): Promise<UserRow | null> {
-    const res = await this.pool.query<UserRow>(`SELECT * FROM users WHERE id = $1 LIMIT 1`, [id]);
+    const res = await this.pool.query<UserRow>('SELECT * FROM users WHERE id = $1 LIMIT 1', [id]);
     return res.rows[0] ?? null;
   }
 
   async listByTenant(tenantId: string | null): Promise<UserRow[]> {
     const sql = tenantId
-      ? `SELECT * FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`
-      : `SELECT * FROM users ORDER BY tenant_id NULLS FIRST, created_at DESC`;
+      ? 'SELECT * FROM users WHERE tenant_id = $1 ORDER BY created_at DESC'
+      : 'SELECT * FROM users ORDER BY tenant_id NULLS FIRST, created_at DESC';
     const params = tenantId ? [tenantId] : [];
     const res = await this.pool.query<UserRow>(sql, params);
     return res.rows;
@@ -158,7 +158,7 @@ export class UserRepository {
     if (sets.length === 0) {
       return this.findById(id);
     }
-    sets.push(`updated_at = now()`);
+    sets.push('updated_at = now()');
     params.push(id);
     const res = await this.pool.query<UserRow>(
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
@@ -174,7 +174,7 @@ export class UserRepository {
 
   async countSuperAdmins(): Promise<number> {
     const res = await this.pool.query<{ c: string }>(
-      `SELECT count(*)::text AS c FROM users WHERE tenant_id IS NULL AND is_active = true`,
+      'SELECT count(*)::text AS c FROM users WHERE tenant_id IS NULL AND is_active = true',
     );
     return Number(res.rows[0]?.c ?? '0');
   }

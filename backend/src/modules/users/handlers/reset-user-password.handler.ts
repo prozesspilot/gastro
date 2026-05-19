@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hashPassword, validatePasswordStrength } from '../../../core/auth/password';
+import { ResetPasswordSchema } from '../schemas/user.schema';
 import { AuthEventLogger } from '../services/auth-event.logger';
 import { publicUserView } from '../services/auth.service';
 import { RefreshTokenRepository } from '../services/refresh-token.repository';
 import { UserRepository } from '../services/user.repository';
-import { ResetPasswordSchema } from '../schemas/user.schema';
 
 export async function resetUserPasswordHandler(
   req: FastifyRequest<{ Params: { id: string } }>,

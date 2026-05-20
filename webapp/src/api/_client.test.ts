@@ -141,7 +141,8 @@ describe('apiBlob', () => {
       ),
     );
     const blob = await apiBlob('/file');
-    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.size).toBeGreaterThan(0);
+    expect(blob.type).toBe('application/pdf');
   });
 
   it('wirft bei Fehler', async () => {

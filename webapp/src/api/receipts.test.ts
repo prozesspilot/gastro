@@ -179,7 +179,8 @@ describe('downloadReceipt', () => {
       ),
     );
     const blob = await downloadReceipt('r-001');
-    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.size).toBeGreaterThan(0);
+    expect(blob.type).toBe('application/pdf');
   });
 
   it('wirft bei 404 (kein Storage-Key)', async () => {

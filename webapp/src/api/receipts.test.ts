@@ -179,6 +179,7 @@ describe('downloadReceipt', () => {
       ),
     );
     const blob = await downloadReceipt('r-001');
+    // Realm-Mismatch: jsdom-Blob ≠ Node-global Blob → semantischer statt instanceof-Check
     expect(blob.size).toBeGreaterThan(0);
     expect(blob.type).toBe('application/pdf');
   });

@@ -83,9 +83,13 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
     }),
   );
 
-  await page.route('**/api/v1/auth/logout', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { logged_out: true } }) }),
-  );
+  await page.route('**/api/v1/auth/logout', async (route) => {
+    // Session-Flag zurücksetzen — defensive Konsistenz für Tests, die nach Logout /session erneut prüfen.
+    await page.evaluate(() => {
+      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
+    });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { logged_out: true } }) });
+  });
 
   // Belegt /receipts/stats (vom Layout angefragt) damit Dashboard-Render nicht crasht
   await page.route('**/api/v1/customers/*/stats', (route) =>

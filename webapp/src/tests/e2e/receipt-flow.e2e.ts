@@ -25,10 +25,10 @@ const MOCK_SESSION = {
 
 // ── Test Suite ────────────────────────────────────────────────────────────────
 
-// TODO: Diese Tests gehören umgeschrieben für die aktuelle LoginPage
+// TODO T020: Diese Tests gehören umgeschrieben für die aktuelle LoginPage
 // (Discord-OAuth + Notfall-Login-Toggle, kein Mandanten-Dropdown mehr).
-// Aktuell skipped, weil sie ein veraltetes Login-Design erwarten.
-// Follow-up-Task im Backlog.
+// Backlog-Task: tasks/_backlog/T020-e2e-receipt-flow-discord-auth.md
+// Blaupause für M14-Cookie-Stub: webapp/src/tests/e2e/auth.e2e.ts
 test.describe.skip('G1 — Receipt-Flow (TODO: für Discord-Auth umschreiben)', () => {
   // Login-Tests dürfen KEINE Session haben (sonst redirected useEffect zur Startseite).
   test.describe('ohne Session', () => {

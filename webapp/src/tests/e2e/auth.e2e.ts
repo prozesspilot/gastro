@@ -28,8 +28,14 @@ const SESSION_USER = {
 async function stubAuth(page: import('@playwright/test').Page, opts: {
   loginFails?: boolean;
 } = {}) {
+  // Session-State: erst nach erfolgreichem Login auf true setzen.
+  // Sonst würde LoginPage uns sofort vom /login wegredirecten (user-useEffect).
+  await page.addInitScript(() => {
+    (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
+  });
+
   // Notfall-Login-Endpoint (POST) — BASE in auth.ts ist /api/v1/auth
-  await page.route('**/api/v1/auth/notfall/login', (route) => {
+  await page.route('**/api/v1/auth/notfall/login', async (route) => {
     if (opts.loginFails) {
       return route.fulfill({
         status: 401,
@@ -37,6 +43,10 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
         body: JSON.stringify({ error: 'invalid_credentials', message: 'fail' }),
       });
     }
+    // Erst jetzt darf /session den User liefern.
+    await page.evaluate(() => {
+      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = true;
+    });
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -45,14 +55,24 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
     });
   });
 
-  // Session-Check nach erfolgreichem Login
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({
+  // Session-Check: 401 vor Login (LoginPage rendert Toggle), 200 nach Login (Dashboard)
+  await page.route('**/api/v1/auth/session', async (route) => {
+    const loggedIn = await page.evaluate(
+      () => (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn === true,
+    );
+    if (!loggedIn) {
+      return route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false }),
+      });
+    }
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ ok: true, user: SESSION_USER }),
-    }),
-  );
+    });
+  });
 
   // Refresh-Endpoint (für AuthContext.init)
   await page.route('**/api/v1/auth/refresh', (route) =>

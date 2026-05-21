@@ -11,7 +11,7 @@
  *
  * DECISION: Wir nutzen 24h TTL für Discord-Login statt 15min, weil die Mitarbeiter-Webapp
  * im Browser läuft und kein automatisches Token-Refresh implementiert ist (T002).
- * Das Cookie hat SameSite=Strict + HttpOnly als Schutz.
+ * Das Cookie hat SameSite=Lax + HttpOnly als Schutz (Lax ist Pflicht für OAuth-Redirects).
  */
 
 import { randomUUID } from 'node:crypto';

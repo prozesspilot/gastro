@@ -3,37 +3,78 @@
  *
  * Spec: Konzeptentwicklung/modules/M14_User_Verwaltung_Auth.md §6.2 + §6.4
  *
- * Stubt das Backend per page.route(), damit der Test ohne echten Server läuft.
+ * Stubt das M14-Backend per page.route() (Cookie-Session-Flow):
+ *   - POST /api/v1/auth/notfall/login → setzt pp_auth-Cookie
+ *   - GET  /api/v1/auth/session       → gibt M14SessionUser zurück
+ *   - POST /api/v1/auth/logout        → endet Session
+ *
  * Szenarien:
- *   1. Login als super_admin → Dashboard
- *   2. Forced password_must_change → Redirect auf /change-password
- *   3. Logout → zurück auf /login
- *   4. Falsche Credentials → generischer Fehler
+ *   1. Login als Geschäftsführer → Dashboard
+ *   2. Logout → zurück auf /login
+ *   3. Falsche Credentials → generischer Fehler
+ *
+ * Note: password_must_change-Flow gibt's im M14-Cookie-Flow nicht mehr — Test entfernt.
  */
 
 import { expect, test } from '@playwright/test';
 
-function jwtFor(claims: Record<string, unknown>): string {
-  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
-  return `${enc({ alg: 'HS256', typ: 'JWT' })}.${enc({ ...claims, exp: Math.floor(Date.now() / 1000) + 600 })}.sig`;
-}
-
-const SUPER_ADMIN = {
-  id: 'usr_root', email: 'root@test.de', display_name: 'Root',
-  tenant_id: null, permissions: ['*'], preset: 'super_admin',
-  is_active: true, password_must_change: false, last_login_at: null, created_at: '',
-};
-
-const NEW_USER = {
-  id: 'usr_neu', email: 'neu@test.de', display_name: 'Neu',
-  tenant_id: 'tnt_a', permissions: ['receipts.read'], preset: 'operator',
-  is_active: true, password_must_change: true, last_login_at: null, created_at: '',
+const SESSION_USER = {
+  id: 'usr_root',
+  display_name: 'Root',
+  role: 'geschaeftsfuehrer',
+  login_method: 'emergency',
 };
 
 async function stubAuth(page: import('@playwright/test').Page, opts: {
-  loginUser?: Record<string, unknown>;
   loginFails?: boolean;
 } = {}) {
+  // Session-State: erst nach erfolgreichem Login auf true setzen.
+  // Sonst würde LoginPage uns sofort vom /login wegredirecten (user-useEffect).
+  await page.addInitScript(() => {
+    (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
+  });
+
+  // Notfall-Login-Endpoint (POST) — BASE in auth.ts ist /api/v1/auth
+  await page.route('**/api/v1/auth/notfall/login', async (route) => {
+    if (opts.loginFails) {
+      return route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'invalid_credentials', message: 'fail' }),
+      });
+    }
+    // Erst jetzt darf /session den User liefern.
+    await page.evaluate(() => {
+      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = true;
+    });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'set-cookie': 'pp_auth=stub; Path=/; HttpOnly' },
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  // Session-Check: 401 vor Login (LoginPage rendert Toggle), 200 nach Login (Dashboard)
+  await page.route('**/api/v1/auth/session', async (route) => {
+    const loggedIn = await page.evaluate(
+      () => (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn === true,
+    );
+    if (!loggedIn) {
+      return route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, user: SESSION_USER }),
+    });
+  });
+
+  // Refresh-Endpoint (für AuthContext.init)
   await page.route('**/api/v1/auth/refresh', (route) =>
     route.fulfill({
       status: 401,
@@ -42,32 +83,13 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
     }),
   );
 
-  await page.route('**/api/v1/auth/login', (route) => {
-    if (opts.loginFails) {
-      return route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ ok: false, error: { code: 'INVALID_CREDENTIALS', message: 'fail' } }),
-      });
-    }
-    const user = opts.loginUser ?? SUPER_ADMIN;
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'set-cookie': 'pp_refresh=stub; Path=/api/v1/auth; HttpOnly' },
-      body: JSON.stringify({
-        ok: true,
-        data: {
-          access_token: jwtFor({ sub: user.id, tenant_id: user.tenant_id, permissions: user.permissions, preset: user.preset }),
-          user,
-        },
-      }),
+  await page.route('**/api/v1/auth/logout', async (route) => {
+    // Session-Flag zurücksetzen — defensive Konsistenz für Tests, die nach Logout /session erneut prüfen.
+    await page.evaluate(() => {
+      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
     });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { logged_out: true } }) });
   });
-
-  await page.route('**/api/v1/auth/logout', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { logged_out: true } }) }),
-  );
 
   // Belegt /receipts/stats (vom Layout angefragt) damit Dashboard-Render nicht crasht
   await page.route('**/api/v1/customers/*/stats', (route) =>
@@ -81,13 +103,21 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
   );
 }
 
+// Notfall-Login ist standardmäßig zugeklappt (Discord-OAuth ist Primär-Pfad).
+// E2E-Tests müssen den Toggle erst öffnen, bevor Email/Passwort-Felder existieren.
+async function openEmergencyLogin(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: /notfall-login/i }).click();
+}
+
 test.describe('M14 Auth E2E', () => {
   test('Login als super_admin → Dashboard', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByLabel(/totp/i).fill('123456');
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     // Nach Login Redirect — kein Login-Heading mehr (Dashboard wird gerendert).
     await expect(page).toHaveURL(/\/$|\/dashboard/);
   });
@@ -95,28 +125,25 @@ test.describe('M14 Auth E2E', () => {
   test('Falsche Credentials → generische Fehlermeldung', async ({ page }) => {
     await stubAuth(page, { loginFails: true });
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('falsch@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('wrong');
-    await page.getByRole('button', { name: /anmelden/i }).click();
-    await expect(page.getByRole('alert')).toContainText(/Login fehlgeschlagen/i);
+    await page.getByLabel(/totp/i).fill('123456');
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
+    await expect(page.getByRole('alert')).toContainText(/zugangsdaten ungültig/i);
   });
 
-  test('password_must_change → Redirect /change-password', async ({ page }) => {
-    await stubAuth(page, { loginUser: NEW_USER });
-    await page.goto('/login');
-    await page.getByLabel(/email/i).fill('neu@test.de');
-    await page.getByLabel('Passwort', { exact: true }).fill('temp-pwd-1234XY');
-    await page.getByRole('button', { name: /anmelden/i }).click();
-    await expect(page).toHaveURL(/\/change-password$/);
-    await expect(page.getByRole('heading', { name: /passwort ändern/i })).toBeVisible();
-  });
+  // Hinweis: password_must_change-Flow gibt's im M14-Cookie-Session-Modell nicht mehr —
+  // der entsprechende Test wurde entfernt. Passwort-Change ist jetzt manuell über Settings.
 
   test('Logout vom Dashboard zurück zu /login', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByLabel(/totp/i).fill('123456');
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     await expect(page).not.toHaveURL(/\/login/);
     // UserMenu öffnen → Logout
     await page.getByLabel(/benutzermenü/i).click();

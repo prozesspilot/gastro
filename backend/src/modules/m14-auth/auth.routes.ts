@@ -8,7 +8,7 @@
  *   - CSRF via State-Token (32 Bytes, Base64URL, Redis TTL 5 Min)
  *   - State ist einmalig (DELETE nach Validierung)
  *   - Redirect-Ziel nur relative URLs (verhindert Open-Redirect)
- *   - Cookie: HttpOnly, Secure (Prod), SameSite=Strict
+ *   - Cookie: HttpOnly, Secure (Prod), SameSite=Lax (Pflicht für OAuth-Redirects)
  *   - Tokens werden nie geloggt
  *
  * Registrierung in app.ts VOR dem HMAC-Block:
@@ -294,10 +294,13 @@ export async function discordAuthRoutes(app: FastifyInstance): Promise<void> {
       // ── 13. Cookie setzen ─────────────────────────────────────────────
       const isSecure = config.NODE_ENV === 'production';
 
+      // sameSite: 'lax' ist Pflicht für OAuth-Redirects — bei 'strict' wird das Cookie
+      // beim Top-Level-Redirect von discord.com zurück NICHT mitgeschickt und der User
+      // landet in einer Login-Loop. 'lax' schützt weiterhin vor CSRF (POST-Requests).
       reply.setCookie(AUTH_COOKIE_NAME, jwtToken, {
         httpOnly: true,
         secure: isSecure,
-        sameSite: 'strict',
+        sameSite: 'lax',
         maxAge: COOKIE_MAX_AGE_SECONDS,
         path: '/',
       });

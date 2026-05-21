@@ -27,6 +27,8 @@ test.describe('ProzessPilot Smoke-Tests', () => {
   test('Login-Page hat Email- und Passwort-Feld', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: 'ProzessPilot' })).toBeVisible();
+    // Notfall-Login ist standardmäßig zugeklappt → erst öffnen.
+    await page.getByRole('button', { name: /notfall-login/i }).click();
     await expect(page.getByLabel(/email/i)).toBeVisible();
     await expect(page.getByLabel('Passwort', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
@@ -46,9 +48,10 @@ test.describe('ProzessPilot Smoke-Tests', () => {
 
   test('Login-Page ist zugänglich ohne eingeloggten State', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('form')).toBeVisible();
-    // Kein Passwort → Button disabled?
-    const submitBtn = page.getByRole('button', { name: /anmelden/i });
-    await expect(submitBtn).toBeVisible();
+    // Discord-Login ist Primär-Pfad → der Anker muss sichtbar sein.
+    await expect(page.getByRole('link', { name: /discord/i })).toBeVisible();
+    // Notfall-Login öffnen für den klassischen Anmelden-Button.
+    await page.getByRole('button', { name: /notfall-login/i }).click();
+    await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
   });
 });

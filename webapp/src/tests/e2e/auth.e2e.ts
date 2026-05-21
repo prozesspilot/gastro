@@ -81,10 +81,17 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
   );
 }
 
+// Notfall-Login ist standardmäßig zugeklappt (Discord-OAuth ist Primär-Pfad).
+// E2E-Tests müssen den Toggle erst öffnen, bevor Email/Passwort-Felder existieren.
+async function openEmergencyLogin(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: /notfall-login/i }).click();
+}
+
 test.describe('M14 Auth E2E', () => {
   test('Login als super_admin → Dashboard', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
     await page.getByRole('button', { name: /anmelden/i }).click();
@@ -95,6 +102,7 @@ test.describe('M14 Auth E2E', () => {
   test('Falsche Credentials → generische Fehlermeldung', async ({ page }) => {
     await stubAuth(page, { loginFails: true });
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('falsch@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('wrong');
     await page.getByRole('button', { name: /anmelden/i }).click();
@@ -104,6 +112,7 @@ test.describe('M14 Auth E2E', () => {
   test('password_must_change → Redirect /change-password', async ({ page }) => {
     await stubAuth(page, { loginUser: NEW_USER });
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('neu@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('temp-pwd-1234XY');
     await page.getByRole('button', { name: /anmelden/i }).click();
@@ -114,6 +123,7 @@ test.describe('M14 Auth E2E', () => {
   test('Logout vom Dashboard zurück zu /login', async ({ page }) => {
     await stubAuth(page);
     await page.goto('/login');
+    await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
     await page.getByRole('button', { name: /anmelden/i }).click();

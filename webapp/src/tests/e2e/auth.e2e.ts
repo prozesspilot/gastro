@@ -4,9 +4,9 @@
  * Spec: Konzeptentwicklung/modules/M14_User_Verwaltung_Auth.md §6.2 + §6.4
  *
  * Stubt das M14-Backend per page.route() (Cookie-Session-Flow):
- *   - POST /api/v1/notfall/login    → setzt pp_auth-Cookie
- *   - GET  /api/v1/session          → gibt M14SessionUser zurück
- *   - POST /api/v1/auth/logout      → endet Session
+ *   - POST /api/v1/auth/notfall/login → setzt pp_auth-Cookie
+ *   - GET  /api/v1/auth/session       → gibt M14SessionUser zurück
+ *   - POST /api/v1/auth/logout        → endet Session
  *
  * Szenarien:
  *   1. Login als Geschäftsführer → Dashboard
@@ -28,8 +28,8 @@ const SESSION_USER = {
 async function stubAuth(page: import('@playwright/test').Page, opts: {
   loginFails?: boolean;
 } = {}) {
-  // Notfall-Login-Endpoint (POST)
-  await page.route('**/api/v1/notfall/login', (route) => {
+  // Notfall-Login-Endpoint (POST) — BASE in auth.ts ist /api/v1/auth
+  await page.route('**/api/v1/auth/notfall/login', (route) => {
     if (opts.loginFails) {
       return route.fulfill({
         status: 401,
@@ -46,7 +46,7 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
   });
 
   // Session-Check nach erfolgreichem Login
-  await page.route('**/api/v1/session', (route) =>
+  await page.route('**/api/v1/auth/session', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',

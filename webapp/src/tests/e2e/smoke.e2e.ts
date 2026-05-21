@@ -31,18 +31,18 @@ test.describe('ProzessPilot Smoke-Tests', () => {
     await page.getByRole('button', { name: /notfall-login/i }).click();
     await expect(page.getByLabel(/email/i)).toBeVisible();
     await expect(page.getByLabel('Passwort', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /notfall-anmeldung/i })).toBeVisible();
   });
 
   test('Not-Found-Page zeigt 404', async ({ page }) => {
     await page.goto('/login');
     // Erst einloggen wenn möglich
-    const loginPage = await page.getByRole('button', { name: /anmelden/i }).isVisible().catch(() => false);
+    const loginPage = await page.getByRole('button', { name: /notfall-anmeldung/i }).isVisible().catch(() => false);
 
     if (loginPage) {
       // Simuliere Login-Abbruch und direkten Zugriff auf unbekannte Seite
       // In Tests ohne Backend: bleib auf Login-Page
-      await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /notfall-anmeldung/i })).toBeVisible();
     }
   });
 
@@ -52,6 +52,6 @@ test.describe('ProzessPilot Smoke-Tests', () => {
     await expect(page.getByRole('link', { name: /discord/i })).toBeVisible();
     // Notfall-Login öffnen für den klassischen Anmelden-Button.
     await page.getByRole('button', { name: /notfall-login/i }).click();
-    await expect(page.getByRole('button', { name: /anmelden/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /notfall-anmeldung/i })).toBeVisible();
   });
 });

@@ -94,7 +94,7 @@ test.describe('M14 Auth E2E', () => {
     await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     // Nach Login Redirect — kein Login-Heading mehr (Dashboard wird gerendert).
     await expect(page).toHaveURL(/\/$|\/dashboard/);
   });
@@ -105,7 +105,7 @@ test.describe('M14 Auth E2E', () => {
     await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('falsch@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('wrong');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     await expect(page.getByRole('alert')).toContainText(/Login fehlgeschlagen/i);
   });
 
@@ -115,7 +115,7 @@ test.describe('M14 Auth E2E', () => {
     await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('neu@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('temp-pwd-1234XY');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByRole('heading', { name: /passwort ändern/i })).toBeVisible();
   });
@@ -126,7 +126,7 @@ test.describe('M14 Auth E2E', () => {
     await openEmergencyLogin(page);
     await page.getByLabel(/email/i).fill('root@test.de');
     await page.getByLabel('Passwort', { exact: true }).fill('SuperGeheim1234!');
-    await page.getByRole('button', { name: /anmelden/i }).click();
+    await page.getByRole('button', { name: /notfall-anmeldung/i }).click();
     await expect(page).not.toHaveURL(/\/login/);
     // UserMenu öffnen → Logout
     await page.getByLabel(/benutzermenü/i).click();

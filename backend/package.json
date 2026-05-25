@@ -56,7 +56,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
-    "@types/node": "^20.14.0",
+    "@types/node": "^25.9.1",
     "@types/pg": "^8.11.6",
     "pino-pretty": "^11.2.1",
     "tsx": "^4.15.0",

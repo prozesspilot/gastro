@@ -1,0 +1,41 @@
+# T023 — Integrationstests gegen echte DB für M05-Export + M15-POS
+
+**Priorität:** P2 — Qualitäts-Schuld aus Pilot-pragmatischem Merge
+**Module:** M05 (lexoffice), M15 (pos-connector)
+**Herkunft:** Review-Findings aus PR #59 (T009), #60 (T005), #61 (T018) —
+bewusst als Follow-up zurückgestellt (Funktions-/Daten-Bugs wurden vor Merge
+gefixt, die fehlenden Integrationstests nicht).
+
+## Kontext
+
+Mehrere Kern-Pfade sind aktuell nur gegen **gemockte** Pools getestet. Die
+eigentliche SQL-/RLS-/Retry-Logik wird nie gegen echtes Postgres ausgeführt.
+Setup-Rezept für lokale Test-DB: siehe `webapp-test-stack`-Memory bzw.
+`.github/workflows/ci-backend.yml` (postgres:16 + redis:7, Rolle `gastro_app`).
+
+## Zu schreibende Integrationstests
+
+### M05 — Lexware-Export (`exportBelegToLexware`)
+- Kern-Service ist komplett ungetestet (Handler-Tests mocken ihn weg).
+- Abdecken: Idempotenz-Skip (bereits gepusht), Happy-Path-Push, 4xx → kein
+  Retry, 5xx → Retry-dann-Erfolg, finaler Fail → Discord-Alert, Anhang-Best-
+  Effort. `vi.useFakeTimers()` für die Backoff-Delays (1s/4s/16s).
+- Idempotency-Key-Pfad (PR #59) end-to-end verifizieren.
+
+### M15 — SumUp RLS (`listActiveSumUpTenants`)
+- Integrationstest gegen echte DB mit **aktiver RLS** auf einer Spiegel-Tabelle:
+  beweist, dass das Tenant-Listing unter RLS funktioniert (bzw. dass die
+  Owner-Connection aus [[T022]] nötig ist).
+
+### M15 — POS-Cleanup Lösch-Kriterien (`purgeInactivePosCredentials`)
+- Drei Fixtures gegen echte DB:
+  1. aktive Credential → bleibt,
+  2. inaktiv aber innerhalb Retention (z.B. 29 Tage bei 30d) → bleibt,
+  3. inaktiv außerhalb Retention (31 Tage) → wird gelöscht.
+- Boundary-Test exakt auf der Grenze (`updated_at = now() - retention`).
+- Verifizieren, dass der `audit_log`-Eintrag tenant-isoliert geschrieben wird
+  (PR #61) und `auth_audit_log` NICHT mehr genutzt wird.
+
+## Akzeptanz
+- Tests laufen in CI (`Backend — Lint, Build, Migrate, Test`) grün.
+- Coverage der drei Kern-Funktionen ≥ 80%.

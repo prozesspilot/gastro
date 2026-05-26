@@ -66,8 +66,19 @@ export class LexofficeClient {
 
   // ── Public API ─────────────────────────────────────────────────────────
 
-  async createVoucher(voucher: LexofficeVoucher): Promise<LexofficeCreateResponse> {
-    return this.requestJson<LexofficeCreateResponse>('POST', '/v1/vouchers', voucher);
+  /**
+   * Legt einen Voucher an. `idempotencyKey` (optional) wird als
+   * `Idempotency-Key`-Header gesendet — Lexoffice dedupliziert serverseitig,
+   * sodass Retries (interner Client-Retry bei 5xx UND der aeussere Exporter-
+   * Retry) keinen doppelten Buchungsbeleg erzeugen. Schluessel muss pro Beleg
+   * stabil sein (z.B. SHA256(tenant:beleg:target)).
+   */
+  async createVoucher(
+    voucher: LexofficeVoucher,
+    idempotencyKey?: string,
+  ): Promise<LexofficeCreateResponse> {
+    const extraHeaders = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined;
+    return this.requestJson<LexofficeCreateResponse>('POST', '/v1/vouchers', voucher, extraHeaders);
   }
 
   async uploadVoucherFile(
@@ -116,11 +127,16 @@ export class LexofficeClient {
 
   // ── Internal: Request mit Retry + Rate-Limit ─────────────────────────
 
-  private async requestJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
     const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
     const init: RequestInit = {
       method,
-      headers: this.headers('application/json'),
+      headers: { ...this.headers('application/json'), ...extraHeaders },
     };
     if (body !== undefined) {
       init.body = JSON.stringify(body);

@@ -137,10 +137,42 @@
 - **Hinweis:** Reguläres `npm run migrate` über Production-Image scheiterte an fehlendem `tsx`-Binary
   → Backend muss in CI vor Deploy migrieren ODER via `node dist/core/db/migrate.js` (Build-Output)
 
-### ⏳ DB-Cleanup-Cron einrichten (T018 Backlog)
+### ⏳ POS-Credentials-Cleanup-Cron einrichten (T018)
 - **Priorität:** P1 (DSGVO)
-- **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
-- **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
+- **Was:** Daily-Cron, der inaktive `pos_credentials` (active=false) nach 30 Tagen Hard-Delete + Audit-Log
+- **Status:** Code implementiert (T018, PR offen). Setup auf IONOS noch erforderlich.
+- **Setup (systemd-Timer):**
+  ```bash
+  ssh root@87.106.8.111
+  cat > /etc/systemd/system/gastro-pos-cleanup.service <<'EOF'
+  [Unit]
+  Description=Gastro POS-Credentials DSGVO-Cleanup
+  After=docker.service
+
+  [Service]
+  Type=oneshot
+  WorkingDirectory=/opt/gastro
+  ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml exec -T backend node dist/cron/pos-credentials-cleanup.js
+  EOF
+
+  cat > /etc/systemd/system/gastro-pos-cleanup.timer <<'EOF'
+  [Unit]
+  Description=Daily POS-Credentials-Cleanup 04:30 UTC
+
+  [Timer]
+  OnCalendar=*-*-* 04:30:00 UTC
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+  EOF
+
+  systemctl daemon-reload
+  systemctl enable --now gastro-pos-cleanup.timer
+  ```
+- **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/pos-credentials-cleanup.js` → Exit 0 + Logs zeigen Anzahl
+- **Optional:** ENV `POS_CREDENTIALS_RETENTION_DAYS` (default 30) anpassen falls juristisch notwendig
+- **DSGVO-Doku:** Aufbewahrungsfrist von 30 Tagen fuer OAuth-Tokens nach Deaktivierung. Tokens fallen NICHT unter 10-Jahres-Pflicht (§ 147 AO), weil sie keine Geschaeftsdaten sind. Begruendung: nur Zugriffs-Credentials, keine Steuer-/Buchungs-Belege.
 
 ### ✅ Migration 090 — Soft-Delete für Belege (T015)
 - **Status:** Wird automatisch durch Auto-Deploy-Pipeline angewendet (`migrate:prod` in `deploy-staging.yml`, seit T012)
@@ -196,6 +228,44 @@
   3. Verifizieren: `\d kasse_transactions` zeigt `integration_id uuid` (kein NOT NULL)
   4. `INSERT INTO schema_migrations(filename) VALUES ('110_kasse_transactions_fk_relax.sql')`
 - **Rollback:** `110_kasse_transactions_fk_relax_rollback.sql` (failt wenn schon Rows mit integration_id=NULL existieren)
+
+### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
+- **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
+- **Was:** Steuerberaterin von Almaz kontaktieren, Lexware-Office-API-Token (Public-API-Schluessel) anfordern, in DB hinterlegen
+- **Schritte:**
+  1. Steuerberaterin per Mail/Anruf: „Wir brauchen einen Lexware-Office-API-Token, um Almaz' Belege automatisch in deinen Posteingang zu schieben."
+  2. Token unter https://app.lexoffice.de → Einstellungen → Öffentliche API erzeugen lassen
+  3. Token sicher uebergeben (1Password Share, NIEMALS per Mail-Klartext)
+  4. Token via Bootstrap-Script ablegen — **WICHTIG: nicht via `node -e` mit
+     Token in der Command-Line!** Der Token wuerde sonst in Shell-History,
+     docker-exec-Audit-Log und syslog landen.
+     Stattdessen das interaktive Script aus T009-Review-Fix nutzen:
+     ```bash
+     ssh root@87.106.8.111
+     cd /opt/gastro
+     # Interaktiver Prompt — Token-Eingabe ist echo-muted (kein History-Leak)
+     docker compose -f docker-compose.prod.yml exec backend \
+       node dist/scripts/bootstrap-lexware-token.js
+     ```
+     Das Script fragt nacheinander ab:
+     - Tenant-UUID (Almaz)
+     - Mitarbeiter-User-UUID (wer setzt den Token ein — fuer Audit-Log)
+     - Display-Name (z.B. "Steuerkanzlei Mustermann")
+     - Lexware-API-Token (Eingabe wird mit `*` maskiert)
+     Bei Erfolg: `booking_credentials`-Row + Audit-Log-Event geschrieben.
+  5. Smoke-Test: `curl -X POST https://api.prozesspilot.net/api/v1/belege/<beleg-id>/exports/lexware -H "Cookie: pp_auth=..." -H "X-PP-Tenant-ID: ..."`
+- **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
+- **Dependencies:** Migration 100 muss vorher gelaufen sein.
+
+### ⏳ Migration 100 in Production laufen lassen (T009)
+- **Priorität:** P0 (Token-Storage existiert sonst nicht)
+- **Was:** `belege` bekommt nichts; neue Tabelle `booking_credentials` (Lexware-Token-Storage)
+- **Schritte:**
+  1. Backup ziehen
+  2. SQL via psql: `\i /opt/gastro/migrations/100_booking_credentials.sql`
+  3. Verifizieren: `\d booking_credentials`
+  4. `INSERT INTO schema_migrations(filename) VALUES ('100_booking_credentials.sql')`
+- **Rollback:** `100_booking_credentials_rollback.sql`
 
 ### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
 - **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)

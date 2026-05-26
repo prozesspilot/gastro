@@ -238,4 +238,92 @@ Gesamtbetrag: 142,85 EUR`;
       processBeleg(noopDb, TENANT_UUID, BELEG_UUID, { ocrAdapter: adapter }),
     ).rejects.toThrow('S3-Client');
   });
+
+  // ── T008-Review-Fix #5: Integration-Tests fuer requires_review-Force-Logik ──
+
+  it('T008: Bewirtungs-Beleg mit hoher Konfidenz (>=0.7) bleibt extracted', async () => {
+    (getBelegById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBeleg());
+
+    // Beleg mit 3 Bewirtungs-Indikatoren → confidence = 0.75
+    const rawText = `Pizzeria Bella Italia
+Datum: 28.04.2026
+Tisch 5, Gedeck 2 Personen
+Pizza Margherita      8,50 EUR
+Pasta Carbonara      12,00 EUR
+Wein (Glas)           5,00 EUR
+Trinkgeld:            2,50 EUR
+Gesamtbetrag:        28,00 EUR`;
+    const adapter = makeMockOcrAdapter({ raw_text: rawText, confidence: 0.95 });
+
+    const result = await processBeleg(noopDb, TENANT_UUID, BELEG_UUID, {
+      s3: makeMockS3(),
+      ocrAdapter: adapter,
+    });
+
+    // Bei hoher Bewirtungs-Konfidenz (>=0.7) bleibt der Status 'extracted'
+    expect(result.status).toBe('extracted');
+
+    const call = (updateBelegOcrResult as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[3].newStatus).toBe('extracted');
+    // payload.bewirtung wurde befuellt
+    expect(call[3].bewirtung).toBeDefined();
+    expect(call[3].bewirtung.confidence).toBeGreaterThanOrEqual(0.7);
+    // category wurde auf 'bewirtung' gesetzt
+    expect(call[3].denormalized.category).toBe('bewirtung');
+  });
+
+  it('T008: Bewirtungs-Beleg mit mittlerer Konfidenz (0.5..0.7) erzwingt requires_review', async () => {
+    (getBelegById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBeleg());
+
+    // Nur 2 von 4 Bewirtungs-Indikatoren (supplier + context) → confidence = 0.5.
+    // Aber: ein vollstaendiger Beleg (Lieferant + Datum + Betrag) hat hohe
+    // overall OCR-Konfidenz → ohne Bewirtungs-Override waere status=extracted.
+    const rawText = `Restaurant Adler
+01.05.2026
+Tisch reserviert
+Gesamtbetrag: 50,00 EUR`;
+    const adapter = makeMockOcrAdapter({ raw_text: rawText, confidence: 0.95 });
+
+    const result = await processBeleg(noopDb, TENANT_UUID, BELEG_UUID, {
+      s3: makeMockS3(),
+      ocrAdapter: adapter,
+    });
+
+    expect(result.status).toBe('requires_review');
+
+    const call = (updateBelegOcrResult as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[3].newStatus).toBe('requires_review');
+    expect(call[3].bewirtung).toBeDefined();
+    expect(call[3].bewirtung.confidence).toBeGreaterThanOrEqual(0.5);
+    expect(call[3].bewirtung.confidence).toBeLessThan(0.7);
+    // category trotzdem auf 'bewirtung' (Detection war positiv, nur unsicher)
+    expect(call[3].denormalized.category).toBe('bewirtung');
+    // Validation-Issue enthaelt BEWIRTUNG_DETECTED
+    const issues = call[3].validation.issues as Array<{ code: string }>;
+    expect(issues.some((i) => i.code === 'BEWIRTUNG_DETECTED')).toBe(true);
+  });
+
+  it('T008: Non-Bewirtungs-Beleg setzt warnings nicht (Splitting-Warning-Guard)', async () => {
+    (getBelegById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBeleg());
+
+    // Metro-Beleg: 7% UND 19% im Text, ABER kein Bewirtungs-Kontext.
+    // Vor dem Fix war das ein false-positive Splitting-Warning.
+    const rawText = `Metro Cash & Carry
+01.05.2026
+Mehl 25kg (7% MwSt)         20,00 EUR
+Reinigungsmittel (19% MwSt)  5,00 EUR
+Gesamtbetrag:               25,00 EUR`;
+    const adapter = makeMockOcrAdapter({ raw_text: rawText, confidence: 0.95 });
+
+    await processBeleg(noopDb, TENANT_UUID, BELEG_UUID, {
+      s3: makeMockS3(),
+      ocrAdapter: adapter,
+    });
+
+    const call = (updateBelegOcrResult as ReturnType<typeof vi.fn>).mock.calls[0];
+    // Kein Bewirtungs-Match → bewirtung-payload bleibt undefined
+    expect(call[3].bewirtung).toBeUndefined();
+    // Warnings darf KEIN tax_split_required:7_19 enthalten (Bewirtungs-spezifisch)
+    expect(call[3].extraction.warnings).not.toContain('tax_split_required:7_19');
+  });
 });

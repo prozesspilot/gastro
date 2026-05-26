@@ -29,6 +29,7 @@ import { categoriesRoutes } from './modules/m03-categorization/categories.routes
 import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
 import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
 import { m04DatevRoutes } from './modules/m04-datev/routes';
+import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
 import {
   m05CustomerLexofficeRoutes,
   m05IntegrationRoutes,
@@ -234,6 +235,9 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M01 Belege-Routes — VOR HMAC-Block (JWT-geschützt, nicht HMAC)
   // /api/v1/belege/upload, /api/v1/belege, /api/v1/belege/:id
   await app.register(belegeRoutes, { prefix: '/api/v1/belege' });
+  // T009/M05: Lexware-Office-Export-Routes — /api/v1/belege/:id/exports/lexware
+  // und /api/v1/exports/lexware/batch (JWT-geschuetzt, nicht HMAC).
+  await app.register(belegeLexwareRoutes, { prefix: '/api/v1' });
   // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm

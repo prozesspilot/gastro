@@ -16,6 +16,7 @@
  */
 
 import { config } from '../../core/config';
+import { logger } from '../../core/logger';
 
 // ── Konstanten ─────────────────────────────────────────────────────────────
 
@@ -251,6 +252,7 @@ export async function fetchTransactionHistory(
   const out: SumUpTransaction[] = [];
   let cursor: string | undefined;
   let page = 0;
+  let cursorPending = false;
 
   while (page < maxPages) {
     const params = new URLSearchParams({
@@ -270,9 +272,23 @@ export async function fetchTransactionHistory(
     });
 
     if (Array.isArray(response.items)) out.push(...response.items);
-    if (!response.next_cursor) break;
+    if (!response.next_cursor) {
+      cursorPending = false;
+      break;
+    }
     cursor = response.next_cursor;
+    cursorPending = true;
     page++;
+  }
+
+  // T005-Review-Fix: Wenn wir wegen maxPages aufhoeren obwohl noch ein Cursor
+  // offen ist, waere der Z-Bon stillschweigend unvollstaendig → Steuerdaten
+  // falsch. Daher laut warnen, statt still abzuschneiden.
+  if (cursorPending && page >= maxPages) {
+    logger.warn(
+      { fromIso, toIso, maxPages, fetched: out.length },
+      '[sumup] Transaktions-History bei maxPages abgeschnitten — Z-Bon evtl. unvollstaendig',
+    );
   }
 
   return out;

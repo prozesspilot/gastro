@@ -159,8 +159,23 @@ export async function listKasseTransactions(
 
     const limit = opts.limit ?? 100;
     const offset = opts.offset ?? 0;
-    const result = await client.query<DbKasseTransaction & { total_count: string }>(
-      `SELECT *, COUNT(*) OVER() AS total_count
+
+    // T005-Review-Fix: Separater COUNT statt `COUNT(*) OVER()`. Das Window-COUNT
+    // liefert den Gesamtwert nur ueber zurueckgegebene Rows — auf einer Seite
+    // jenseits der Treffermenge (offset >= total) sind keine Rows da und der
+    // Gesamtwert fiel faelschlich auf 0, obwohl Datensaetze existieren.
+    const countResult = await client.query<{ total: string }>(
+      `SELECT COUNT(*) AS total
+         FROM kasse_transactions
+        WHERE tenant_id = $1
+          AND ($2::date IS NULL OR business_date >= $2::date)
+          AND ($3::date IS NULL OR business_date <= $3::date)`,
+      [tenantId, opts.fromDate ?? null, opts.toDate ?? null],
+    );
+    const total = Number.parseInt(countResult.rows[0]?.total ?? '0', 10);
+
+    const result = await client.query<DbKasseTransaction>(
+      `SELECT *
          FROM kasse_transactions
         WHERE tenant_id = $1
           AND ($2::date IS NULL OR business_date >= $2::date)
@@ -171,8 +186,7 @@ export async function listKasseTransactions(
     );
 
     await client.query('COMMIT');
-    const total = result.rows.length > 0 ? Number.parseInt(result.rows[0].total_count, 10) : 0;
-    const items = result.rows.map(({ total_count: _tc, ...row }) => row as DbKasseTransaction);
+    const items = result.rows.map((row) => row as DbKasseTransaction);
     return { items, total };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
@@ -185,19 +199,22 @@ export async function listKasseTransactions(
 /**
  * Listet alle aktiven pos_credentials-Tenants — Daily-Cron iteriert darueber.
  *
- * RLS-Bypass via `app.bypass_rls='on'` GUC + `is_rls_bypassed()`-Funktion.
+ * BEGIN/COMMIT-Pattern: `set_config(name, value, is_local=true)` ist LOCAL und
+ * braucht eine aktive Transaktion, sonst ist das GUC im naechsten Statement
+ * schon wieder weg.
  *
- * T005-Review-Fix #1 (Bug): `set_config(name, value, is_local=true)` ist
- * LOCAL und braucht eine aktive Transaktion. Ohne BEGIN/COMMIT laeuft jedes
- * Statement im pg-Pool als eigene Auto-Commit-Transaktion → das GUC ist
- * im naechsten Statement schon wieder weg. Das fuehrte zu silent-empty-Result
- * sobald RLS auf pos_credentials aktiviert wird (T020).
+ * ⚠️ WICHTIG — RLS-Bypass-Grenze (T005-Review-Fix #2, korrigiert):
+ * Das `set_config('app.bypass_rls','on')` unten ist zur Laufzeit ein NO-OP,
+ * solange der Cron mit der App-Rolle `gastro_app` laeuft: `is_rls_bypassed()`
+ * (Migration 002_helpers) liefert nur fuer `gastro_owner`/Superuser true.
+ * Aktuell funktioniert die Abfrage NUR, weil `pos_credentials` noch gar keine
+ * RLS-Policy hat (Migration 022). SOBALD T020 RLS auf pos_credentials mit einer
+ * `is_rls_bypassed() OR tenant_id = current_tenant_id()`-Policy aktiviert, gibt
+ * dieser Cron als `gastro_app` ein SILENT-EMPTY-Result zurueck (kein Fehler).
  *
- * Fix: explizites BEGIN/COMMIT-Pattern wie alle anderen Repo-Funktionen.
- *
- * Aktuell hat `pos_credentials` noch keine RLS-Policy (Migration 022
- * Header-Kommentar), aber wir schreiben den Code korrekt fuer den
- * zukuenftigen Zustand.
+ * T020 MUSS daher diesen Cron auf eine Owner-Connection umstellen (analog zum
+ * Migrate-Pfad) — der GUC allein reicht nicht. Siehe Backlog
+ * `T022-pos-cron-owner-connection`.
  */
 export async function listActiveSumUpTenants(
   pool: Pool,

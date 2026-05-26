@@ -243,12 +243,11 @@ describe('listKasseTransactions', () => {
     expect(capturedParams[2]).toBeNull(); // toDate
   });
 
-  it('total wird aus Window-Function-COUNT extrahiert', async () => {
+  it('total wird aus separatem COUNT-Query gelesen', async () => {
     const { pool } = makePoolWithQueryFn((sql) => {
+      if (sql.includes('COUNT(*) AS total')) return { rows: [{ total: '42' }] };
       if (sql.includes('FROM kasse_transactions')) {
-        return {
-          rows: [{ id: 'kt-1', tenant_id: TENANT, total_count: '42' }],
-        };
+        return { rows: [{ id: 'kt-1', tenant_id: TENANT }] };
       }
       return { rows: [] };
     });
@@ -260,8 +259,24 @@ describe('listKasseTransactions', () => {
     expect((result.items[0] as unknown as { total_count?: string }).total_count).toBeUndefined();
   });
 
+  it('total bleibt korrekt auf einer Seite jenseits der Treffer (Regression)', async () => {
+    // Vor dem Fix lieferte COUNT(*) OVER() hier 0, weil keine Rows zurueckkamen.
+    const { pool } = makePoolWithQueryFn((sql) => {
+      if (sql.includes('COUNT(*) AS total')) return { rows: [{ total: '5' }] };
+      if (sql.includes('FROM kasse_transactions')) return { rows: [] }; // leere Seite
+      return { rows: [] };
+    });
+
+    const result = await listKasseTransactions(pool, TENANT, { limit: 10, offset: 100 });
+    expect(result.total).toBe(5);
+    expect(result.items).toEqual([]);
+  });
+
   it('leeres Result → total=0', async () => {
-    const { pool } = makePoolWithQueryFn(() => ({ rows: [] }));
+    const { pool } = makePoolWithQueryFn((sql) => {
+      if (sql.includes('COUNT(*) AS total')) return { rows: [{ total: '0' }] };
+      return { rows: [] };
+    });
     const result = await listKasseTransactions(pool, TENANT, {});
     expect(result.total).toBe(0);
     expect(result.items).toEqual([]);

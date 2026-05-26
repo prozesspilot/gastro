@@ -260,5 +260,8 @@ function escapeRegex(s: string): string {
  * basiert) auch fuer akzentuierte Lieferantennamen korrekt greift.
  */
 function foldDiacritics(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // NFD zerlegt akzentuierte Zeichen in Basis + Combining-Mark; `\p{M}`
+  // (Unicode-Mark-Property, u-Flag) entfernt die Marks. Vermeidet eine
+  // Combining-Mark-Range in der Character-Class (biome/noMisleadingCharacterClass).
+  return s.normalize('NFD').replace(/\p{M}/gu, '');
 }

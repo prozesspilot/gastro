@@ -93,19 +93,56 @@ claude auth login
 cd backend && npm install
 cd ../webapp && npm install
 
-# 9. Lokale Postgres + Redis starten
+# 9. Lokale Infra starten (Postgres + Redis + MinIO)
 cd ..
-docker compose up -d
+docker compose up -d postgres redis minio
 
-# 10. Migrations + Bootstrap
+# 10. DB-Rolle gastro_app anlegen (einmalig, von den Migrationen benötigt)
+docker exec -e PGPASSWORD=pp $(docker compose ps -q postgres) \
+  psql -U pp -d prozesspilot -v ON_ERROR_STOP=1 \
+  -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='gastro_app') THEN CREATE ROLE gastro_app NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END \$\$;"
+
+# 11. Migrations + Seed (Dev-Tenant + Dev-User)
 cd backend && npm run migrate
-npm run bootstrap:first-admin   # erstellt ersten Geschäftsführer
+npm run seed:dev
 
-# 11. Erste Test-Session
+# 12. Erste Test-Session
 cd ..
 claude
 > /start-task T000
 ```
+
+---
+
+## Lokal manuell testen (App im Browser)
+
+Voraussetzung: Schritte 9–11 oben (Infra läuft, DB migriert + geseedet).
+
+```bash
+# Backend starten (Terminal 1) — API auf http://localhost:3000
+cd backend && npm run dev
+#   Health-Check:  curl http://localhost:3000/api/v1/health   → {"ok":true,...}
+#   Ready-Check:   curl http://localhost:3000/api/v1/ready     → db + redis connected
+
+# Webapp starten (Terminal 2) — UI auf http://localhost:5173
+cd webapp && cp -n .env.example .env   # einmalig: VITE_API_URL=http://localhost:3000
+npm run dev
+```
+
+**Login (Mitarbeiter-Webapp):** Die Webapp verlangt eine Anmeldung. Discord-OAuth
+ist auf die Prod-Redirect-URI konfiguriert und funktioniert lokal nicht direkt —
+für lokales Testen den **Notfall-Login** (Email + TOTP) nutzen:
+
+```bash
+# Einmalig einen Geschäftsführer-Account anlegen (interaktiv)
+cd backend && npm run bootstrap-admin -- --force
+#   → fragt Display-Name, Notfall-Email, Passwort ab
+#   → gibt TOTP-Secret + Backup-Codes aus (TOTP-Secret in Authenticator-App eintragen)
+```
+
+Danach in der Webapp auf **"Notfall-Login"** klicken und mit Email + Passwort +
+TOTP-Code anmelden. `PP_AUTH_DISABLED=1` umgeht NUR die HMAC-Prüfung
+(n8n↔Backend), NICHT die Webapp-Session — taugt also nicht als Login-Bypass.
 
 ---
 

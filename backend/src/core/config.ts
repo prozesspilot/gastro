@@ -169,8 +169,13 @@ const envSchema = z.object({
   // Discord-App-Credentials (Developer Portal → OAuth2)
   DISCORD_CLIENT_ID: z.string().default(''),
   DISCORD_CLIENT_SECRET: z.string().default(''),
-  // Redirect-URI muss exakt mit Discord Developer Portal übereinstimmen.
-  DISCORD_REDIRECT_URI: z.string().default('https://admin.prozesspilot.net/auth/discord/callback'),
+  // Redirect-URI muss exakt mit Discord Developer Portal übereinstimmen UND auf
+  // den Backend-Callback-Pfad `/api/v1/auth/discord/callback` zeigen (Route
+  // `/auth/discord/callback` + Prefix `/api/v1`, via nginx `/api/`-Proxy ans
+  // Backend). Ohne `/api/v1` landet Discord auf dem SPA-Fallback → stiller Loop.
+  DISCORD_REDIRECT_URI: z
+    .string()
+    .default('https://admin.prozesspilot.net/api/v1/auth/discord/callback'),
   // Guild-ID des ProzessPilot-Team-Servers (Discord-Server).
   // Nur Mitglieder dieses Servers dürfen sich einloggen.
   DISCORD_GUILD_ID: z.string().default(''),
@@ -259,6 +264,16 @@ function loadConfig(): Config {
     if (!cfg.DISCORD_ROLE_ID_GF) {
       console.warn(
         'WARNUNG: DISCORD_ROLE_ID_GF nicht gesetzt — alle Guild-Mitglieder bekommen Rolle "mitarbeiter". Manuell in DB korrigieren.',
+      );
+    }
+    // Der Discord-Callback ist unter /api/v1/auth/discord/callback registriert.
+    // Endet die Redirect-URI auf einem anderen Pfad (klassisch: /api/v1 vergessen),
+    // schickt Discord den Browser auf den SPA-Fallback statt ans Backend → der
+    // OAuth-Code wird nie getauscht → stiller Login-Loop. Derselbe Wert MUSS im
+    // Discord Developer Portal (OAuth2 → Redirects) eingetragen sein.
+    if (!cfg.DISCORD_REDIRECT_URI.endsWith('/api/v1/auth/discord/callback')) {
+      console.warn(
+        `WARNUNG: DISCORD_REDIRECT_URI ("${cfg.DISCORD_REDIRECT_URI}") endet nicht auf "/api/v1/auth/discord/callback" — Discord-Login läuft sonst in einen stillen Loop (Callback trifft den SPA-Fallback statt das Backend). Korrekt z.B. https://admin.prozesspilot.net/api/v1/auth/discord/callback — denselben Wert im Discord Developer Portal eintragen.`,
       );
     }
   }

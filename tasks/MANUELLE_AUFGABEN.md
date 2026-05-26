@@ -149,6 +149,44 @@
 - **Rollback:** `090_belege_soft_delete_rollback.sql` griffbereit (entfernt Spalte + Partial-Index)
 - **Hinweis:** NICHT manuell via psql ausführen — dann läuft sie nochmal automatisch und gibt schema_migrations-Duplikat-Error.
 
+### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
+- **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
+- **Was:** Steuerberaterin von Almaz kontaktieren, Lexware-Office-API-Token (Public-API-Schluessel) anfordern, in DB hinterlegen
+- **Schritte:**
+  1. Steuerberaterin per Mail/Anruf: „Wir brauchen einen Lexware-Office-API-Token, um Almaz' Belege automatisch in deinen Posteingang zu schieben."
+  2. Token unter https://app.lexoffice.de → Einstellungen → Öffentliche API erzeugen lassen
+  3. Token sicher uebergeben (1Password Share, NIEMALS per Mail-Klartext)
+  4. Token via Bootstrap-Script ablegen — **WICHTIG: nicht via `node -e` mit
+     Token in der Command-Line!** Der Token wuerde sonst in Shell-History,
+     docker-exec-Audit-Log und syslog landen.
+     Stattdessen das interaktive Script aus T009-Review-Fix nutzen:
+     ```bash
+     ssh root@87.106.8.111
+     cd /opt/gastro
+     # Interaktiver Prompt — Token-Eingabe ist echo-muted (kein History-Leak)
+     docker compose -f docker-compose.prod.yml exec backend \
+       node dist/scripts/bootstrap-lexware-token.js
+     ```
+     Das Script fragt nacheinander ab:
+     - Tenant-UUID (Almaz)
+     - Mitarbeiter-User-UUID (wer setzt den Token ein — fuer Audit-Log)
+     - Display-Name (z.B. "Steuerkanzlei Mustermann")
+     - Lexware-API-Token (Eingabe wird mit `*` maskiert)
+     Bei Erfolg: `booking_credentials`-Row + Audit-Log-Event geschrieben.
+  5. Smoke-Test: `curl -X POST https://api.prozesspilot.net/api/v1/belege/<beleg-id>/exports/lexware -H "Cookie: pp_auth=..." -H "X-PP-Tenant-ID: ..."`
+- **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
+- **Dependencies:** Migration 100 muss vorher gelaufen sein.
+
+### ⏳ Migration 100 in Production laufen lassen (T009)
+- **Priorität:** P0 (Token-Storage existiert sonst nicht)
+- **Was:** `belege` bekommt nichts; neue Tabelle `booking_credentials` (Lexware-Token-Storage)
+- **Schritte:**
+  1. Backup ziehen
+  2. SQL via psql: `\i /opt/gastro/migrations/100_booking_credentials.sql`
+  3. Verifizieren: `\d booking_credentials`
+  4. `INSERT INTO schema_migrations(filename) VALUES ('100_booking_credentials.sql')`
+- **Rollback:** `100_booking_credentials_rollback.sql`
+
 ### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
 - **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)
 - **Was:** GCP-Projekt anlegen, Vision-API aktivieren, Service-Account erzeugen, JSON-Key herunterladen

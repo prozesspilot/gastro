@@ -27,6 +27,10 @@ import { adapterFactory } from '../../../core/adapters/ocr/factory';
 import { config } from '../../../core/config';
 import { logger } from '../../../core/logger';
 import {
+  BEWIRTUNG_REVIEW_THRESHOLD,
+  analyze as analyzeBewirtung,
+} from '../../m03-categorization/services/bewirtungs-detector';
+import {
   getBelegById,
   getOcrCallCountToday,
   incrementOcrCallCount,
@@ -183,6 +187,14 @@ export async function processBeleg(
   // 7. Felder extrahieren
   const light = extractLightFields(ocr.raw_text);
 
+  // 7b. T008/M03: Bewirtungs-Detection-Hook nach OCR + Field-Extraction.
+  //     Pure-Function-Call, kein I/O — Ergebnis landet in payload.bewirtung,
+  //     bei is_bewirtung=true setzen wir zusaetzlich category='bewirtung'.
+  const bewirtung = analyzeBewirtung({
+    rawText: ocr.raw_text,
+    supplierName: light.fields.supplier_name ?? null,
+  });
+
   // 8. Gesamt-Konfidenz: gewichtetes Mittel aus OCR-Konfidenz und Feld-Konfidenz.
   //    Beide gehen 50/50 ein.
   const overallConfidence = (ocr.confidence + light.overall_confidence) / 2;
@@ -223,8 +235,28 @@ export async function processBeleg(
     });
   }
 
-  const newStatus: 'extracted' | 'requires_review' =
+  let newStatus: 'extracted' | 'requires_review' =
     isValid && overallConfidence >= CONFIDENCE_THRESHOLD ? 'extracted' : 'requires_review';
+
+  // T008: Bewirtungs-Detection → wenn match aber Konfidenz <0.7, zwinge
+  // requires_review (Mitarbeiter muss Anlass/Teilnehmer bestaetigen vor
+  // SKR04-Splitting). Pflichtfeld-Check + Buchungs-Splitting kommt in M03 Phase 2.
+  if (bewirtung.is_bewirtung) {
+    issues.push({
+      code: 'BEWIRTUNG_DETECTED',
+      field: 'category',
+      message: `Bewirtungs-Beleg erkannt (Konfidenz ${bewirtung.confidence.toFixed(2)}). Anlass + Teilnehmer als Pflichtfelder eintragen.`,
+    });
+    if (bewirtung.confidence < BEWIRTUNG_REVIEW_THRESHOLD) {
+      newStatus = 'requires_review';
+    }
+  }
+
+  // T008: Optionale Category-Override — nur wenn noch keine gesetzt war.
+  // Wenn ein User die category schon explizit gesetzt hat (zukuenftiges
+  // Reprocess-Szenario), ueberschreiben wir nichts.
+  const categoryForDenorm =
+    bewirtung.is_bewirtung && !beleg.category ? 'bewirtung' : beleg.category;
 
   // 10. Persistieren
   await updateBelegOcrResult(pool, tenantId, belegId, {
@@ -238,8 +270,18 @@ export async function processBeleg(
         ...light.fields,
         fields_confidence: light.confidence_per_field,
         ocr_confidence: ocr.confidence,
+        ...(bewirtung.trinkgeld_cents !== null
+          ? { trinkgeld_cents: bewirtung.trinkgeld_cents }
+          : {}),
       },
-      warnings: [],
+      // T008-Review-Fix: warning nur bei Bewirtungs-Belegen. Sonst leakte das
+      // false-positive Splitting-Warning auch in non-Bewirtungs-Belege (Metro
+      // mit "7%" + "19%" im Volltext → splitting_required=true, aber kein
+      // Bewirtungs-Kontext, kein SKR04-Splitting noetig).
+      warnings:
+        bewirtung.is_bewirtung && bewirtung.tax_split.splitting_required
+          ? ['tax_split_required:7_19']
+          : [],
     },
     validation: { is_valid: isValid, issues, checks },
     denormalized: {
@@ -247,8 +289,18 @@ export async function processBeleg(
       document_date: light.fields.document_date ?? null,
       total_gross: light.fields.total_gross ?? null,
       currency: light.fields.currency ?? null,
+      category: categoryForDenorm,
     },
     audit: { actorType: 'system', actorId: 'module:M01-OCR' },
+    bewirtung: bewirtung.is_bewirtung
+      ? {
+          confidence: bewirtung.confidence,
+          indicators: bewirtung.indicators,
+          tax_split: bewirtung.tax_split,
+          trinkgeld_cents: bewirtung.trinkgeld_cents,
+          matched_positions: bewirtung.matched_positions,
+        }
+      : undefined,
   });
 
   return {

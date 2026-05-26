@@ -765,8 +765,12 @@ export async function updateBelegOcrResult(
       document_date?: string | null;
       total_gross?: number | null;
       currency?: string | null;
+      /** T008: Top-Level category aus dem Bewirtungs-Detector. */
+      category?: string | null;
     };
     audit: { actorType: 'system' | 'staff'; actorId: string };
+    /** T008: optionale Bewirtungs-Sektion in payload (nur wenn Detector match). */
+    bewirtung?: Record<string, unknown>;
   },
 ): Promise<DbBeleg | null> {
   const client = await pool.connect();
@@ -791,7 +795,7 @@ export async function updateBelegOcrResult(
       ? (existingPayload as { audit: { events: unknown[] } }).audit.events
       : [];
 
-    const newPayload = {
+    const newPayload: Record<string, unknown> = {
       ...existingPayload,
       extraction: input.extraction,
       validation: input.validation,
@@ -809,6 +813,10 @@ export async function updateBelegOcrResult(
         ],
       },
     };
+    // T008: Bewirtungs-Sektion nur einbetten wenn Detector ein Ergebnis lieferte.
+    if (input.bewirtung) {
+      newPayload.bewirtung = input.bewirtung;
+    }
 
     const denorm = input.denormalized ?? {};
     const updateResult = await client.query<DbBeleg>(
@@ -818,7 +826,8 @@ export async function updateBelegOcrResult(
              supplier_name = COALESCE($5, supplier_name),
              document_date = COALESCE($6::date, document_date),
              total_gross = COALESCE($7, total_gross),
-             currency = COALESCE($8, currency)
+             currency = COALESCE($8, currency),
+             category = COALESCE($9, category)
        WHERE id = $1 AND tenant_id = $2
        RETURNING *`,
       [
@@ -830,6 +839,7 @@ export async function updateBelegOcrResult(
         denorm.document_date ?? null,
         denorm.total_gross ?? null,
         denorm.currency ?? null,
+        denorm.category ?? null,
       ],
     );
 

@@ -59,9 +59,11 @@ export function buildDiscordAuthUrl(state: string): string {
     response_type: 'code',
     scope: 'identify guilds',
     state,
-    // prompt=none: kein Re-Auth-Prompt falls User bereits eingeloggt ist
-    prompt: 'none',
   });
+  // KEIN prompt=none: das triggert bei Discord einen Deep-Link in die Desktop-App
+  // ("zurück zum Browser") statt einer regulären Browser-Authorize-Seite.
+  // Discord zeigt den Consent-Screen ohnehin nur beim ERSTEN Login pro App — danach
+  // wird direkt der Code zurückgegeben, kein Re-Consent.
   return `${DISCORD_OAUTH_AUTHORIZE}?${params.toString()}`;
 }
 

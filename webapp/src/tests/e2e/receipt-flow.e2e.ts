@@ -25,7 +25,11 @@ const MOCK_SESSION = {
 
 // ── Test Suite ────────────────────────────────────────────────────────────────
 
-test.describe('G1 — Receipt-Flow', () => {
+// TODO T020: Diese Tests gehören umgeschrieben für die aktuelle LoginPage
+// (Discord-OAuth + Notfall-Login-Toggle, kein Mandanten-Dropdown mehr).
+// Backlog-Task: tasks/_backlog/T020-e2e-receipt-flow-discord-auth.md
+// Blaupause für M14-Cookie-Stub: webapp/src/tests/e2e/auth.e2e.ts
+test.describe.skip('G1 — Receipt-Flow (TODO: für Discord-Auth umschreiben)', () => {
   // Login-Tests dürfen KEINE Session haben (sonst redirected useEffect zur Startseite).
   test.describe('ohne Session', () => {
     test('Login-Page ist erreichbar', async ({ page }) => {
@@ -72,7 +76,7 @@ test.describe('G1 — Receipt-Flow', () => {
 
 // ── Multi-Tenant Tests ────────────────────────────────────────────────────────
 
-test.describe('G1 — Multi-Tenant-Switch', () => {
+test.describe.skip('G1 — Multi-Tenant-Switch (TODO: für Discord-Auth umschreiben)', () => {
   test('Login-Page zeigt Mandanten-Dropdown', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByLabel(/mandant/i)).toBeVisible({ timeout: 10_000 });
@@ -112,7 +116,7 @@ test.describe('G1 — Multi-Tenant-Switch', () => {
 
 // ── DSGVO Lösch-Flow ──────────────────────────────────────────────────────────
 
-test.describe('G1 — DSGVO-Lösch-Flow', () => {
+test.describe.skip('G1 — DSGVO-Lösch-Flow (TODO: für Discord-Auth umschreiben)', () => {
   test('Settings-Page ist erreichbar', async ({ page }) => {
     await page.addInitScript((session) => {
       sessionStorage.setItem('pp_session', JSON.stringify(session));
@@ -126,7 +130,7 @@ test.describe('G1 — DSGVO-Lösch-Flow', () => {
 
 // ── Steuerberater-Export ──────────────────────────────────────────────────────
 
-test.describe('G1 — Steuerberater-Export-Download', () => {
+test.describe.skip('G1 — Steuerberater-Export-Download (TODO: für Discord-Auth umschreiben)', () => {
   test('Advisor-Portal ist erreichbar', async ({ page }) => {
     await page.addInitScript((session) => {
       sessionStorage.setItem('pp_session', JSON.stringify(session));

@@ -15,6 +15,7 @@
  */
 
 import type { Pool } from 'pg';
+import { logAuditEvent } from '../../core/audit/audit-log';
 import { config } from '../../core/config';
 import { captureException } from '../../core/sentry';
 
@@ -339,26 +340,37 @@ export interface PurgedPosCredential {
 
 /**
  * T018: Loescht alle pos_credentials die seit `retentionDays` deaktiviert sind
- * UND schreibt pro Loeschung einen `auth_audit_log`-Eintrag — alles in EINER
+ * UND schreibt pro Loeschung einen `audit_log`-Eintrag — alles in EINER
  * Transaktion (Review-Fix #1 Atomicity).
  *
- * Vorher: DELETE + logAuthEvent waren separate Auto-Commit-Statements →
+ * Vorher: DELETE + Audit waren separate Auto-Commit-Statements →
  * wenn die Connection zwischen DELETE-Commit und Audit-Insert crashte,
  * gab es geloeschte Rows ohne Audit-Eintrag → DSGVO-Compliance-Gap.
  *
  * Jetzt:
  *   BEGIN
- *     SET LOCAL app.bypass_rls='on'   -- Review-Fix #2: defensive RLS-Bypass
  *     DELETE … RETURNING
- *     INSERT INTO auth_audit_log (×N via insert_auth_audit_log SECURITY DEFINER)
+ *     -- pro Row: set_config('app.tenant_id', <row.tenant_id>) + audit_log-INSERT
  *   COMMIT
  *
  * Bei jedem Fehler im Block: ROLLBACK → DELETE rueckabgewickelt, kein
  * orphaner Zustand.
  *
- * Defense-in-Depth: `SET LOCAL app.bypass_rls='on'` ist redundant solange
- * `pos_credentials` kein RLS hat (Migration 022). Sobald T020 das aktiviert,
- * funktioniert der Cron weiter (keine silent-empty-Result).
+ * Audit-Ziel (Review-Fix #2, korrigiert): Der Eintrag geht in `audit_log`
+ * (tenant-isoliert, mit tenant_id-Spalte + RLS), NICHT in `auth_audit_log`
+ * (global, ohne tenant_id, fuer Login/Logout gedacht). Sonst taucht die
+ * Loeschung bei einem DSGVO-Auskunftsersuchen NICHT im tenant-isolierten
+ * Audit-Trail des Kunden auf. Der INSERT laeuft pro Row mit gesetztem
+ * `app.tenant_id` → die RLS-INSERT-Policy `tenant_id = current_tenant_id()`
+ * greift auch fuer die gastro_app-Rolle (kein Bypass noetig).
+ *
+ * ⚠️ RLS-Grenze beim DELETE (Review-Fix #2): `pos_credentials` hat aktuell
+ * KEINE RLS (Migration 022), daher loescht der Cron als gastro_app heute
+ * korrekt ueber alle Tenants. SOBALD T020 RLS auf pos_credentials aktiviert,
+ * gibt der DELETE als gastro_app ein SILENT-EMPTY zurueck — T020 MUSS den Cron
+ * dann auf eine Owner-Connection umstellen. Siehe Backlog
+ * `T022-pos-cron-owner-connection`. Ein `set_config('app.bypass_rls')` waere
+ * hier wirkungslos (greift nur fuer gastro_owner/Superuser).
  *
  * Token sind kein Geschaeftsdaten-Bestandteil — die 10-Jahres-Aufbewahrungs-
  * pflicht (§ 147 AO) gilt fuer Belege/Buchungen, NICHT fuer OAuth-Tokens.
@@ -373,8 +385,6 @@ export async function purgeInactivePosCredentials(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // Review-Fix #2: defensive RLS-Bypass (LOCAL, wirkt nur in dieser Tx)
-    await client.query("SELECT set_config('app.bypass_rls', 'on', true)");
 
     const result = await client.query<{
       id: string;
@@ -400,27 +410,25 @@ export async function purgeInactivePosCredentials(
       inactive_since: r.updated_at,
     }));
 
-    // Review-Fix #1: Audit-Inserts in DERSELBEN Tx wie DELETE.
-    // SECURITY DEFINER `insert_auth_audit_log()` (Migration 061) erlaubt
-    // dem App-User den Insert trotz RLS-INSERT-Policy `WITH CHECK (is_rls_bypassed())`.
+    // Review-Fix #1+#2: Audit-Inserts in DERSELBEN Tx wie DELETE, Ziel
+    // `audit_log` (tenant-isoliert). Pro Row den Tenant-Context setzen, damit
+    // die RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
     for (const p of purged) {
-      await client.query(
-        'SELECT insert_auth_audit_log($1::uuid, $2::text, $3::text, $4::text, $5::jsonb)',
-        [
-          null, // userId = system actor
-          'pos_credentials_purged',
-          null, // ipAddress
-          actorUserAgent,
-          JSON.stringify({
-            tenant_id: p.tenant_id,
-            pos_system: p.pos_system,
-            pos_account_id: p.pos_account_id,
-            inactive_reason: p.inactive_reason,
-            inactive_since: p.inactive_since.toISOString(),
-            retention_days: retentionDays,
-          }),
-        ],
-      );
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [p.tenant_id]);
+      await logAuditEvent(client, {
+        tenantId: p.tenant_id,
+        entityType: 'pos_credentials',
+        entityId: p.id,
+        eventType: 'pos_credentials.purged',
+        actor: { type: 'system', id: actorUserAgent },
+        payloadBefore: {
+          pos_system: p.pos_system,
+          pos_account_id: p.pos_account_id,
+          inactive_reason: p.inactive_reason,
+          inactive_since: p.inactive_since.toISOString(),
+        },
+        metadata: { retention_days: retentionDays },
+      });
     }
 
     await client.query('COMMIT');

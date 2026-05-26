@@ -1,9 +1,9 @@
 /**
  * T018/M15 — Tests fuer purgeInactivePosCredentials + Cron-Script.
  *
- * Nach T018-Review-Fix #1 (Atomicity):
- *   * DELETE + auth_audit_log-Inserts in EINER Postgres-Transaktion
- *   * Pool-Mock simuliert BEGIN/set_config/DELETE/SELECT(insert_audit)/COMMIT
+ * Nach T018-Review-Fix #1+#2:
+ *   * DELETE + audit_log-Inserts (tenant-isoliert) in EINER Postgres-Transaktion
+ *   * Pool-Mock simuliert BEGIN/DELETE/set_config(tenant)/INSERT audit_log/COMMIT
  */
 
 import type { Pool, PoolClient } from 'pg';
@@ -33,7 +33,7 @@ function makeTxPool(deletedRows: Array<Record<string, unknown>>): {
       if (sql.startsWith('DELETE FROM pos_credentials')) {
         return { rows: deletedRows, rowCount: deletedRows.length };
       }
-      // BEGIN, COMMIT, ROLLBACK, set_config, insert_auth_audit_log → leeres Ergebnis
+      // BEGIN, COMMIT, ROLLBACK, set_config, INSERT INTO audit_log → leeres Ergebnis
       return { rows: [] };
     }),
     release: vi.fn(),
@@ -71,26 +71,41 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
 
     await purgeInactivePosCredentials(pool, 30);
 
-    // Reihenfolge muss BEGIN → set_config → DELETE → insert_auth_audit_log → COMMIT sein
+    // Reihenfolge: BEGIN → DELETE → set_config(tenant) → INSERT audit_log → COMMIT
     const beginIdx = sqlCalls.findIndex((s) => s === 'BEGIN');
-    const setConfigIdx = sqlCalls.findIndex((s) => s.includes('set_config'));
     const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
-    const auditIdx = sqlCalls.findIndex((s) => s.includes('insert_auth_audit_log'));
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    const auditIdx = sqlCalls.findIndex((s) => s.includes('INSERT INTO audit_log'));
     const commitIdx = sqlCalls.findIndex((s) => s === 'COMMIT');
 
     expect(beginIdx).toBeGreaterThanOrEqual(0);
-    expect(setConfigIdx).toBeGreaterThan(beginIdx);
-    expect(deleteIdx).toBeGreaterThan(setConfigIdx);
-    expect(auditIdx).toBeGreaterThan(deleteIdx);
+    expect(deleteIdx).toBeGreaterThan(beginIdx);
+    expect(tenantCtxIdx).toBeGreaterThan(deleteIdx);
+    expect(auditIdx).toBeGreaterThan(tenantCtxIdx);
     expect(commitIdx).toBeGreaterThan(auditIdx);
   });
 
-  it('Review-Fix #2: defensive RLS-Bypass via app.bypass_rls=on', async () => {
-    const { pool, sqlCalls } = makeTxPool([]);
+  it('Review-Fix #2: Audit geht tenant-isoliert in audit_log, nicht in auth_audit_log', async () => {
+    const { pool, sqlCalls, paramsCalls } = makeTxPool([
+      {
+        id: 'cred-1',
+        tenant_id: TENANT,
+        pos_system: 'sumup_lite',
+        pos_account_id: 'merch-001',
+        inactive_reason: 'refresh_failed',
+        updated_at: new Date(),
+      },
+    ]);
     await purgeInactivePosCredentials(pool, 30);
-    const bypass = sqlCalls.find((s) => s.includes('set_config'));
-    expect(bypass).toContain("'app.bypass_rls'");
-    expect(bypass).toContain("'on'");
+
+    // audit_log statt auth_audit_log
+    expect(sqlCalls.some((s) => s.includes('INSERT INTO audit_log'))).toBe(true);
+    expect(sqlCalls.some((s) => s.includes('auth_audit_log'))).toBe(false);
+
+    // Tenant-Context wird auf die tenant_id der Row gesetzt, damit die
+    // RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    expect(paramsCalls[tenantCtxIdx]).toEqual([TENANT]);
   });
 
   it('ROLLBACK wenn DELETE wirft (kein orphaner Zustand)', async () => {
@@ -111,7 +126,7 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
     expect(sqlCalls).toContain('ROLLBACK');
   });
 
-  it('ROLLBACK wenn insert_auth_audit_log wirft → DELETE wird rueckabgewickelt', async () => {
+  it('ROLLBACK wenn audit_log-INSERT wirft → DELETE wird rueckabgewickelt', async () => {
     const sqlCalls: string[] = [];
     const mockClient = {
       query: vi.fn(async (sql: string) => {
@@ -131,7 +146,7 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
             rowCount: 1,
           };
         }
-        if (sql.includes('insert_auth_audit_log')) {
+        if (sql.includes('INSERT INTO audit_log')) {
           throw new Error('Audit-Log DB unavailable');
         }
         return { rows: [] };
@@ -234,12 +249,12 @@ describe('purgeInactivePosCredentials — Output', () => {
     const result = await purgeInactivePosCredentials(pool, 30);
     expect(result).toHaveLength(2);
 
-    // Genau 2 insert_auth_audit_log-Calls (1 pro Row)
-    const auditCalls = sqlCalls.filter((s) => s.includes('insert_auth_audit_log'));
+    // Genau 2 audit_log-Inserts (1 pro Row)
+    const auditCalls = sqlCalls.filter((s) => s.includes('INSERT INTO audit_log'));
     expect(auditCalls).toHaveLength(2);
   });
 
-  it('Audit-Payload enthaelt alle Metadata-Felder (pos_account_id, inactive_reason, retention_days)', async () => {
+  it('audit_log-Eintrag hat korrekte entity/event-Felder + payload_before + metadata', async () => {
     const inactiveDate = new Date('2026-04-15T10:00:00Z');
     const { pool, sqlCalls, paramsCalls } = makeTxPool([
       {
@@ -253,20 +268,26 @@ describe('purgeInactivePosCredentials — Output', () => {
     ]);
     await purgeInactivePosCredentials(pool, 30);
 
-    const auditIdx = sqlCalls.findIndex((s) => s.includes('insert_auth_audit_log'));
+    const auditIdx = sqlCalls.findIndex((s) => s.includes('INSERT INTO audit_log'));
     const auditParams = paramsCalls[auditIdx];
-    // Params: [userId=null, eventType, ipAddress=null, userAgent, metadata-JSON]
-    expect(auditParams[0]).toBeNull(); // userId
-    expect(auditParams[1]).toBe('pos_credentials_purged'); // eventType
-    expect(auditParams[3]).toBe('cron:pos-credentials-cleanup'); // userAgent
+    // logAuditEvent-Params: [tenantId, entityType, entityId, eventType,
+    //   actor-JSON, payloadBefore-JSON, payloadAfter-JSON, metadata-JSON]
+    expect(auditParams[0]).toBe(TENANT); // tenant_id (tenant-isoliert!)
+    expect(auditParams[1]).toBe('pos_credentials'); // entity_type
+    expect(auditParams[2]).toBe('c-1'); // entity_id
+    expect(auditParams[3]).toBe('pos_credentials.purged'); // event_type
 
-    const metadata = JSON.parse(auditParams[4] as string);
-    expect(metadata.tenant_id).toBe(TENANT);
-    expect(metadata.pos_system).toBe('sumup_lite');
-    expect(metadata.pos_account_id).toBe('merch-test');
-    expect(metadata.inactive_reason).toBe('token_revoked');
+    const actor = JSON.parse(auditParams[4] as string);
+    expect(actor).toEqual({ type: 'system', id: 'cron:pos-credentials-cleanup' });
+
+    const payloadBefore = JSON.parse(auditParams[5] as string);
+    expect(payloadBefore.pos_system).toBe('sumup_lite');
+    expect(payloadBefore.pos_account_id).toBe('merch-test');
+    expect(payloadBefore.inactive_reason).toBe('token_revoked');
+    expect(payloadBefore.inactive_since).toBe('2026-04-15T10:00:00.000Z');
+
+    const metadata = JSON.parse(auditParams[7] as string);
     expect(metadata.retention_days).toBe(30);
-    expect(metadata.inactive_since).toBe('2026-04-15T10:00:00.000Z');
   });
 });
 

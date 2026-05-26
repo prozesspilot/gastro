@@ -137,10 +137,42 @@
 - **Hinweis:** Reguläres `npm run migrate` über Production-Image scheiterte an fehlendem `tsx`-Binary
   → Backend muss in CI vor Deploy migrieren ODER via `node dist/core/db/migrate.js` (Build-Output)
 
-### ⏳ DB-Cleanup-Cron einrichten (T018 Backlog)
+### ⏳ POS-Credentials-Cleanup-Cron einrichten (T018)
 - **Priorität:** P1 (DSGVO)
-- **Was:** Background-Job, der `pos_credentials` mit `active=false AND updated_at < now() - 30 days` löscht
-- **Status:** Task T018 im Backlog angelegt (aus PR #29 Review)
+- **Was:** Daily-Cron, der inaktive `pos_credentials` (active=false) nach 30 Tagen Hard-Delete + Audit-Log
+- **Status:** Code implementiert (T018, PR offen). Setup auf IONOS noch erforderlich.
+- **Setup (systemd-Timer):**
+  ```bash
+  ssh root@87.106.8.111
+  cat > /etc/systemd/system/gastro-pos-cleanup.service <<'EOF'
+  [Unit]
+  Description=Gastro POS-Credentials DSGVO-Cleanup
+  After=docker.service
+
+  [Service]
+  Type=oneshot
+  WorkingDirectory=/opt/gastro
+  ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml exec -T backend node dist/cron/pos-credentials-cleanup.js
+  EOF
+
+  cat > /etc/systemd/system/gastro-pos-cleanup.timer <<'EOF'
+  [Unit]
+  Description=Daily POS-Credentials-Cleanup 04:30 UTC
+
+  [Timer]
+  OnCalendar=*-*-* 04:30:00 UTC
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+  EOF
+
+  systemctl daemon-reload
+  systemctl enable --now gastro-pos-cleanup.timer
+  ```
+- **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/pos-credentials-cleanup.js` → Exit 0 + Logs zeigen Anzahl
+- **Optional:** ENV `POS_CREDENTIALS_RETENTION_DAYS` (default 30) anpassen falls juristisch notwendig
+- **DSGVO-Doku:** Aufbewahrungsfrist von 30 Tagen fuer OAuth-Tokens nach Deaktivierung. Tokens fallen NICHT unter 10-Jahres-Pflicht (§ 147 AO), weil sie keine Geschaeftsdaten sind. Begruendung: nur Zugriffs-Credentials, keine Steuer-/Buchungs-Belege.
 
 ### ✅ Migration 090 — Soft-Delete für Belege (T015)
 - **Status:** Wird automatisch durch Auto-Deploy-Pipeline angewendet (`migrate:prod` in `deploy-staging.yml`, seit T012)

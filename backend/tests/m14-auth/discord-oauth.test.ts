@@ -194,7 +194,9 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
     const cookieStr = Array.isArray(cookieHeader) ? cookieHeader.join('; ') : (cookieHeader ?? '');
     expect(cookieStr).toContain('pp_auth=');
     expect(cookieStr).toContain('HttpOnly');
-    expect(cookieStr).toContain('SameSite=Strict');
+    // sameSite: 'lax' ist Pflicht für OAuth-Redirects (#66, Discord-OAuth-Loop-Fix).
+    // 'strict' würde das pp_auth-Cookie beim Redirect von Discord nicht senden.
+    expect(cookieStr).toContain('SameSite=Lax');
   });
 
   it('löscht State aus Redis nach Verwendung (einmalig-use)', async () => {

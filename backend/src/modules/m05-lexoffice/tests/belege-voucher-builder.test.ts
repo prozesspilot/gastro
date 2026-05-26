@@ -39,6 +39,26 @@ describe('buildBelegVoucher — minimal', () => {
     expect(v.voucherItems[0].categoryId).toBe(FAKE_CATEGORY_ID);
   });
 
+  it('coerced total_gross als pg-NUMERIC-String zu number (Review-Fix)', () => {
+    // pg liefert NUMERIC(12,2) als String — buildBelegVoucher muss das robust
+    // zu number coercen, sonst landet ein String im Voucher-Betrag.
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({ total_gross: '119.00' }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.totalGrossAmount).toBe(119);
+    expect(typeof v.totalGrossAmount).toBe('number');
+    expect(v.totalTaxAmount).toBeCloseTo(19);
+  });
+
+  it('fällt bei ungültigem total_gross-String auf payload/0 zurück', () => {
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({ total_gross: 'abc', payload: { extraction: { fields: { total_gross: 50 } } } }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.totalGrossAmount).toBe(50);
+  });
+
   it('nutzt document_number aus payload wenn vorhanden', () => {
     const v = buildBelegVoucher({
       beleg: makeBeleg({

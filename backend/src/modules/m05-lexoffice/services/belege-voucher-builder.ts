@@ -34,7 +34,13 @@ export interface BelegeForVoucher {
   id: string;
   supplier_name: string | null;
   document_date: Date | string | null;
-  total_gross: number | null;
+  /**
+   * T009-Review-Fix: `belege.total_gross` ist NUMERIC(12,2). Der pg-Driver
+   * liefert NUMERIC standardmaessig als String (kein globaler setTypeParser
+   * im Repo). Typ daher ehrlich als `number | string | null` — `buildBelegVoucher`
+   * coerced via `coerceAmount()`. NUMERIC(12,2) passt verlustfrei in double.
+   */
+  total_gross: number | string | null;
   currency: string;
   category: string | null;
   payload: Record<string, unknown>;
@@ -73,7 +79,7 @@ export function buildBelegVoucher(input: BuildVoucherInput): LexofficeVoucher {
   const fields = payload.extraction?.fields ?? {};
 
   const documentDate = isoDateOf(beleg.document_date) ?? fields.document_date ?? today();
-  const totalGross = round2(beleg.total_gross ?? fields.total_gross ?? 0);
+  const totalGross = round2(coerceAmount(beleg.total_gross) ?? fields.total_gross ?? 0);
 
   // Tax-Lines: T007 liefert nur einen tax_rate-Wert, nicht das volle tax_lines-Array.
   // Wir konstruieren ein einzelnes Tax-Line aus tax_rate, oder fallen auf
@@ -124,6 +130,17 @@ export const MEMO_MAX_CHARS = 250;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Coerced einen Betrag, der als number ODER (pg-NUMERIC) String reinkommt,
+ * zu einem endlichen number. null/undefined/ungueltig → undefined, damit der
+ * `?? fields.total_gross ?? 0`-Fallback im Caller greift.
+ */
+function coerceAmount(v: number | string | null | undefined): number | undefined {
+  if (v === null || v === undefined) return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function isoDateOf(value: Date | string | null | undefined): string | null {

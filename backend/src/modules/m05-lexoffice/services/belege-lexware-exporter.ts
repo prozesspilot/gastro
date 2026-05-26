@@ -19,6 +19,7 @@
  * Discord-Alert: bei finalem Fail Best-Effort an DISCORD_OPS_WEBHOOK_URL.
  */
 
+import { createHash } from 'node:crypto';
 import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import type { Pool } from 'pg';
 
@@ -102,7 +103,8 @@ interface BelegRow {
   file_mime_type: string;
   supplier_name: string | null;
   document_date: Date | null;
-  total_gross: number | null;
+  // pg liefert NUMERIC(12,2) als String — ehrlicher Typ, Coercion in buildBelegVoucher.
+  total_gross: number | string | null;
   currency: string;
   category: string | null;
   payload: Record<string, unknown>;
@@ -235,6 +237,14 @@ export async function exportBelegToLexware(
   let attemptNo = previousAttempts + 1;
   let lastError: string | null = null;
 
+  // Stabiler Idempotency-Key pro Beleg → Lexoffice dedupliziert serverseitig,
+  // sodass weder der interne Client-Retry (bei 5xx/429) noch der aeussere
+  // Retry hier einen doppelten Buchungsbeleg im Steuerberater-System erzeugen
+  // (PR #59 Review-Blocker: doppelte Betriebsausgaben).
+  const idempotencyKey = createHash('sha256')
+    .update(`${tenantId}:${belegId}:lexware_office`)
+    .digest('hex');
+
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     try {
       // 3. Client + Token aufloesen (nur beim ersten Attempt — danach reuse)
@@ -249,8 +259,8 @@ export async function exportBelegToLexware(
         lexofficeCategoryId: categoryId,
       });
 
-      // 5. Voucher anlegen
-      const created = await client.createVoucher(voucher);
+      // 5. Voucher anlegen (mit Idempotency-Key gegen Duplikate)
+      const created = await client.createVoucher(voucher, idempotencyKey);
 
       // 6. Anhang hochladen (best-effort: wenn der Datei-Download oder
       //    Upload fehlschlaegt, ist der Voucher trotzdem da → wir loggen

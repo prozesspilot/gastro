@@ -141,7 +141,9 @@ describe('apiBlob', () => {
       ),
     );
     const blob = await apiBlob('/file');
-    expect(blob).toBeInstanceOf(Blob);
+    // Realm-Mismatch: jsdom-Blob ≠ Node-global Blob → semantischer statt instanceof-Check
+    expect(blob.size).toBeGreaterThan(0);
+    expect(blob.type).toBe('application/pdf');
   });
 
   it('wirft bei Fehler', async () => {

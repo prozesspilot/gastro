@@ -250,10 +250,12 @@ export async function emergencyLoginRoutes(app: FastifyInstance): Promise<void> 
       });
 
       const isSecure = config.NODE_ENV === 'production';
+      // sameSite: 'lax' — konsistent mit Discord-OAuth-Pfad (auth.routes.ts).
+      // CSRF-Schutz bleibt erhalten (POST-Requests cross-site werden weiterhin geblockt).
       reply.setCookie(AUTH_COOKIE_NAME, jwtToken, {
         httpOnly: true,
         secure: isSecure,
-        sameSite: 'strict',
+        sameSite: 'lax',
         maxAge: EMERGENCY_COOKIE_MAX_AGE_SECONDS,
         path: '/',
       });

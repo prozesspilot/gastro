@@ -73,10 +73,13 @@ describe('listActiveSumUpTenants (Review-Fix #1)', () => {
   });
 
   it('set_config setzt app.bypass_rls=on (RLS-Bypass-GUC)', async () => {
-    let bypassCall: { sql: string; params?: unknown[] } | null = null;
+    // Array-Sammel-Pattern statt Closure-Variable: vermeidet das TS-Control-Flow-
+    // Limit, dass Zuweisungen innerhalb einer Callback-Closure beim Narrowing im
+    // aeusseren Scope ignoriert werden (sonst wuerde bypassCall auf `never` engen).
+    const setConfigCalls: { sql: string; params?: unknown[] }[] = [];
     const { pool } = makePoolWithQueryFn((sql, params) => {
       if (sql.includes('set_config')) {
-        bypassCall = { sql, params };
+        setConfigCalls.push({ sql, params });
       }
       if (sql.includes('SELECT tenant_id')) return { rows: [] };
       return { rows: [] };
@@ -84,9 +87,10 @@ describe('listActiveSumUpTenants (Review-Fix #1)', () => {
 
     await listActiveSumUpTenants(pool);
 
-    if (!bypassCall) throw new Error('Expected set_config call to be captured');
-    expect(bypassCall.sql).toContain("'app.bypass_rls'");
-    expect(bypassCall.sql).toContain("'on'");
+    const bypassCall = setConfigCalls.find((c) => c.sql.includes('bypass_rls'));
+    expect(bypassCall).toBeDefined();
+    expect(bypassCall?.sql).toContain("'app.bypass_rls'");
+    expect(bypassCall?.sql).toContain("'on'");
   });
 
   it('ROLLBACK bei DB-Fehler', async () => {

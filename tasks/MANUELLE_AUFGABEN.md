@@ -181,6 +181,54 @@
 - **Rollback:** `090_belege_soft_delete_rollback.sql` griffbereit (entfernt Spalte + Partial-Index)
 - **Hinweis:** NICHT manuell via psql ausführen — dann läuft sie nochmal automatisch und gibt schema_migrations-Duplikat-Error.
 
+### ⏳ SumUp Daily-Sync-Cron einrichten (T005)
+- **Priorität:** P1 (manueller Sync ist via UI moeglich, Cron automatisiert)
+- **Dependencies:** T004 SumUp-OAuth muss durchlaufen sein (pos_credentials mit aktivem Token)
+- **Was:** Daily-Cron taeglich 03:00 UTC, der `node dist/cron/sumup-daily.js` ausfuehrt
+- **Variante A (empfohlen, IONOS-systemd-Timer):**
+  ```bash
+  ssh root@87.106.8.111
+  cat > /etc/systemd/system/gastro-sumup-sync.service <<'EOF'
+  [Unit]
+  Description=Gastro SumUp Daily-Sync
+  After=docker.service
+
+  [Service]
+  Type=oneshot
+  WorkingDirectory=/opt/gastro
+  ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml exec -T backend node dist/cron/sumup-daily.js
+  EOF
+
+  cat > /etc/systemd/system/gastro-sumup-sync.timer <<'EOF'
+  [Unit]
+  Description=Daily SumUp-Sync 03:00 UTC
+
+  [Timer]
+  OnCalendar=*-*-* 03:00:00 UTC
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+  EOF
+
+  systemctl daemon-reload
+  systemctl enable --now gastro-sumup-sync.timer
+  systemctl list-timers gastro-sumup-sync   # zeigt Next-Run
+  ```
+- **Variante B (n8n-Workflow):** WF-CRON-DAILY-POS-PULL ruft `POST /api/v1/m15/sumup/sync` mit Body `{ date: "<gestern>" }` pro Tenant auf. Geht auch, aber duplicat: das Backend-Script kennt alle Tenants schon.
+- **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/sumup-daily.js` → Exit-Code 0 + Logs zeigen Anzahl gepullter Transaktionen
+- **Monitoring:** Bei Fehler verschickt der Service einen Discord-Alert via `DISCORD_OPS_WEBHOOK_URL` (siehe T017). Optional: `systemctl status gastro-sumup-sync` zeigt Last-Run-Result.
+
+### ⏳ Migration 110 in Production laufen lassen (T005)
+- **Priorität:** P0 (Sync schlaegt sonst beim ersten INSERT fehl)
+- **Was:** Macht `kasse_transactions.integration_id` nullable (T005 nutzt pos_credentials, nicht kasse_integrations)
+- **Schritte:**
+  1. Backup ziehen (`pg_dump`)
+  2. SQL via psql: `\i /opt/gastro/migrations/110_kasse_transactions_fk_relax.sql`
+  3. Verifizieren: `\d kasse_transactions` zeigt `integration_id uuid` (kein NOT NULL)
+  4. `INSERT INTO schema_migrations(filename) VALUES ('110_kasse_transactions_fk_relax.sql')`
+- **Rollback:** `110_kasse_transactions_fk_relax_rollback.sql` (failt wenn schon Rows mit integration_id=NULL existieren)
+
 ### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
 - **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
 - **Was:** Steuerberaterin von Almaz kontaktieren, Lexware-Office-API-Token (Public-API-Schluessel) anfordern, in DB hinterlegen

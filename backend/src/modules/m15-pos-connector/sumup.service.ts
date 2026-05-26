@@ -16,6 +16,7 @@
  */
 
 import { config } from '../../core/config';
+import { logger } from '../../core/logger';
 
 // ── Konstanten ─────────────────────────────────────────────────────────────
 
@@ -63,6 +64,45 @@ export interface SumUpUserInfo {
     merchant_code: string;
     company_name: string;
   };
+}
+
+// ── T005: Transaction-History-Types ─────────────────────────────────────────
+
+/**
+ * Subset des SumUp-Transaction-History-Items, das wir tatsaechlich auswerten.
+ * SumUp liefert mehr Felder — wir ignorieren sie (raw_data archiviert alles).
+ *
+ * SumUp-API-Doku: https://developer.sumup.com/api/transactions/historic-transaction
+ */
+export interface SumUpTransaction {
+  /** Transaktions-ID (UUID). Wird zur Idempotenz im business-day-Aggregat genutzt. */
+  id: string;
+  /** Bei manchen API-Antworten 'transaction_code' statt id. */
+  transaction_code?: string;
+  /** ISO-8601 Timestamp wann die Transaktion stattfand. */
+  timestamp: string;
+  /** Brutto-Betrag in EUR (Float, positiv = Einnahme, negativ = Refund). */
+  amount: number;
+  /** Waehrung — wir erwarten 'EUR'. */
+  currency: string;
+  /** Status — wir zaehlen NUR 'SUCCESSFUL' fuer Aggregation, REFUND wird separat behandelt. */
+  status: 'SUCCESSFUL' | 'CANCELLED' | 'FAILED' | 'PENDING' | 'REFUNDED' | string;
+  /** Zahlungsart — 'CARD', 'CASH', 'MOBILE_PAYMENT', ... */
+  payment_type?: string;
+  /** 'PAYMENT', 'REFUND', 'CHARGE_BACK', ... */
+  type?: string;
+  /** MwSt-Satz (falls vom Wirt in der Kasse konfiguriert) — 0.07, 0.19, 0.0 */
+  vat_rate?: number;
+  /** Bei manchen Transaktionen pro Position aufgeschluesselt. */
+  products?: Array<{ name?: string; price?: number; vat_rate?: number; quantity?: number }>;
+}
+
+export interface SumUpTransactionHistoryResponse {
+  items: SumUpTransaction[];
+  /** Cursor fuer die naechste Page (falls vorhanden). */
+  next_cursor?: string;
+  /** Total count laut SumUp (best-effort). */
+  total_count?: number;
 }
 
 // ── Hilfsfunktion ──────────────────────────────────────────────────────────
@@ -188,4 +228,68 @@ export function buildSumUpAuthUrl(state: string): string {
   });
 
   return `${config.SUMUP_API_BASE_URL}/authorize?${params.toString()}`;
+}
+
+/**
+ * T005: Pullt alle Transaktionen eines Zeitfensters via SumUp Transaction-History-API.
+ *
+ * Behandelt Pagination via next_cursor — laedt alle Pages bis kein Cursor mehr
+ * zurueck kommt oder bis maxPages erreicht ist (Schutz gegen Infinite-Loop).
+ *
+ * GET ${SUMUP_API_BASE_URL}/v0.1/me/transactions/history?from=...&to=...&limit=...
+ *
+ * @param accessToken  Bearer-Token aus kasse_integrations (decrypted)
+ * @param fromIso      Start des Zeitfensters (ISO-8601, z.B. "2026-05-18T00:00:00Z")
+ * @param toIso        Ende des Zeitfensters (ISO-8601, exclusive)
+ * @param maxPages     Schutz vor unendlichem Pagination-Loop (default 50, ~5000 Tx)
+ */
+export async function fetchTransactionHistory(
+  accessToken: string,
+  fromIso: string,
+  toIso: string,
+  maxPages = 50,
+): Promise<SumUpTransaction[]> {
+  const out: SumUpTransaction[] = [];
+  let cursor: string | undefined;
+  let page = 0;
+  let cursorPending = false;
+
+  while (page < maxPages) {
+    const params = new URLSearchParams({
+      from: fromIso,
+      to: toIso,
+      limit: '100',
+    });
+    if (cursor) params.set('next_cursor', cursor);
+
+    const url = `${config.SUMUP_API_BASE_URL}/v0.1/me/transactions/history?${params.toString()}`;
+    const response = await fetchWithTimeout<SumUpTransactionHistoryResponse>(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (Array.isArray(response.items)) out.push(...response.items);
+    if (!response.next_cursor) {
+      cursorPending = false;
+      break;
+    }
+    cursor = response.next_cursor;
+    cursorPending = true;
+    page++;
+  }
+
+  // T005-Review-Fix: Wenn wir wegen maxPages aufhoeren obwohl noch ein Cursor
+  // offen ist, waere der Z-Bon stillschweigend unvollstaendig → Steuerdaten
+  // falsch. Daher laut warnen, statt still abzuschneiden.
+  if (cursorPending && page >= maxPages) {
+    logger.warn(
+      { fromIso, toIso, maxPages, fetched: out.length },
+      '[sumup] Transaktions-History bei maxPages abgeschnitten — Z-Bon evtl. unvollstaendig',
+    );
+  }
+
+  return out;
 }

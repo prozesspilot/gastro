@@ -51,6 +51,7 @@ import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
 import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
+import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
@@ -229,6 +230,8 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // M15 SumUp-OAuth-Routes — VOR HMAC-Block (Callback ist öffentlicher Redirect-Endpoint)
   // /api/v1/m15/oauth/sumup/start, /api/v1/m15/oauth/sumup/callback, /api/v1/m15/sumup/disconnect/:tenantId
   await app.register(sumupOauthRoutes, { prefix: '/api/v1' });
+  // T005/M15: Kasse-Sync + Z-Bon-Liste — JWT-geschuetzt unter /api/v1/m15
+  await app.register(kasseRoutes, { prefix: '/api/v1/m15' });
   // M01 Belege-Routes — VOR HMAC-Block (JWT-geschützt, nicht HMAC)
   // /api/v1/belege/upload, /api/v1/belege, /api/v1/belege/:id
   await app.register(belegeRoutes, { prefix: '/api/v1/belege' });

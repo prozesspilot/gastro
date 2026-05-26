@@ -61,6 +61,28 @@ Tisch 12 / Gedeck 1`,
     });
     expect(result.confidence).toBeGreaterThanOrEqual(BEWIRTUNG_REVIEW_THRESHOLD);
   });
+
+  it('akzentuierter Lieferantenname "Café" → supplier_match=true (Review-Fix #5)', () => {
+    // Regression: vor dem Diakritika-Folding matchte `\bcafé\b` (ASCII-`\b`)
+    // einen echten Beleg "Café Mozart" nicht → supplier_match faelschlich false.
+    const result = analyze({
+      supplierName: 'Café Mozart',
+      rawText: `Café Mozart
+Espresso          2,80
+Cappuccino        3,50
+Tisch 12`,
+    });
+    expect(result.indicators.supplier_match).toBe(true);
+    expect(result.is_bewirtung).toBe(true);
+  });
+
+  it('akzentuierter "Döner"-Imbiss → supplier_match=true (Diakritika-Folding)', () => {
+    const result = analyze({
+      supplierName: 'Döner Palast',
+      rawText: 'Döner Palast\nDöner Box 7,50\nAyran 2,00',
+    });
+    expect(result.indicators.supplier_match).toBe(true);
+  });
 });
 
 describe('bewirtungs-detector — Non-Bewirtungs-Belege (Negativ-Falls)', () => {

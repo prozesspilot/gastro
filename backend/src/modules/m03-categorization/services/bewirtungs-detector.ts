@@ -165,14 +165,18 @@ export function analyze(input: BewirtungsInput): BewirtungsResult {
   //
   // T008-Review-Fix #2: Word-Boundary statt blossem `includes()`. Sonst
   // matcht z.B. `bar` in `Bargeld`, `Lebensbar`, `Cocktailbar`, `Wundbar`.
-  // \b matcht an Wort-Grenzen — auch nach DE-Umlauten, weil `\b` in JS
-  // unicode-aware via `(?<![A-Za-zÄÖÜäöüß])`-Aequivalent ueber Unicode-
-  // Property-Escapes funktioniert. Wir bleiben pragmatisch bei \b — es
-  // matcht nicht 100% perfekt fuer Wortgrenzen-Detection an Umlauten,
-  // aber gut genug fuer die Keyword-Liste (alles ASCII).
+  //
+  // T008-Review-Fix #5: `\b` ist in JS ASCII-basiert und bildet KEINE korrekte
+  // Wortgrenze hinter Nicht-ASCII-Zeichen. Ein Keyword wie `café` matchte daher
+  // einen echten Beleg "Café Mozart" nicht (`\bcafé\b` schlaegt fehl). Loesung:
+  // Diakritika auf BEIDEN Seiten (Suchtext + Keyword) per NFD entfernen, dann
+  // matcht `\bcafe\b` gegen "cafe mozart". Die ae-Varianten (gaststaette,
+  // doener) bleiben fuer Belege erhalten, die bereits ASCII-transliteriert sind.
+  const foldedSupplier = foldDiacritics(supplier);
+  const foldedTopLines = foldDiacritics(topLinesText(text, 3));
   const supplierMatch = SUPPLIER_KEYWORDS.some((kw) => {
-    const re = new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i');
-    return re.test(supplier) || re.test(topLinesText(text, 3));
+    const re = new RegExp(`\\b${escapeRegex(foldDiacritics(kw))}\\b`, 'i');
+    return re.test(foldedSupplier) || re.test(foldedTopLines);
   });
 
   // Indikator 2: Kontext-Keywords im Volltext
@@ -243,10 +247,18 @@ function topLinesText(text: string, n: number): string {
 
 /**
  * Escaped einen String fuer den Einsatz in einem RegExp-Pattern.
- * Verhindert dass Keywords mit Regex-Sonderzeichen (z.B. "café") falsch
- * matchen — alle unsere Keywords sind ASCII ohne Sonderzeichen, aber
- * defensive Code.
+ * Defensive — falls ein Keyword je Regex-Sonderzeichen enthaelt.
  */
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Entfernt Diakritika (Akzente, Umlaut-Punkte) via Unicode-NFD-Zerlegung +
+ * Strip der Combining-Marks. "Café" → "Cafe", "Döner" → "Doner",
+ * "Gaststätte" → "Gaststatte". Noetig, damit die `\b`-Word-Boundary (ASCII-
+ * basiert) auch fuer akzentuierte Lieferantennamen korrekt greift.
+ */
+function foldDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }

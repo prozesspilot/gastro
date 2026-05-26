@@ -53,7 +53,10 @@ describe('buildBelegVoucher — minimal', () => {
 
   it('fällt bei ungültigem total_gross-String auf payload/0 zurück', () => {
     const v = buildBelegVoucher({
-      beleg: makeBeleg({ total_gross: 'abc', payload: { extraction: { fields: { total_gross: 50 } } } }),
+      beleg: makeBeleg({
+        total_gross: 'abc',
+        payload: { extraction: { fields: { total_gross: 50 } } },
+      }),
       lexofficeCategoryId: FAKE_CATEGORY_ID,
     });
     expect(v.totalGrossAmount).toBe(50);

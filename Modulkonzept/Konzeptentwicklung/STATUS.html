@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ProzessPilot — Status 2026-05-07 (post-cleanup)</title>
+<title>ProzessPilot — Status 2026-05-26</title>
 <style>
   :root {
     --bg: #0f1419;
@@ -135,11 +135,11 @@
     margin-bottom: 24px;
   }
   .alert strong { color: var(--ok); }
+  .alert.warn { background: rgba(240,180,41,0.08); border-color: rgba(240,180,41,0.3); }
+  .alert.warn strong { color: var(--warn); }
 
   .flex-row { display: flex; gap: 8px; flex-wrap: wrap; }
-
   .crossed { text-decoration: line-through; color: var(--muted); }
-
   footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
 </style>
 </head>
@@ -147,213 +147,133 @@
 <div class="container">
 
 <header>
-  <h1>ProzessPilot — Status (post-cleanup)</h1>
-  <div class="sub">IST-Stand · 2026-05-07 · Konzept synchronisiert mit Code · veraltete Files entfernt</div>
+  <h1>ProzessPilot — Status</h1>
+  <div class="sub">IST-Stand &middot; 2026-05-26 &middot; Branch <code>main</code> &middot; letzter Commit <code>a164abf</code> (#80) &middot; CI gr&uuml;n + branch-protected</div>
 </header>
 
-<div style="background: rgba(240,180,41,0.12); border: 1px solid rgba(240,180,41,0.4); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px;">
-  <strong style="color: #f0b429;">&#x26A0; Veraltet seit 2026-05-12.</strong> Aktueller Stand nach autonomem Fix-Lauf: <a href="STATUS_POST_FIX_AUTONOMOUS.html" style="color: #58a6ff;">STATUS_POST_FIX_AUTONOMOUS.html</a>. Vollstandiger Audit-Report: <a href="STATUS_AUDIT_2026-05-12.html" style="color: #58a6ff;">STATUS_AUDIT_2026-05-12.html</a>.
+<div class="alert">
+  <strong>&#x2713; main ist gr&uuml;n und gesch&uuml;tzt.</strong> 4 Feature-PRs (M03/M05/M15) reviewt + gemergt, Discord-Login-Loop behoben (live verifiziert), Branch-Protection auf <code>main</code> aktiv (CI-Checks + 1 Review erzwungen).
 </div>
 
-<div class="alert">
-  <strong>✓ Cleanup abgeschlossen</strong> · Konzept-Doku ist jetzt synchron zum Code. Sprint-Files ins Archiv, Foundation_Spec als erfüllt markiert, Roadmap auf IST umgeschrieben, drei undokumentierte Module (M11/M12/M13) nachgezogen, tote Refactor-Leiche <code>m04-categorize/</code> + leerer <code>_foundation/</code>-Ordner aus dem Repo entfernt.
+<div class="alert warn">
+  <strong>&#x26A0; Konzept&harr;Code-Drift dokumentiert.</strong> Voller Audit am 2026-05-26: <a href="_audit/REPORT-2026-05-26.md" style="color: #58a6ff;">_audit/REPORT-2026-05-26.md</a>. Kernpunkt: das laut Konzept zentrale <strong>Task-Dashboard ist nur ein hartkodierter Mock</strong> (<code>webapp/src/data/tasks.ts</code>) &mdash; siehe Abschnitt 4.
 </div>
 
 <section>
   <h2>Zahlen auf einen Blick</h2>
   <div class="summary-grid">
-    <div class="stat"><div class="num">13/13</div><div class="lbl">Module dokumentiert + implementiert</div></div>
-    <div class="stat"><div class="num">17</div><div class="lbl">n8n Workflows</div></div>
-    <div class="stat"><div class="num">30</div><div class="lbl">Postgres-Migrationen</div></div>
-    <div class="stat"><div class="num">131</div><div class="lbl">Tests gesamt</div></div>
-    <div class="stat"><div class="num">24</div><div class="lbl">Module-Ordner Backend (war 26)</div></div>
-    <div class="stat"><div class="num">22</div><div class="lbl">Uncommitted Files (inkl. Cleanup)</div></div>
+    <div class="stat"><div class="num">15</div><div class="lbl">Module M01&ndash;M15 implementiert</div></div>
+    <div class="stat"><div class="num">16</div><div class="lbl">Postgres-Migrationen (letzte: 110)</div></div>
+    <div class="stat"><div class="num">17</div><div class="lbl">n8n-Workflows</div></div>
+    <div class="stat"><div class="num">830</div><div class="lbl">Backend-Tests gr&uuml;n (93 Files)</div></div>
+    <div class="stat"><div class="num">41</div><div class="lbl">Webapp-Test-Files (Vitest)</div></div>
+    <div class="stat"><div class="num">17 / 7</div><div class="lbl">Tasks erledigt / offen</div></div>
   </div>
 </section>
 
 <section>
-  <h2>1 · Konzeptentwicklung — was sich geändert hat</h2>
+  <h2>1 &middot; Was zuletzt passiert ist (diese Session)</h2>
   <div class="card">
-    <table>
-      <thead><tr><th>Datei</th><th>Aktion</th><th>Begründung</th></tr></thead>
-      <tbody>
-        <tr><td><code>README.md</code></td><td><span class="pill info">neu geschrieben</span></td><td>IST-Stand, alle 13 Module, Verweis auf STATUS.html</td></tr>
-        <tr><td><code>05_Roadmap.md</code></td><td><span class="pill info">neu geschrieben</span></td><td>SOLL→IST umgekehrt, neue Phasen A/B/C/D</td></tr>
-        <tr><td><code>Foundation_Spec.md</code></td><td><span class="pill ok">als erfüllt markiert</span></td><td>Status-Block oben, Datei bleibt als Referenz</td></tr>
-        <tr><td><code>_sprints/Sprint_0_Foundation.md</code></td><td><span class="pill warn">→ _archive/</span></td><td>Sprint abgeschlossen, Decisions-Log nie ausgefüllt</td></tr>
-        <tr><td><code>_sprints/Sprint_1_MVP.md</code></td><td><span class="pill warn">→ _archive/</span></td><td>Sprint abgeschlossen</td></tr>
-        <tr><td><code>_sprints/</code></td><td><span class="pill danger">gelöscht (leer)</span></td><td>Ordner war nur noch leere Hülle</td></tr>
-        <tr><td><code>modules/M11_IMAP_Eingang.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec</td></tr>
-        <tr><td><code>modules/M12_DSGVO.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec</td></tr>
-        <tr><td><code>modules/M13_Steuerberater_Portal.md</code></td><td><span class="pill ok">neu</span></td><td>Bisher Code ohne Spec, lebt unter <code>m06-advisor-portal/</code></td></tr>
-        <tr><td><code>STATUS.html</code></td><td><span class="pill info">aktualisiert</span></td><td>Diese Datei</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<section>
-  <h2>2 · Repo (prozesspilot/) — was sich geändert hat</h2>
-  <div class="card">
-    <table>
-      <thead><tr><th>Pfad</th><th>Aktion</th><th>Begründung</th></tr></thead>
-      <tbody>
-        <tr><td><code>backend/src/modules/m04-categorize/</code></td><td><span class="pill danger">gelöscht</span></td><td>Verifiziert tot — <code>app.ts:27</code> sagte selbst „intentionally omitted"</td></tr>
-        <tr><td><code>backend/src/modules/_foundation/</code></td><td><span class="pill danger">gelöscht</span></td><td>Leerer Stub-Ordner mit nur <code>.gitkeep</code></td></tr>
-        <tr><td><code>backend/dist/modules/m04-categorize/</code></td><td><span class="pill danger">gelöscht</span></td><td>Build-Reste, beim nächsten <code>npm run build</code> sowieso weg</td></tr>
-        <tr><td><code>backend/src/app.ts</code></td><td><span class="pill info">2× obsolete Kommentare entfernt</span></td><td>Verweise auf m04-categorize entfernt</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="card">
-    <h3>Was bewusst NICHT angefasst wurde</h3>
     <ul class="clean">
-      <li><code>m03-ocr/</code> + <code>m03-categorization/</code> — sind <strong>keine Duplikate</strong>. m03-ocr macht den OCR-Endpoint, m03-categorization die KI-Kategorisierung. Beide aktiv in <code>app.ts</code> registriert.</li>
-      <li><code>m06-sevdesk/</code> + <code>m06-advisor-portal/</code> — auch <strong>keine Duplikate</strong>. m06-advisor-portal ist das Steuerberater-Portal (M13), kein sevDesk-Submodul. Sinnvoll wäre Umbenennung auf <code>m13-advisor-portal/</code>, aber das beim nächsten Refactor — nicht jetzt, weil grüne Tests + stabiler Code.</li>
-      <li>Die 20 zuvor uncommitted Files — der eigentliche Code-Cleanup (n8n-Workflow-Refactoring + receipt.repository) war vor diesem Cleanup-Lauf schon da, sollte separat reviewt werden.</li>
+      <li><strong>4 Feature-PRs reviewt + gemergt</strong> (jeweils code-reviewer-Agent, dann pilot-pragmatische Fixes): <code>T008</code> M03 Bewirtungs-Hook (#57), <code>T009</code> M05 Lexware-Export (#59), <code>T005</code> M15 SumUp Daily-Pull (#60), <code>T018</code> M15 DSGVO-Cleanup-Cron (#61).</li>
+      <li><strong>Review-Fixes</strong>: Caf&eacute;/D&ouml;ner-Erkennung (Diakritika-Folding), Lexware-Idempotency-Key (gegen Doppel-Buchungen), NUMERIC-String-Coercion, SumUp-Pagination-Bug, DSGVO-Audit in <code>audit_log</code> (tenant-isoliert) statt <code>auth_audit_log</code>.</li>
+      <li><strong>Discord-Login-Loop behoben</strong> (#66/#67 + #80): Ursache war <code>DISCORD_REDIRECT_URI</code> ohne <code>/api/v1</code> &rarr; Callback landete auf SPA-Fallback. Live auf Prod verifiziert: Login funktioniert.</li>
+      <li><strong>Branch-Protection</strong> auf <code>main</code> eingerichtet (required CI-Checks Backend + Webapp, 1 Review).</li>
+      <li><strong>Housekeeping</strong> (#79): Tasks nach <code>_done</code>, Follow-up-Tasks T022/T023 angelegt, README-Runbook „Lokal manuell testen" erg&auml;nzt.</li>
     </ul>
   </div>
 </section>
 
 <section>
-  <h2>3 · Modul-Status</h2>
+  <h2>2 &middot; Modul-Status (Backend)</h2>
   <table>
-    <thead>
-      <tr>
-        <th>Modul</th><th>Paket</th><th>Spec</th><th>Code</th><th>n8n</th><th>Status</th>
-      </tr>
-    </thead>
+    <thead><tr><th>Modul</th><th>Code-Ordner</th><th>Status</th><th>Notiz</th></tr></thead>
     <tbody>
-      <tr><td>M01 Belegerfassung &amp; OCR</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>14 .ts</td><td>WF-M01</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M02 Belegarchivierung</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>11 .ts</td><td>WF-M02</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M03 Kategorisierung</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>16+3 .ts (categorization + ocr)</td><td>WF-M03</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M04 DATEV-Export</td><td>Pro</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M04</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M05 Lexoffice</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M05</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M06 sevDesk</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>6 .ts</td><td>WF-M06</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M07 Excel/Sheets Export</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>12 .ts</td><td>WF-M07</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M08 Monatsreporting</td><td>Standard+</td><td><span class="pill ok">✓</span></td><td>10 .ts</td><td>WF-M08 + Cron</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M09 Lieferanten-Comm</td><td>Pro</td><td><span class="pill ok">✓</span></td><td>13 .ts</td><td>WF-M09 + Cron</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M10 WhatsApp</td><td>Basic+</td><td><span class="pill ok">✓</span></td><td>22 .ts</td><td>WF-INPUT-WHATSAPP</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M11 IMAP-Eingang</td><td>Basic+</td><td><span class="pill ok">✓ neu</span></td><td>2 .ts</td><td>WF-INPUT-IMAP</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M12 DSGVO-Workflows</td><td>alle</td><td><span class="pill ok">✓ neu</span></td><td>5 .ts</td><td>—</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>M13 Steuerberater-Portal</td><td>Pro</td><td><span class="pill ok">✓ neu</span></td><td>5 .ts (in m06-advisor-portal/)</td><td>—</td><td><span class="pill ok">fertig</span></td></tr>
-      <tr><td>Plugin-System</td><td>Pro</td><td><span class="pill ok">in 04_Erweiterbarkeit</span></td><td>8 .ts</td><td>WF-PLUGIN-DISPATCHER</td><td><span class="pill ok">fertig</span></td></tr>
+      <tr><td>M01 Receipt-Intake</td><td class="mono">m01-receipt-intake</td><td><span class="pill ok">impl + getestet</span></td><td>Upload, OCR-Pipeline, belege-Tabelle</td></tr>
+      <tr><td>M02 Archiv</td><td class="mono">m02-archive</td><td><span class="pill ok">impl + getestet</span></td><td>GoBD-Archivierung</td></tr>
+      <tr><td>M03 Kategorisierung / OCR</td><td class="mono">m03-categorization, m03-ocr</td><td><span class="pill ok">impl + getestet</span></td><td>Bewirtungs-Detector zuletzt geh&auml;rtet (#57)</td></tr>
+      <tr><td>M04 DATEV-Export</td><td class="mono">m04-datev</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M05 Lexware Office</td><td class="mono">m05-lexoffice, m06-sevdesk</td><td><span class="pill ok">impl + getestet</span></td><td>belege-Export-Adapter + Idempotency-Key (#59)</td></tr>
+      <tr><td>M07 Spreadsheet</td><td class="mono">m07-spreadsheet</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M08 Reporting</td><td class="mono">m08-reporting</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M09 Supplier-Comm</td><td class="mono">m09-supplier-comm</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M10 WhatsApp</td><td class="mono">m10-whatsapp</td><td><span class="pill warn">impl, Meta ausstehend</span></td><td>Code ready; Meta-Verifizierung + HTTPS-URL n&ouml;tig</td></tr>
+      <tr><td>M11 IMAP/E-Mail</td><td class="mono">m11-imap</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M12 DSGVO</td><td class="mono">dsgvo</td><td><span class="pill ok">impl + getestet</span></td><td></td></tr>
+      <tr><td>M13 Steuerberater-Portal</td><td class="mono">m06-advisor-portal</td><td><span class="pill ok">impl + getestet</span></td><td>Ordnername weicht ab (dokumentiert)</td></tr>
+      <tr><td>M14 Auth (Discord/Notfall)</td><td class="mono">m14-auth</td><td><span class="pill ok">impl + getestet</span></td><td>Discord-Login frisch gefixt &amp; live verifiziert</td></tr>
+      <tr><td>M15 POS-Connector (SumUp)</td><td class="mono">m15-pos-connector</td><td><span class="pill ok">impl + getestet</span></td><td>Neu: OAuth, Daily-Pull, Z-Bon, DSGVO-Cleanup</td></tr>
+    </tbody>
+  </table>
+  <p class="sub" style="margin-top:10px;">„impl + getestet" = Code vorhanden, Unit/Integration-Tests gr&uuml;n in CI. <strong>Nicht</strong> gleichbedeutend mit „im Pilot produktiv verifiziert" &mdash; der KW22-Pilot steht noch aus.</p>
+</section>
+
+<section>
+  <h2>3 &middot; Frontends (3-Frontend-Architektur, CLAUDE.md &sect;5.2)</h2>
+  <table>
+    <thead><tr><th>Frontend</th><th>Domain</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Mitarbeiter-Webapp</td><td class="mono">admin.prozesspilot.net</td><td><span class="pill warn">l&auml;uft, aber unvollst&auml;ndig</span> &mdash; Tenant/Beleg/Reports/Users/Settings da; <strong>Task-Dashboard fehlt</strong> (Mock)</td></tr>
+      <tr><td>Onboarding-Wizard</td><td class="mono">setup.prozesspilot.net</td><td><span class="pill danger">nicht gebaut</span> (Stub) &mdash; Backlog T016</td></tr>
+      <tr><td>Web-Chat-Widget</td><td class="mono">chat.prozesspilot.net</td><td><span class="pill danger">nicht gebaut</span> (Stub)</td></tr>
+      <tr><td>Discord-Bot/Notifications</td><td class="mono">Gastro-Team-Server</td><td><span class="pill warn">nur OAuth</span> &mdash; Bot-Service/Bridge fehlt</td></tr>
     </tbody>
   </table>
 </section>
 
 <section>
-  <h2>4 · Was als nächstes</h2>
-
-  <div class="reco priority-high">
-    <h4>① Uncommitted Changes commiten (10 min)</h4>
-    <p class="why">Ein commit für Cleanup (diese Session), ein commit für die ältere Refactoring-Welle (n8n-Workflows + receipt.repository).</p>
-    <div class="action">cd prozesspilot
-git add -p   # selektiv reviewen
-git commit -m "cleanup: remove m04-categorize remnant + empty _foundation/"
-git add -p
-git commit -m "refactor: n8n workflows + receipt repository"</div>
+  <h2>4 &middot; Konzept&harr;Code-Drift (Audit 2026-05-26)</h2>
+  <div class="card">
+    <h3>Pilot-relevante Befunde</h3>
+    <ul class="clean">
+      <li><strong>Task-Dashboard nur Mock</strong> (F01/F02): <code>webapp/src/data/tasks.ts</code> ist eine hartkodierte Liste. Keine Tabellen <code>tasks</code>/<code>task_collaborators</code>/<code>task_activity_log</code>, keine API, keine <code>/tasks</code>-Route. Genau deshalb wirkt die Admin-Seite „wie fr&uuml;her".</li>
+      <li><strong>Zwei parallele Daten-Welten</strong> (F09/F10): Backend registriert gleichzeitig die alte <code>customer_id</code>-Welt und die neue <code>tenant_id</code>/<code>belege</code>-Welt (<code>app.ts:267&ndash;302</code>), w&auml;hrend <code>01_Datenmodell_Events.md</code> noch die alte beschreibt. &rarr; Architektur-Entscheidung n&ouml;tig.</li>
+      <li><strong>Auto-Trigger-Engine</strong> (F03), <strong>Onboarding-Wizard</strong> (F20), <strong>Discord-Notifications</strong> (F22) fehlen.</li>
+      <li><strong>3 Spec-Migrations-Referenzen falsch</strong> (F13&ndash;F16): M14 &rarr; <code>031</code> (real <code>020</code>), M15 &rarr; <code>040/041_pos_*</code> (real <code>022</code>+<code>040_kasse</code>), M13 &rarr; <code>028</code> (existiert nicht). Billige Doku-Fixes.</li>
+    </ul>
   </div>
-
-  <div class="reco priority-high">
-    <h4>② Server-Deployment vorbereiten</h4>
-    <p class="why">Code ist ready, WhatsApp braucht eine echte HTTPS-URL, DSGVO einen EU-Server. Detail-Anleitung steht bereits in <code>infra/runbook/01_deployment.md</code>.</p>
-    <div class="action">→ IONOS VPS 4-4-120 (4 GB RAM, EU, 4 vCore)
-→ Domain + DNS auf Server
-→ docker-compose.prod.yml deployen
-→ Nginx + Let's Encrypt
-→ Sentry-DSN + Backup-Cron</div>
-  </div>
-
-  <div class="reco priority-mid">
-    <h4>③ WhatsApp Business API verifizieren — JETZT starten</h4>
-    <p class="why">Meta-Verifizierung dauert 2–3 Wochen. Sollte parallel zum Server-Setup angestoßen werden, sonst wird das der Engpass.</p>
-    <div class="action">→ Meta Business Manager → App anlegen
-→ Phone Number Display Name (kann nur 1× pro 30 Tage geändert werden)
-→ Webhook-URL muss HTTPS sein → erst nach Server-Deployment final konfigurierbar</div>
-  </div>
-
-  <div class="reco priority-mid">
-    <h4>④ Audit-Subagent einbauen</h4>
-    <p class="why">Damit dieser Drift Konzept↔Code nicht wieder auf 4 Wochen anwächst.</p>
-    <div class="action">.claude/agents/konzept-auditor.md   (Opus, read-only)
-.claude/commands/audit-konzept.md   (/audit-konzept)
-→ läuft nach jedem Sprint, schreibt _audit/REPORT.md</div>
-  </div>
-
-  <div class="reco priority-low">
-    <h4>⑤ m13-advisor-portal-Umbenennung (später)</h4>
-    <p class="why">Code lebt unter <code>m06-advisor-portal/</code>, ist aber konzeptionell M13. Sinnvoll umzubenennen, aber nicht jetzt — Tests sind grün, Code stabil. Beim nächsten Refactor-Sprint mit dranhängen.</p>
-  </div>
-
-  <div class="reco priority-low">
-    <h4>⑥ Erster Pilotkunde</h4>
-    <p class="why">Sobald Server live + WhatsApp verifiziert: Tenant nach <code>infra/runbook/04_tenant_onboarding.md</code> anlegen, 50 echte Belege durchlaufen lassen, Findings ins Konzept zurückspielen.</p>
+  <div class="card">
+    <h3>Legitim Post-Pilot (lt. Webapp &sect;10)</h3>
+    <ul class="clean">
+      <li><code>invoices</code> + Auto-Rechnungs-Generator (F04), Provisions-&Uuml;bersicht (F05), Customer-Chat-View + Web-Chat-Widget (F06/F21).</li>
+      <li>Real-Time: Code nutzt SSE statt Socket.io (F08) &mdash; Spec angleichen.</li>
+      <li>Event-Vertrag &sect;4.3 abgleichen (F11/F12), camelCase&rarr;snake_case JSON-Felder (F18), STATUS.html neu generieren (F19 &mdash; hiermit erledigt).</li>
+    </ul>
   </div>
 </section>
 
 <section>
-  <h2>5 · Verzeichnis nach Cleanup</h2>
-  <div class="grid-2">
-    <div class="card">
-      <h3>Konzeptentwicklung/</h3>
-<pre style="margin:0;font-size:12px;color:var(--muted);font-family:'SF Mono',Menlo,Consolas,monospace">
-README.md           ← IST-Stand
-STATUS.html         ← live (diese Datei)
-00_Architektur_Hauptdokument.md
-01_Datenmodell_Events.md
-02_Kundenprofil_System.md
-03_n8n_Workflows.md
-04_Erweiterbarkeit_Pro.md
-05_Roadmap.md       ← IST + nächste Schritte
-06_Prompt_System.md
-Foundation_Spec.md  ← erfüllt-Marker
-_archive/           ← Sprint 0 + 1 (historisch)
-modules/
-  M01..M10          ← original
-  M11_IMAP_Eingang.md          ← neu
-  M12_DSGVO.md                  ← neu
-  M13_Steuerberater_Portal.md   ← neu
-</pre>
-    </div>
-    <div class="card">
-      <h3>prozesspilot/backend/src/modules/</h3>
-<pre style="margin:0;font-size:12px;color:var(--muted);font-family:'SF Mono',Menlo,Consolas,monospace">
-_shared/
-customers/
-documents/
-dsgvo/                  ← M12
-m01-receipt-intake/
-m02-archive/
-m03-categorization/     ← M03 KI
-m03-ocr/                ← M03 OCR
-m04-datev/              ← M04
-m05-lexoffice/
-m06-advisor-portal/     ← M13 (lebt hier hist.)
-m06-sevdesk/            ← M06
-m07-spreadsheet/
-m08-reporting/
-m09-supplier-comm/
-m10-whatsapp/
-m11-imap/
-plugin-system/
-profiles/
-receipts/
-reports/
-routing/
-stats/
-tenants/
+  <h2>5 &middot; Was als n&auml;chstes</h2>
 
-ENTFERNT:
-  m04-categorize/       ← tote Refactor-Leiche
-  _foundation/          ← leer
-</pre>
-    </div>
+  <div class="reco priority-high">
+    <h4>Task-Dashboard bauen (Konzept-Kern)</h4>
+    <p class="why">Migration (<code>tasks</code>/<code>collaborators</code>/<code>activity_log</code> mit RLS) &rarr; Backend-API &rarr; <code>/tasks</code>-UI (Mock ersetzen). Das ist der Grund, warum die Admin-Seite unver&auml;ndert wirkt.</p>
+  </div>
+
+  <div class="reco priority-high">
+    <h4>Architektur-Entscheidung: Legacy-<code>customer</code>-Welt</h4>
+    <p class="why">Mit Andreas kl&auml;ren, ob die alte <code>customer_id</code>-Welt absichtlich (n8n-Kompat) weiterl&auml;uft oder Altlast ist. Danach <code>01_Datenmodell_Events.md</code> auf den <code>tenants</code>/<code>belege</code>-Reboot ziehen.</p>
+  </div>
+
+  <div class="reco priority-mid">
+    <h4>Quick-Win-Doku-Fixes</h4>
+    <p class="why">Migrations-Referenzen in M13/M14/M15 korrigieren + M15-OAuth-Callback-Pfad auf <code>/api/v1/&hellip;</code>. Kleiner Doku-PR.</p>
+  </div>
+
+  <div class="reco priority-mid">
+    <h4>Pilot-Vorbereitung (KW22)</h4>
+    <p class="why">Onboarding-Wizard (T016) + Discord-Notifications. WhatsApp braucht Meta-Verifizierung (Vorlauf 2&ndash;3 Wochen). Offen au&szlig;erdem: T019 (alte /receipts-Routen entfernen), T020 (E2E auf Discord-Auth), T021 (M03-Detector entkoppeln), T022 (POS-Cron Owner-Connection vor RLS), T023 (Integrationstests).</p>
+  </div>
+
+  <div class="reco priority-low">
+    <h4>Offene PRs / manuelle Schritte</h4>
+    <p class="why">Keine offenen PRs (alle gemergt). Manuell ausstehend laut <code>tasks/MANUELLE_AUFGABEN.md</code>: Lexware-Office-Token besorgen, SumUp-Daily-Sync-Cron auf IONOS einrichten, Vision-API-Credentials.</p>
   </div>
 </section>
 
 <footer>
-  Generiert am 2026-05-07 (post-cleanup) · ProzessPilot · STATUS.html
+  ProzessPilot (Einzelunternehmen Steve Bernhardt) &middot; System-/Repo-Name: Gastro &middot; Status generiert 2026-05-26 &middot;
+  Quelle: Konzept-Audit <code>_audit/REPORT-2026-05-26.md</code>
 </footer>
 
 </div>

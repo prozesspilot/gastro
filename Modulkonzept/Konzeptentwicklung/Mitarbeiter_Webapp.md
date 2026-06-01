@@ -47,7 +47,7 @@ Die **Mitarbeiter-Webapp** ist das **rein interne Verwaltungs-Tool** für Steve,
 | State-Management | TanStack Query (Server-State) + Zustand (UI-State) | minimal-overhead |
 | Routing | React Router v7 | Standard |
 | API-Client | Generated TypeScript-Client aus OpenAPI-Spec | Type-safety end-to-end |
-| Real-Time | Socket.io-Client | für Live-Updates Tasks + Customer-Chat |
+| Real-Time | **SSE** (Server-Sent Events via `fetch` + `ReadableStream`) | einseitiger Server→Client-Push reicht; kein bidirektionaler WebSocket-Channel nötig. Schlankere Lösung ohne socket.io-Overhead. Bidirektionales Schreiben (Chat-Antworten) läuft weiter als normaler POST-Request. |
 | Forms | react-hook-form + Zod-Validation | minimal Bugs durch Type-Safety |
 | Auth | Discord OAuth (siehe M14) + Notfall-Login | Standard-Setup |
 | Tests | Vitest (Unit) + Playwright (E2E) | konsistent mit Backend |
@@ -94,7 +94,7 @@ webapp-internal/
 │   ├── lib/
 │   │   ├── api-client.ts          # Generated aus OpenAPI
 │   │   ├── auth.ts                # Discord-OAuth-Flow + Session-Mgmt
-│   │   └── ws-client.ts           # Socket.io-Setup
+│   │   └── sse-client.ts          # SSE-Hook-Setup (useReceiptEvents, fetch+ReadableStream)
 │   └── stores/                    # Zustand-Stores
 └── tests/
 ```
@@ -391,26 +391,51 @@ Wenn 25+ aktive Tenants: Wechsel auf Stripe-Subscriptions empfohlen. Migration:
 
 ---
 
-## 7. Real-Time-Updates via WebSocket
+## 7. Real-Time-Updates via SSE (Server-Sent Events)
 
-### 7.1 Was live aktualisiert wird
+> **Entscheidung (T034, 2026-06-01):** Die Spec nannte ursprünglich Socket.io. Der Code nutzt bewusst SSE. Socket.io
+> wäre überdimensioniert: Alle Benachrichtigungen sind einseitige Server→Client-Pushes. Bidirektionales Schreiben
+> (z.B. Chat-Antworten) erfolgt weiter als normaler POST-Request — dafür braucht man keinen WebSocket-Kanal.
+> SSE ist HTTP-nativ, proxy-freundlich, kein extra Server-Prozess nötig.
+
+### 7.1 Was live aktualisiert wird (aktuell implementiert)
+
+- **Beleg-Events**: neuer Beleg eingegangen, OCR abgeschlossen, Statuswechsel
+- Geliefert über SSE-Endpunkt `GET /api/v1/events` (Backend: `backend/src/routes/sse.ts`)
+- Frontend-Hook: `webapp/src/hooks/useReceiptEvents.ts`
+
+Geplant (Folge-Tasks):
 
 - Task-Liste: neue Tasks, Status-Änderungen
-- Customer-Chat: neue Nachrichten
-- CI-Status: erfolgreiche/fehlgeschlagene Pipelines
 - Tenant-Aktivität: neue Belege, Setup-Status-Änderungen
 
 ### 7.2 Implementation
 
-- Backend: Socket.io-Server, gebunden an Auth-Session
-- Frontend: Socket.io-Client subscribed auf `user:<userId>`-Channel und `tenant:*`-Channels (je nach Berechtigung)
-- Backend pusht bei Events
-- Frontend updatet via TanStack-Query-Cache-Invalidation
+**Backend (`backend/src/routes/sse.ts`):**
 
-### 7.3 Fallback ohne WebSocket
+- Endpoint: `GET /api/v1/events`
+- Authentifizierung über Header `x-pp-tenant-id`
+- Heartbeat alle 30 Sekunden (`: keepalive`)
+- Cleanup automatisch bei Connection-Close (SIGTERM-safe)
+- Kein eigener Server-Prozess — läuft im Fastify-Prozess
 
-- Polling alle 30 Sekunden
-- Sichtbares Banner "Live-Updates getrennt — Polling aktiv"
+**Frontend (`webapp/src/hooks/useReceiptEvents.ts`):**
+
+- `fetch` + `ReadableStream` statt nativer `EventSource` (weil `EventSource` keine Custom-Header unterstützt)
+- Auto-Reconnect nach 3 Sekunden bei Verbindungsabbruch
+- React-Hook-Pattern: `useReceiptEvents(tenantId, onEvent)`
+- `onEvent`-Callback via `useRef` stabilisiert (vermeidet unnötige Effect-Re-Runs)
+- Frontend-Update-Strategie: TanStack-Query-Cache-Invalidation nach Event-Eingang
+
+### 7.3 Fallback bei SSE-Verbindungsabbruch
+
+- Automatischer Reconnect nach 3 Sekunden (im Hook eingebaut)
+- Optional: sichtbares Banner "Live-Updates getrennt — Polling aktiv" (noch nicht implementiert — Folge-Task)
+
+### 7.4 Wann Socket.io relevant werden könnte
+
+Nur wenn Anforderungen hinzukommen, die echte Bidirektionalität erfordern — z.B. kollaboratives Bearbeiten im
+Task-Detail (Typing-Indicator, gleichzeitiges Editieren). Dann als separaten Task bewerten.
 
 ---
 
@@ -472,7 +497,7 @@ Implementiert als Middleware im Backend (Permission-Check pro Endpoint) + Fronte
 - TenantSettings (Modul-Toggles, OAuth-Setups)
 - TaskDetail + Auto-Trigger-Engine
 - Customer-Chat-View (synchron mit Discord-Bridge)
-- Real-Time-Updates via WebSocket
+- Real-Time-Updates via SSE (`/api/v1/events`, Hook `useReceiptEvents`)
 
 ### 10.3 Phase 2 (M2 Reseller-Launch)
 
@@ -536,9 +561,9 @@ Kritische User-Flows:
 
 ## 14. Zusammenfassung in einem Absatz
 
-Die Mitarbeiter-Webapp ist das rein interne Verwaltungs-Tool für Steve, Andreas und zukünftige Mitarbeiter — erreichbar unter admin.prozesspilot.net. React + Vite + shadcn/ui, Login via Discord-OAuth (Standard) oder Notfall-Login mit TOTP (nur Geschäftsführer). Kern-Komponenten: Dashboard, Tenant-Management, Task-Dashboard mit Auto-Trigger-Engine, Beleg-Korrektur-View, Customer-Chat-Übersicht (synchron zur Discord-Bridge), Provisions-Übersicht (für Vertriebsagentur), Mitarbeiter-Verwaltung, System-Einstellungen. Real-Time-Updates via WebSocket. Berechtigungs-Modell: Geschäftsführer / Mitarbeiter / Support. Implementations-Reihenfolge: P1.1 Auth + Tenant-Basics + Beleg-Korrektur, P1.2 Volle Task-Engine + Customer-Chat + Real-Time, Phase 2 Provisions + Rechnungs-Automation, Phase 3 erweiterte Verwaltung + Stripe-Migration.
+Die Mitarbeiter-Webapp ist das rein interne Verwaltungs-Tool für Steve, Andreas und zukünftige Mitarbeiter — erreichbar unter admin.prozesspilot.net. React + Vite + shadcn/ui, Login via Discord-OAuth (Standard) oder Notfall-Login mit TOTP (nur Geschäftsführer). Kern-Komponenten: Dashboard, Tenant-Management, Task-Dashboard mit Auto-Trigger-Engine, Beleg-Korrektur-View, Customer-Chat-Übersicht (synchron zur Discord-Bridge), Provisions-Übersicht (für Vertriebsagentur), Mitarbeiter-Verwaltung, System-Einstellungen. Real-Time-Updates via SSE (Server-Sent Events, `GET /api/v1/events`, Hook `useReceiptEvents`). Berechtigungs-Modell: Geschäftsführer / Mitarbeiter / Support. Implementations-Reihenfolge: P1.1 Auth + Tenant-Basics + Beleg-Korrektur, P1.2 Volle Task-Engine + Customer-Chat + Real-Time, Phase 2 Provisions + Rechnungs-Automation, Phase 3 erweiterte Verwaltung + Stripe-Migration.
 
 ---
 
-**Letzte Aktualisierung:** 2026-05-15
+**Letzte Aktualisierung:** 2026-06-01 (T034: §2 + §7 von Socket.io auf SSE angeglichen)
 **Verantwortlich:** Steve (Frontend), Andreas (Backend-APIs)

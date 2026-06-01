@@ -18,6 +18,12 @@
 | 040 | `040_kasse.sql` | `kasse_integrations`, `kasse_transactions` | ✓ |
 | 050 | `050_export_log.sql` | `export_log` | ✓ |
 | 060 | `060_audit_log.sql` | `audit_log` (immutable, append-only) | ✓ (read), bypass-only (write/update/delete) |
+| 070 | `070_ocr_cost_log.sql` | `ocr_cost_log` | ✓ |
+| 080 | `080_dsgvo_requests.sql` | `dsgvo_requests` | ✓ |
+| 090 | `090_belege_soft_delete.sql` | Soft-Delete-Spalten auf `belege` | — (ALTER TABLE) |
+| 100 | `100_booking_credentials.sql` | `booking_credentials` | ✓ |
+| 110 | `110_kasse_transactions_fk_relax.sql` | FK-Relax auf `kasse_transactions.integration_id` | — (ALTER TABLE) |
+| 120 | `120_tasks.sql` | `tasks`, `task_collaborators`, `task_activity_log` | ✓ (alle 3 Tabellen) |
 
 Migrationen sind **rückwärts-kompatibel** und **idempotent durch den Runner** (`schema_migrations` Tabelle trackt angewandte Versionen). Jede Migration läuft in einer eigenen Transaktion — Fehler → Rollback.
 
@@ -104,10 +110,14 @@ erDiagram
   tenants ||--o{ kasse_transactions : produces
   tenants ||--o{ export_log : exports
   tenants ||--o{ audit_log : logs
+  tenants ||--o{ tasks : "0..N Tasks"
   belege  ||--o{ export_log : "1 Beleg → N Export-Versuche"
   kasse_integrations ||--o{ kasse_transactions : "1 OAuth → N Tages-Snapshots"
   users   ||--o{ auth_sessions : owns
   users   ||--o{ auth_audit_log : produces
+  users   ||--o{ tasks : "assigned_to"
+  tasks   ||--o{ task_collaborators : "Helfer"
+  tasks   ||--o{ task_activity_log : "Aktivitaets-Log"
 
   tenants {
     uuid id PK

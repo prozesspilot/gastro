@@ -1,4 +1,4 @@
--- 120_invoices.sql
+-- 122_invoices.sql
 -- Auto-Rechnungs-Generator — Tabelle invoices
 --
 -- Jede Rechnung ist einem Tenant zugeordnet und hat eine fortlaufende

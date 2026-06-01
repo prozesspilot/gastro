@@ -2,7 +2,7 @@
 
 > **Status (2026-05-07):** ✅ implementiert. Spec wurde nachgezogen, weil das Modul im Code unter dem etwas irreführenden Pfad `m06-advisor-portal/` liegt — historisch bedingt, kein Submodul von M06 (sevDesk).
 > **Code:** `backend/src/modules/m06-advisor-portal/`
-> **Migration:** `028_tax_advisor_portal.sql`
+> **Migration:** Kein eigener Migration-File. Die Tabellen `tax_advisor_accounts` und `tax_advisor_audit` wurden ad-hoc angelegt oder existieren im Code-Kontext des Moduls. Eine eigenständige Migration `028_tax_advisor_portal.sql` existiert **nicht** in `backend/migrations/` — die Spec-Referenz war fehlerhaft (Audit-Finding F15). Nächste freie Migrationsnummer für eine Nachrüstung wäre ≥ 120.
 > **Paket:** Pro
 
 ---
@@ -44,7 +44,9 @@ Ursprünglich war das Portal interaktiver gedacht (Live-Belege approven), wurde 
 
 ## 5. Datenmodell
 
-Migration 028 fügt hinzu:
+> **Hinweis (Audit-Finding F15, 2026-05-26):** Eine Migration `028_tax_advisor_portal.sql` existiert **nicht** in `backend/migrations/`. Die nachstehenden Tabellen sind entweder noch nicht per Migration angelegt oder wurden ad-hoc erstellt. Bei der nächsten Überarbeitung dieses Moduls muss eine saubere Migration erstellt werden (nächste freie Nr. ≥ 120).
+
+Benötigte Tabellen:
 
 - `tax_advisor_accounts` (id, customer_id, name, email, token_hash, created_at, last_login_at)
 - `tax_advisor_audit` (id, advisor_id, action, target_resource, ip, user_agent, occurred_at)

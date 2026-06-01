@@ -2,7 +2,7 @@
 
 > **Status (2026-05-15):** Komplett neu konzipiert nach Konzept-Reboot. Alte Version (Tenant-Customer-Auth) verworfen, weil Endkunden im neuen Konzept keinen Login mehr haben.
 > **Code-Zielort:** `backend/src/modules/m14-auth/`, `backend/src/core/auth/`, `webapp-internal/src/auth/`
-> **Migration:** `031_users_auth.sql` (komplett neu — alte Version aus 2026-05-12 wird durch dieses Modul ersetzt)
+> **Migration:** `020_users_auth.sql` (Audit-Finding F13: Spec hatte fälschlicherweise `031_users_auth.sql` angegeben — real existiert `backend/migrations/020_users_auth.sql`)
 > **Paket:** alle (Pflicht-Modul, jeder Mitarbeiter braucht es)
 > **Vorausgesetzt durch:** Mitarbeiter-Webapp, Discord-Integration
 
@@ -471,7 +471,7 @@ reply.setCookie('pp_auth', jwt, {
 
 ### 11.1 P1.1 (KW 21)
 
-- DB-Migration `031_users_auth.sql`
+- DB-Migration `020_users_auth.sql` (real existierender Name — Spec hatte fälschlicherweise `031_users_auth.sql`)
 - Bootstrap-Command für ersten Geschäftsführer
 - Discord-OAuth-Flow Backend + Frontend
 - JWT-Generierung + Cookie-Mgmt

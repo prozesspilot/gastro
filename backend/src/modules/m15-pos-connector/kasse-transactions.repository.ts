@@ -199,41 +199,25 @@ export async function listKasseTransactions(
 /**
  * Listet alle aktiven pos_credentials-Tenants — Daily-Cron iteriert darueber.
  *
- * BEGIN/COMMIT-Pattern: `set_config(name, value, is_local=true)` ist LOCAL und
- * braucht eine aktive Transaktion, sonst ist das GUC im naechsten Statement
- * schon wieder weg.
+ * T022-Fix: Ruft SECURITY DEFINER-Funktion `get_active_sumup_tenants()`
+ * (Migration 121) auf. Die Funktion laeuft als gastro_owner → umgeht RLS
+ * auf pos_credentials korrekt, auch wenn T020/T026 RLS auf der Tabelle
+ * aktiviert hat.
  *
- * ⚠️ WICHTIG — RLS-Bypass-Grenze (T005-Review-Fix #2, korrigiert):
- * Das `set_config('app.bypass_rls','on')` unten ist zur Laufzeit ein NO-OP,
- * solange der Cron mit der App-Rolle `gastro_app` laeuft: `is_rls_bypassed()`
- * (Migration 002_helpers) liefert nur fuer `gastro_owner`/Superuser true.
- * Aktuell funktioniert die Abfrage NUR, weil `pos_credentials` noch gar keine
- * RLS-Policy hat (Migration 022). SOBALD T020 RLS auf pos_credentials mit einer
- * `is_rls_bypassed() OR tenant_id = current_tenant_id()`-Policy aktiviert, gibt
- * dieser Cron als `gastro_app` ein SILENT-EMPTY-Result zurueck (kein Fehler).
- *
- * T020 MUSS daher diesen Cron auf eine Owner-Connection umstellen (analog zum
- * Migrate-Pfad) — der GUC allein reicht nicht. Siehe Backlog
- * `T022-pos-cron-owner-connection`.
+ * Vorher: Direkter SELECT mit set_config('app.bypass_rls','on') war ein
+ * NO-OP fuer gastro_app (is_rls_bypassed() prueft zusaetzlich die DB-Rolle)
+ * → SILENT-EMPTY sobald RLS aktiv. Migration 022 hatte noch kein RLS, daher
+ * war das Problem bisher latent.
  */
 export async function listActiveSumUpTenants(
   pool: Pool,
 ): Promise<Array<{ tenant_id: string; pos_account_id: string }>> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query("SELECT set_config('app.bypass_rls', 'on', true)");
-    const result = await client.query<{ tenant_id: string; pos_account_id: string }>(
-      `SELECT tenant_id, pos_account_id
-         FROM pos_credentials
-        WHERE active = true AND pos_system = 'sumup_lite'`,
-    );
-    await client.query('COMMIT');
-    return result.rows;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
+  // DECISION (T022, 2026-06-01): Einfacher pool.query() ohne Transaktion
+  // ist hier korrekt — get_active_sumup_tenants() ist ein reiner SELECT
+  // (kein DML) und braucht kein BEGIN/COMMIT. set_config LOCAL wuerde
+  // ausserhalb einer Transaktion sowieso nicht helfen.
+  const result = await pool.query<{ tenant_id: string; pos_account_id: string }>(
+    'SELECT tenant_id, pos_account_id FROM get_active_sumup_tenants()',
+  );
+  return result.rows;
 }

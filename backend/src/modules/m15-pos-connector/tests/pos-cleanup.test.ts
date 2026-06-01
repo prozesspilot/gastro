@@ -1,9 +1,11 @@
 /**
- * T018/M15 — Tests fuer purgeInactivePosCredentials + Cron-Script.
+ * T018/T022/M15 — Tests fuer purgeInactivePosCredentials + Cron-Script.
  *
- * Nach T018-Review-Fix #1+#2:
- *   * DELETE + audit_log-Inserts (tenant-isoliert) in EINER Postgres-Transaktion
- *   * Pool-Mock simuliert BEGIN/DELETE/set_config(tenant)/INSERT audit_log/COMMIT
+ * Nach T018-Review-Fix #1+#2 + T022-Fix:
+ *   * T022: DELETE laeuft ueber SECURITY DEFINER-Funktion delete_inactive_pos_credentials()
+ *     (Migration 121). Der Pool-Mock matcht jetzt `SELECT * FROM delete_inactive_pos_credentials`.
+ *   * Audit-Log-Inserts (tenant-isoliert) laufen in DERSELBEN Transaktion.
+ *   * GUC-Name fuer Tenant-Context: app.current_tenant (nicht app.tenant_id).
  */
 
 import type { Pool, PoolClient } from 'pg';
@@ -30,7 +32,8 @@ function makeTxPool(deletedRows: Array<Record<string, unknown>>): {
       sqlCalls.push(sql);
       paramsCalls.push(params ?? []);
 
-      if (sql.startsWith('DELETE FROM pos_credentials')) {
+      // T022: DELETE laeuft ueber SECURITY DEFINER-Funktion
+      if (sql.startsWith('SELECT * FROM delete_inactive_pos_credentials')) {
         return { rows: deletedRows, rowCount: deletedRows.length };
       }
       // BEGIN, COMMIT, ROLLBACK, set_config, INSERT INTO audit_log → leeres Ergebnis
@@ -71,10 +74,12 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
 
     await purgeInactivePosCredentials(pool, 30);
 
-    // Reihenfolge: BEGIN → DELETE → set_config(tenant) → INSERT audit_log → COMMIT
+    // T022: Reihenfolge: BEGIN → delete_fn() → set_config(current_tenant) → INSERT audit_log → COMMIT
     const beginIdx = sqlCalls.findIndex((s) => s === 'BEGIN');
-    const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
-    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    const deleteIdx = sqlCalls.findIndex((s) =>
+      s.startsWith('SELECT * FROM delete_inactive_pos_credentials'),
+    );
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.current_tenant'"));
     const auditIdx = sqlCalls.findIndex((s) => s.includes('INSERT INTO audit_log'));
     const commitIdx = sqlCalls.findIndex((s) => s === 'COMMIT');
 
@@ -102,18 +107,18 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
     expect(sqlCalls.some((s) => s.includes('INSERT INTO audit_log'))).toBe(true);
     expect(sqlCalls.some((s) => s.includes('auth_audit_log'))).toBe(false);
 
-    // Tenant-Context wird auf die tenant_id der Row gesetzt, damit die
-    // RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
-    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    // T022: GUC-Name ist app.current_tenant (current_tenant_id() liest diesen Wert)
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.current_tenant'"));
     expect(paramsCalls[tenantCtxIdx]).toEqual([TENANT]);
   });
 
-  it('ROLLBACK wenn DELETE wirft (kein orphaner Zustand)', async () => {
+  it('ROLLBACK wenn delete_fn() wirft (kein orphaner Zustand)', async () => {
     const sqlCalls: string[] = [];
     const mockClient = {
       query: vi.fn(async (sql: string) => {
         sqlCalls.push(sql);
-        if (sql.startsWith('DELETE FROM pos_credentials')) {
+        // T022: SECURITY DEFINER-Funktion wirft
+        if (sql.startsWith('SELECT * FROM delete_inactive_pos_credentials')) {
           throw new Error('DB unavailable');
         }
         return { rows: [] };
@@ -126,12 +131,13 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
     expect(sqlCalls).toContain('ROLLBACK');
   });
 
-  it('ROLLBACK wenn audit_log-INSERT wirft → DELETE wird rueckabgewickelt', async () => {
+  it('ROLLBACK wenn audit_log-INSERT wirft → delete_fn wird rueckabgewickelt', async () => {
     const sqlCalls: string[] = [];
     const mockClient = {
       query: vi.fn(async (sql: string) => {
         sqlCalls.push(sql);
-        if (sql.startsWith('DELETE FROM pos_credentials')) {
+        // T022: SECURITY DEFINER-Funktion gibt Rows zurueck
+        if (sql.startsWith('SELECT * FROM delete_inactive_pos_credentials')) {
           return {
             rows: [
               {
@@ -177,7 +183,10 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
     const releaseFn = vi.fn();
     const mockClient = {
       query: vi.fn(async (sql: string) => {
-        if (sql.startsWith('DELETE')) throw new Error('boom');
+        // T022: Funktion-Aufruf wirft
+        if (sql.startsWith('SELECT * FROM delete_inactive_pos_credentials')) {
+          throw new Error('boom');
+        }
         return { rows: [] };
       }),
       release: releaseFn,
@@ -216,14 +225,15 @@ describe('purgeInactivePosCredentials — Output', () => {
     expect(result[0].inactive_since).toEqual(inactiveDate);
   });
 
-  it('SQL nutzt retentionDays-Parameter im DELETE', async () => {
+  it('T022: Funktion-Aufruf nutzt retentionDays als Parameter', async () => {
     const { pool, sqlCalls, paramsCalls } = makeTxPool([]);
     await purgeInactivePosCredentials(pool, 90);
-    const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
+    // T022: SECURITY DEFINER-Funktion wird mit retentionDays aufgerufen
+    const deleteIdx = sqlCalls.findIndex((s) =>
+      s.startsWith('SELECT * FROM delete_inactive_pos_credentials'),
+    );
     expect(deleteIdx).toBeGreaterThanOrEqual(0);
     expect(paramsCalls[deleteIdx]).toEqual([90]);
-    expect(sqlCalls[deleteIdx]).toContain('active = false');
-    expect(sqlCalls[deleteIdx]).toContain("INTERVAL '1 day'");
   });
 
   it('mehrere Rows + N Audit-Inserts (1 pro Row)', async () => {

@@ -377,6 +377,28 @@ export interface PurgedPosCredential {
  *
  * Idempotent: bei wiederholtem Aufruf ohne neue inactive-Rows nichts zu tun.
  */
+/**
+ * T018/T022: Loescht alle pos_credentials die seit `retentionDays` deaktiviert
+ * sind UND schreibt pro Loeschung einen `audit_log`-Eintrag — alles in EINER
+ * Transaktion (atomicity-Garantie fuer GoBD).
+ *
+ * T022-Fix: Das DELETE laeuft jetzt ueber die SECURITY DEFINER-Funktion
+ * `delete_inactive_pos_credentials(retention_days)` (Migration 121), die als
+ * gastro_owner laeuft → umgeht RLS auf pos_credentials korrekt. Vorher war der
+ * direkte DELETE-Aufruf als gastro_app ein SILENT-EMPTY sobald RLS auf
+ * pos_credentials aktiv wird.
+ *
+ * Atomicity (unveraendert): DELETE-Funktion + Audit-Inserts laufen in EINER
+ * Transaktion. Bei Fehler → ROLLBACK → kein orphaner Zustand.
+ *
+ * Audit-Ziel: `audit_log` (tenant-isoliert), NICHT `auth_audit_log` (global).
+ * Pro Row: app.current_tenant setzen → RLS-INSERT-Policy trifft zu.
+ *
+ * Token sind kein Geschaeftsdaten-Bestandteil — die 10-Jahres-Aufbewahrungspflicht
+ * (§ 147 AO) gilt fuer Belege/Buchungen, NICHT fuer OAuth-Tokens.
+ *
+ * Idempotent: bei wiederholtem Aufruf ohne neue inactive-Rows nichts zu tun.
+ */
 export async function purgeInactivePosCredentials(
   pool: Pool,
   retentionDays: number,
@@ -386,6 +408,9 @@ export async function purgeInactivePosCredentials(
   try {
     await client.query('BEGIN');
 
+    // T022: SECURITY DEFINER-Funktion fuer cross-tenant DELETE.
+    // Laeuft als gastro_owner → is_rls_bypassed() = true (Rolle + GUC gesetzt
+    // innerhalb der Funktion). Gibt dieselben Spalten wie vorher zurueck.
     const result = await client.query<{
       id: string;
       tenant_id: string;
@@ -393,28 +418,23 @@ export async function purgeInactivePosCredentials(
       pos_account_id: string;
       inactive_reason: string | null;
       updated_at: Date;
-    }>(
-      `DELETE FROM pos_credentials
-        WHERE active = false
-          AND updated_at < now() - ($1::int * INTERVAL '1 day')
-        RETURNING id, tenant_id, pos_system, pos_account_id, inactive_reason, updated_at`,
-      [retentionDays],
-    );
+    }>('SELECT * FROM delete_inactive_pos_credentials($1)', [retentionDays]);
 
     const purged: PurgedPosCredential[] = result.rows.map((r) => ({
       id: r.id,
       tenant_id: r.tenant_id,
-      pos_system: r.pos_system,
+      pos_system: r.pos_system as PosSystem,
       pos_account_id: r.pos_account_id,
       inactive_reason: r.inactive_reason,
       inactive_since: r.updated_at,
     }));
 
-    // Review-Fix #1+#2: Audit-Inserts in DERSELBEN Tx wie DELETE, Ziel
-    // `audit_log` (tenant-isoliert). Pro Row den Tenant-Context setzen, damit
-    // die RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
+    // Audit-Inserts in DERSELBEN Tx wie DELETE (Atomicity). Ziel: `audit_log`
+    // (tenant-isoliert). Pro Row den Tenant-Context setzen, damit die RLS-INSERT-
+    // Policy `tenant_id = current_tenant_id()` fuer gastro_app greift.
+    // WICHTIG: GUC-Name ist app.current_tenant (current_tenant_id() liest diesen).
     for (const p of purged) {
-      await client.query("SELECT set_config('app.tenant_id', $1, true)", [p.tenant_id]);
+      await client.query("SELECT set_config('app.current_tenant', $1, true)", [p.tenant_id]);
       await logAuditEvent(client, {
         tenantId: p.tenant_id,
         entityType: 'pos_credentials',

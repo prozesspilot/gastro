@@ -1,11 +1,10 @@
 /**
- * T005-Review-Fix #1 + #3 — Tests fuer kasse-transactions.repository.
+ * T005-Review-Fix #1 + #3 + T022 — Tests fuer kasse-transactions.repository.
  *
- * Vor dem Fix: listActiveSumUpTenants nutzte set_config(..., true) ohne
- * BEGIN/COMMIT → GUC wirkte nicht im naechsten Query → silent-empty-Result
- * sobald RLS auf pos_credentials aktiviert wird (T020).
- *
- * Diese Tests verifizieren die korrekte BEGIN/COMMIT-Reihenfolge.
+ * T022-Fix: listActiveSumUpTenants ruft jetzt SECURITY DEFINER-Funktion
+ * get_active_sumup_tenants() (Migration 121) auf — kein BEGIN/COMMIT mehr
+ * noetig, kein set_config noetig. Der RLS-Bypass laeuft innerhalb der
+ * SECURITY DEFINER-Funktion (gastro_owner-Kontext).
  */
 
 import type { Pool, PoolClient } from 'pg';
@@ -44,12 +43,20 @@ afterEach(() => {
 
 // ── listActiveSumUpTenants ────────────────────────────────────────────────
 
-describe('listActiveSumUpTenants (Review-Fix #1)', () => {
-  it('wraps in BEGIN/COMMIT damit set_config(..., true) wirkt', async () => {
-    const sqlCalls: string[] = [];
-    const { pool } = makePoolWithQueryFn((sql) => {
-      sqlCalls.push(sql);
-      if (sql.includes('SELECT tenant_id, pos_account_id')) {
+// T022: listActiveSumUpTenants verwendet jetzt pool.query() direkt (kein connect/client),
+// daher brauchen wir ein Pool-Mock mit query()-Methode statt connect().
+function makeDirectPool(
+  queryFn: (sql: string, params?: unknown[]) => { rows: unknown[] } | Promise<{ rows: unknown[] }>,
+): Pool {
+  return {
+    query: vi.fn(async (sql: string, params?: unknown[]) => queryFn(sql, params)),
+  } as unknown as Pool;
+}
+
+describe('listActiveSumUpTenants (T022: SECURITY DEFINER-Funktion)', () => {
+  it('ruft get_active_sumup_tenants() auf und gibt Rows zurueck', async () => {
+    const pool = makeDirectPool((sql) => {
+      if (sql.includes('get_active_sumup_tenants')) {
         return { rows: [{ tenant_id: TENANT, pos_account_id: 'merch-001' }] };
       }
       return { rows: [] };
@@ -59,60 +66,40 @@ describe('listActiveSumUpTenants (Review-Fix #1)', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].tenant_id).toBe(TENANT);
-
-    // Reihenfolge-Check: BEGIN, set_config, SELECT, COMMIT
-    const beginIdx = sqlCalls.findIndex((s) => s === 'BEGIN');
-    const setConfigIdx = sqlCalls.findIndex((s) => s.includes('set_config'));
-    const selectIdx = sqlCalls.findIndex((s) => s.includes('SELECT tenant_id'));
-    const commitIdx = sqlCalls.findIndex((s) => s === 'COMMIT');
-
-    expect(beginIdx).toBeGreaterThanOrEqual(0);
-    expect(setConfigIdx).toBeGreaterThan(beginIdx);
-    expect(selectIdx).toBeGreaterThan(setConfigIdx);
-    expect(commitIdx).toBeGreaterThan(selectIdx);
+    expect(result[0].pos_account_id).toBe('merch-001');
   });
 
-  it('set_config setzt app.bypass_rls=on (RLS-Bypass-GUC)', async () => {
-    // Array-Sammel-Pattern statt Closure-Variable: vermeidet das TS-Control-Flow-
-    // Limit, dass Zuweisungen innerhalb einer Callback-Closure beim Narrowing im
-    // aeusseren Scope ignoriert werden (sonst wuerde bypassCall auf `never` engen).
-    const setConfigCalls: { sql: string; params?: unknown[] }[] = [];
-    const { pool } = makePoolWithQueryFn((sql, params) => {
-      if (sql.includes('set_config')) {
-        setConfigCalls.push({ sql, params });
-      }
-      if (sql.includes('SELECT tenant_id')) return { rows: [] };
+  it('T022: kein BEGIN/COMMIT/set_config — alles in SECURITY DEFINER-Funktion', async () => {
+    const sqlCalls: string[] = [];
+    const pool = makeDirectPool((sql) => {
+      sqlCalls.push(sql);
       return { rows: [] };
     });
 
     await listActiveSumUpTenants(pool);
 
-    const bypassCall = setConfigCalls.find((c) => c.sql.includes('bypass_rls'));
-    expect(bypassCall).toBeDefined();
-    expect(bypassCall?.sql).toContain("'app.bypass_rls'");
-    expect(bypassCall?.sql).toContain("'on'");
+    // Kein BEGIN/COMMIT/set_config mehr — RLS-Bypass liegt in der DB-Funktion
+    expect(sqlCalls).not.toContain('BEGIN');
+    expect(sqlCalls).not.toContain('COMMIT');
+    expect(sqlCalls.some((s) => s.includes('set_config'))).toBe(false);
+    // Genau ein Aufruf: SELECT * FROM get_active_sumup_tenants()
+    expect(sqlCalls).toHaveLength(1);
+    expect(sqlCalls[0]).toContain('get_active_sumup_tenants');
   });
 
-  it('ROLLBACK bei DB-Fehler', async () => {
-    const sqlCalls: string[] = [];
-    const { pool } = makePoolWithQueryFn((sql) => {
-      sqlCalls.push(sql);
-      if (sql.includes('SELECT tenant_id')) {
+  it('DB-Fehler wird hochgeworfen (kein silent-catch)', async () => {
+    const pool = makeDirectPool((sql) => {
+      if (sql.includes('get_active_sumup_tenants')) {
         throw new Error('DB unavailable');
       }
       return { rows: [] };
     });
 
     await expect(listActiveSumUpTenants(pool)).rejects.toThrow('DB unavailable');
-    expect(sqlCalls).toContain('ROLLBACK');
   });
 
   it('leere DB → leeres Array (kein Crash)', async () => {
-    const { pool } = makePoolWithQueryFn((sql) => {
-      if (sql.includes('SELECT tenant_id')) return { rows: [] };
-      return { rows: [] };
-    });
-
+    const pool = makeDirectPool(() => ({ rows: [] }));
     const result = await listActiveSumUpTenants(pool);
     expect(result).toEqual([]);
   });

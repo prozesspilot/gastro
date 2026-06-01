@@ -5,8 +5,8 @@
  * DB wird gemockt — kein echter DB-Zugriff nötig.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { Pool } from 'pg';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mocks MÜSSEN vor dem Import des zu testenden Moduls stehen (Vitest-Hoisting)
 vi.mock('../../modules/invoices/invoice.repository', () => ({
@@ -21,12 +21,12 @@ import {
   generateMonthlyInvoiceForTenant,
   generateSetupFeeInvoice,
 } from '../../modules/invoices/invoice.generator';
+import * as repo from '../../modules/invoices/invoice.repository';
 import {
   PACKAGE_MONTHLY_PRICE_BRUTTO_CENT,
   PACKAGE_SETUP_FEE_BRUTTO_CENT,
   UST_RATE,
 } from '../../modules/invoices/invoice.schema';
-import * as repo from '../../modules/invoices/invoice.repository';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,31 +35,33 @@ function makePool(): Pool {
   return { query: vi.fn() } as unknown as Pool;
 }
 
-function makeInvoiceRow(overrides: Partial<{
-  id: string;
-  invoice_number: string;
-  period_year: number;
-  period_month: number;
-}> = {}) {
+function makeInvoiceRow(
+  overrides: Partial<{
+    id: string;
+    invoice_number: string;
+    period_year: number;
+    period_month: number;
+  }> = {},
+) {
   return {
-    id:               overrides.id ?? 'invoice-uuid-1',
-    tenant_id:        'tenant-uuid-1',
-    invoice_number:   overrides.invoice_number ?? 'PP-2026-00001',
-    invoice_type:     'monthly',
-    period_year:      overrides.period_year ?? 2026,
-    period_month:     overrides.period_month ?? 6,
-    amount_netto:     '66.39',
-    ust_rate:         '0.1900',
-    ust_amount:       '12.61',
-    amount_brutto:    '79.00',
-    pdf_path:         null,
-    status:           'gestellt',
-    paid_at:          null,
-    paid_amount:      null,
+    id: overrides.id ?? 'invoice-uuid-1',
+    tenant_id: 'tenant-uuid-1',
+    invoice_number: overrides.invoice_number ?? 'PP-2026-00001',
+    invoice_type: 'monthly',
+    period_year: overrides.period_year ?? 2026,
+    period_month: overrides.period_month ?? 6,
+    amount_netto: '66.39',
+    ust_rate: '0.1900',
+    ust_amount: '12.61',
+    amount_brutto: '79.00',
+    pdf_path: null,
+    status: 'gestellt',
+    paid_at: null,
+    paid_amount: null,
     reminder_sent_at: null,
-    due_at:           new Date('2026-06-15'),
-    created_at:       new Date('2026-06-01'),
-    updated_at:       new Date('2026-06-01'),
+    due_at: new Date('2026-06-15'),
+    created_at: new Date('2026-06-01'),
+    updated_at: new Date('2026-06-01'),
   };
 }
 
@@ -70,7 +72,7 @@ describe('calcAmounts', () => {
     const bruttoCent = PACKAGE_MONTHLY_PRICE_BRUTTO_CENT.standard; // 7900
     const { amountNetto, ustAmount, amountBrutto } = calcAmounts(bruttoCent);
 
-    expect(amountBrutto).toBe(79.00);
+    expect(amountBrutto).toBe(79.0);
     // Netto = 79 / 1.19 ≈ 66.39
     expect(amountNetto).toBeCloseTo(66.39, 2);
     // USt = 79 - netto ≈ 12.61
@@ -80,15 +82,19 @@ describe('calcAmounts', () => {
   });
 
   it('berechnet korrekt für Solo-Paket (39 €)', () => {
-    const { amountBrutto, amountNetto, ustAmount } = calcAmounts(PACKAGE_MONTHLY_PRICE_BRUTTO_CENT.solo);
-    expect(amountBrutto).toBe(39.00);
+    const { amountBrutto, amountNetto, ustAmount } = calcAmounts(
+      PACKAGE_MONTHLY_PRICE_BRUTTO_CENT.solo,
+    );
+    expect(amountBrutto).toBe(39.0);
     expect(amountNetto).toBeCloseTo(32.77, 2);
     expect(ustAmount).toBeCloseTo(6.23, 2);
   });
 
   it('berechnet korrekt für Filiale-Paket (299 €)', () => {
-    const { amountBrutto, amountNetto, ustAmount } = calcAmounts(PACKAGE_MONTHLY_PRICE_BRUTTO_CENT.filiale);
-    expect(amountBrutto).toBe(299.00);
+    const { amountBrutto, amountNetto, ustAmount } = calcAmounts(
+      PACKAGE_MONTHLY_PRICE_BRUTTO_CENT.filiale,
+    );
+    expect(amountBrutto).toBe(299.0);
     // netto + ust ≈ brutto
     expect(amountNetto + ustAmount).toBeCloseTo(amountBrutto, 2);
   });
@@ -104,13 +110,13 @@ describe('calcAmounts', () => {
 describe('calcDueDate', () => {
   it('addiert 14 Tage', () => {
     const from = new Date('2026-06-01T00:00:00Z');
-    const due  = calcDueDate(from);
+    const due = calcDueDate(from);
     expect(due.getDate() - from.getDate()).toBe(14);
   });
 
   it('überschreitet Monatsgrenze korrekt', () => {
     const from = new Date('2026-06-20T00:00:00Z');
-    const due  = calcDueDate(from);
+    const due = calcDueDate(from);
     expect(due.getMonth()).toBe(6); // Juli = 6
     expect(due.getDate()).toBe(4);
   });
@@ -119,9 +125,9 @@ describe('calcDueDate', () => {
 describe('generateMonthlyInvoiceForTenant', () => {
   const pool = makePool();
   const tenant = {
-    id:                  'tenant-uuid-1',
-    display_name:        'Pizzeria Bella Italia',
-    package:             'standard',
+    id: 'tenant-uuid-1',
+    display_name: 'Pizzeria Bella Italia',
+    package: 'standard',
     contract_started_at: new Date('2026-01-01'),
   };
 
@@ -135,24 +141,24 @@ describe('generateMonthlyInvoiceForTenant', () => {
     vi.mocked(repo.createInvoice).mockResolvedValue({
       ...makeInvoiceRow(),
       // rowToInvoiceResponse gibt dieses Format zurück:
-      id:               'invoice-uuid-1',
-      tenant_id:        'tenant-uuid-1',
-      invoice_number:   'PP-2026-00001',
-      invoice_type:     'monthly',
-      period_year:      2026,
-      period_month:     6,
-      amount_netto:     66.39,
-      ust_rate:         0.19,
-      ust_amount:       12.61,
-      amount_brutto:    79.00,
-      pdf_path:         null,
-      status:           'gestellt',
-      paid_at:          null,
-      paid_amount:      null,
+      id: 'invoice-uuid-1',
+      tenant_id: 'tenant-uuid-1',
+      invoice_number: 'PP-2026-00001',
+      invoice_type: 'monthly',
+      period_year: 2026,
+      period_month: 6,
+      amount_netto: 66.39,
+      ust_rate: 0.19,
+      ust_amount: 12.61,
+      amount_brutto: 79.0,
+      pdf_path: null,
+      status: 'gestellt',
+      paid_at: null,
+      paid_amount: null,
       reminder_sent_at: null,
-      due_at:           '2026-06-15',
-      created_at:       '2026-06-01T00:00:00.000Z',
-      updated_at:       '2026-06-01T00:00:00.000Z',
+      due_at: '2026-06-15',
+      created_at: '2026-06-01T00:00:00.000Z',
+      updated_at: '2026-06-01T00:00:00.000Z',
     });
   });
 
@@ -165,9 +171,9 @@ describe('generateMonthlyInvoiceForTenant', () => {
     expect(repo.createInvoice).toHaveBeenCalledWith(
       pool,
       expect.objectContaining({
-        tenantId:    'tenant-uuid-1',
+        tenantId: 'tenant-uuid-1',
         invoiceType: 'monthly',
-        periodYear:  2026,
+        periodYear: 2026,
         periodMonth: 6,
       }),
     );
@@ -175,24 +181,24 @@ describe('generateMonthlyInvoiceForTenant', () => {
 
   it('überspringt Rechnung wenn bereits vorhanden (Idempotenz)', async () => {
     vi.mocked(repo.findExistingMonthlyInvoice).mockResolvedValue({
-      id:               'existing-invoice-uuid',
-      tenant_id:        'tenant-uuid-1',
-      invoice_number:   'PP-2026-00001',
-      invoice_type:     'monthly',
-      period_year:      2026,
-      period_month:     6,
-      amount_netto:     66.39,
-      ust_rate:         0.19,
-      ust_amount:       12.61,
-      amount_brutto:    79.00,
-      pdf_path:         null,
-      status:           'gestellt',
-      paid_at:          null,
-      paid_amount:      null,
+      id: 'existing-invoice-uuid',
+      tenant_id: 'tenant-uuid-1',
+      invoice_number: 'PP-2026-00001',
+      invoice_type: 'monthly',
+      period_year: 2026,
+      period_month: 6,
+      amount_netto: 66.39,
+      ust_rate: 0.19,
+      ust_amount: 12.61,
+      amount_brutto: 79.0,
+      pdf_path: null,
+      status: 'gestellt',
+      paid_at: null,
+      paid_amount: null,
       reminder_sent_at: null,
-      due_at:           '2026-06-15',
-      created_at:       '2026-06-01T00:00:00.000Z',
-      updated_at:       '2026-06-01T00:00:00.000Z',
+      due_at: '2026-06-15',
+      created_at: '2026-06-01T00:00:00.000Z',
+      updated_at: '2026-06-01T00:00:00.000Z',
     });
 
     const result = await generateMonthlyInvoiceForTenant(pool, tenant, 2026, 6);
@@ -226,16 +232,16 @@ describe('generateMonthlyInvoiceForTenant', () => {
     const call = vi.mocked(repo.createInvoice).mock.calls[0];
     if (!call) throw new Error('createInvoice wurde nicht aufgerufen');
     const [, input] = call;
-    expect(input.amountBrutto).toBe(79.00);
+    expect(input.amountBrutto).toBe(79.0);
   });
 });
 
 describe('generateSetupFeeInvoice', () => {
   const pool = makePool();
   const tenant = {
-    id:                  'tenant-uuid-2',
-    display_name:        'Café Metropol',
-    package:             'solo',
+    id: 'tenant-uuid-2',
+    display_name: 'Café Metropol',
+    package: 'solo',
     contract_started_at: new Date('2026-06-01'),
   };
 
@@ -246,24 +252,24 @@ describe('generateSetupFeeInvoice', () => {
   beforeEach(() => {
     vi.mocked(repo.nextInvoiceNumber).mockResolvedValue('PP-2026-00002');
     vi.mocked(repo.createInvoice).mockResolvedValue({
-      id:               'setup-invoice-uuid',
-      tenant_id:        'tenant-uuid-2',
-      invoice_number:   'PP-2026-00002',
-      invoice_type:     'setup',
-      period_year:      null,
-      period_month:     null,
-      amount_netto:     251.26,
-      ust_rate:         0.19,
-      ust_amount:       47.74,
-      amount_brutto:    299.00,
-      pdf_path:         null,
-      status:           'gestellt',
-      paid_at:          null,
-      paid_amount:      null,
+      id: 'setup-invoice-uuid',
+      tenant_id: 'tenant-uuid-2',
+      invoice_number: 'PP-2026-00002',
+      invoice_type: 'setup',
+      period_year: null,
+      period_month: null,
+      amount_netto: 251.26,
+      ust_rate: 0.19,
+      ust_amount: 47.74,
+      amount_brutto: 299.0,
+      pdf_path: null,
+      status: 'gestellt',
+      paid_at: null,
+      paid_amount: null,
       reminder_sent_at: null,
-      due_at:           '2026-06-15',
-      created_at:       '2026-06-01T00:00:00.000Z',
-      updated_at:       '2026-06-01T00:00:00.000Z',
+      due_at: '2026-06-15',
+      created_at: '2026-06-01T00:00:00.000Z',
+      updated_at: '2026-06-01T00:00:00.000Z',
     });
   });
 
@@ -275,11 +281,11 @@ describe('generateSetupFeeInvoice', () => {
     expect(repo.createInvoice).toHaveBeenCalledWith(
       pool,
       expect.objectContaining({
-        tenantId:    'tenant-uuid-2',
+        tenantId: 'tenant-uuid-2',
         invoiceType: 'setup',
-        periodYear:  null,
+        periodYear: null,
         periodMonth: null,
-        amountBrutto: 299.00,
+        amountBrutto: 299.0,
       }),
     );
   });

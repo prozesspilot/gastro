@@ -56,23 +56,23 @@ export async function nextInvoiceNumber(pool: Pool, year: number): Promise<strin
   const { rows } = await pool.query<{ nextval: string }>(
     `SELECT nextval('invoices_number_seq') AS nextval`,
   );
-  const seq = parseInt(rows[0].nextval, 10);
+  const seq = Number.parseInt(rows[0].nextval, 10);
   return `PP-${year}-${String(seq).padStart(5, '0')}`;
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
 export interface CreateInvoiceInput {
-  tenantId:       string;
-  invoiceNumber:  string;
-  invoiceType:    'setup' | 'monthly';
-  periodYear?:    number | null;
-  periodMonth?:   number | null;
-  amountNetto:    number;   // in EUR
-  ustRate:        number;   // z. B. 0.19
-  ustAmount:      number;   // in EUR
-  amountBrutto:   number;   // in EUR
-  dueAt:          Date;
+  tenantId: string;
+  invoiceNumber: string;
+  invoiceType: 'setup' | 'monthly';
+  periodYear?: number | null;
+  periodMonth?: number | null;
+  amountNetto: number; // in EUR
+  ustRate: number; // z. B. 0.19
+  ustAmount: number; // in EUR
+  amountBrutto: number; // in EUR
+  dueAt: Date;
 }
 
 export async function createInvoice(
@@ -141,7 +141,7 @@ export async function listInvoices(
     `SELECT COUNT(*) AS count FROM invoices ${where}`,
     countParams,
   );
-  const total = parseInt(countRows[0].count, 10);
+  const total = Number.parseInt(countRows[0].count, 10);
 
   params.push(query.limit);
   params.push(query.offset);
@@ -158,14 +158,10 @@ export async function listInvoices(
 
 // ── Get by ID ─────────────────────────────────────────────────────────────────
 
-export async function findInvoiceById(
-  pool: Pool,
-  id: string,
-): Promise<InvoiceResponse | null> {
-  const { rows } = await pool.query<InvoiceRow>(
-    `SELECT * FROM invoices WHERE id = $1 LIMIT 1`,
-    [id],
-  );
+export async function findInvoiceById(pool: Pool, id: string): Promise<InvoiceResponse | null> {
+  const { rows } = await pool.query<InvoiceRow>('SELECT * FROM invoices WHERE id = $1 LIMIT 1', [
+    id,
+  ]);
   return rows.length > 0 ? rowToInvoiceResponse(rows[0]) : null;
 }
 
@@ -193,10 +189,7 @@ export async function markInvoicePaid(
 
 // ── Cancel (Storno) ───────────────────────────────────────────────────────────
 
-export async function cancelInvoice(
-  pool: Pool,
-  id: string,
-): Promise<InvoiceResponse | null> {
+export async function cancelInvoice(pool: Pool, id: string): Promise<InvoiceResponse | null> {
   const { rows } = await pool.query<InvoiceRow>(
     `UPDATE invoices
      SET status = 'storniert', updated_at = now()
@@ -213,10 +206,7 @@ export async function cancelInvoice(
  * Alle überfälligen Rechnungen die noch nicht bezahlt oder storniert sind.
  * Gibt nur die nötigsten Felder zurück (für Mahn-Cron).
  */
-export async function findOverdueInvoices(
-  pool: Pool,
-  asOfDate: Date,
-): Promise<InvoiceResponse[]> {
+export async function findOverdueInvoices(pool: Pool, asOfDate: Date): Promise<InvoiceResponse[]> {
   const { rows } = await pool.query<InvoiceRow>(
     `SELECT * FROM invoices
      WHERE status IN ('gestellt', 'gemahnt_1', 'gemahnt_2')

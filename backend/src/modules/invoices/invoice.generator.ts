@@ -15,35 +15,31 @@
 
 import type { Pool } from 'pg';
 import { logger } from '../../core/logger';
+import { createInvoice, findExistingMonthlyInvoice, nextInvoiceNumber } from './invoice.repository';
 import {
   PACKAGE_MONTHLY_PRICE_BRUTTO_CENT,
   PACKAGE_SETUP_FEE_BRUTTO_CENT,
   UST_RATE,
 } from './invoice.schema';
 import type { InvoiceResponse } from './invoice.schema';
-import {
-  createInvoice,
-  findExistingMonthlyInvoice,
-  nextInvoiceNumber,
-} from './invoice.repository';
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 
 export interface TenantForBilling {
-  id:                 string;
-  package:            string;
+  id: string;
+  package: string;
   contract_started_at: Date | null;
-  display_name:       string;
+  display_name: string;
 }
 
 export interface GeneratorResult {
-  tenantId:      string;
-  tenantName:    string;
-  invoiceId?:    string;
+  tenantId: string;
+  tenantName: string;
+  invoiceId?: string;
   invoiceNumber?: string;
-  skipped:       boolean;
-  skipReason?:   string;
-  error?:        string;
+  skipped: boolean;
+  skipReason?: string;
+  error?: string;
 }
 
 // ── Betrag-Berechnung ──────────────────────────────────────────────────────────
@@ -96,10 +92,10 @@ export async function generateMonthlyInvoiceForTenant(
   if (bruttoCent == null) {
     logger.warn(ctx, '[invoice-generator] Unbekanntes Paket — übersprungen');
     return {
-      tenantId:    tenant.id,
-      tenantName:  tenant.display_name,
-      skipped:     true,
-      skipReason:  `Unbekanntes Paket: ${tenant.package}`,
+      tenantId: tenant.id,
+      tenantName: tenant.display_name,
+      skipped: true,
+      skipReason: `Unbekanntes Paket: ${tenant.package}`,
     };
   }
 
@@ -107,12 +103,12 @@ export async function generateMonthlyInvoiceForTenant(
   const existing = await findExistingMonthlyInvoice(pool, tenant.id, year, month);
   if (existing) {
     return {
-      tenantId:      tenant.id,
-      tenantName:    tenant.display_name,
-      invoiceId:     existing.id,
+      tenantId: tenant.id,
+      tenantName: tenant.display_name,
+      invoiceId: existing.id,
       invoiceNumber: existing.invoice_number,
-      skipped:       true,
-      skipReason:    'Rechnung bereits vorhanden',
+      skipped: true,
+      skipReason: 'Rechnung bereits vorhanden',
     };
   }
 
@@ -124,13 +120,13 @@ export async function generateMonthlyInvoiceForTenant(
   let invoice: InvoiceResponse;
   try {
     invoice = await createInvoice(pool, {
-      tenantId:     tenant.id,
+      tenantId: tenant.id,
       invoiceNumber,
-      invoiceType:  'monthly',
-      periodYear:   year,
-      periodMonth:  month,
+      invoiceType: 'monthly',
+      periodYear: year,
+      periodMonth: month,
       amountNetto,
-      ustRate:      UST_RATE,
+      ustRate: UST_RATE,
       ustAmount,
       amountBrutto,
       dueAt,
@@ -139,10 +135,10 @@ export async function generateMonthlyInvoiceForTenant(
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ ...ctx, err: message }, '[invoice-generator] Fehler beim Erstellen');
     return {
-      tenantId:    tenant.id,
-      tenantName:  tenant.display_name,
-      skipped:     false,
-      error:       message,
+      tenantId: tenant.id,
+      tenantName: tenant.display_name,
+      skipped: false,
+      error: message,
     };
   }
 
@@ -152,11 +148,11 @@ export async function generateMonthlyInvoiceForTenant(
   );
 
   return {
-    tenantId:      tenant.id,
-    tenantName:    tenant.display_name,
-    invoiceId:     invoice.id,
+    tenantId: tenant.id,
+    tenantName: tenant.display_name,
+    invoiceId: invoice.id,
     invoiceNumber: invoice.invoice_number,
-    skipped:       false,
+    skipped: false,
   };
 }
 
@@ -196,13 +192,13 @@ export async function generateMonthlyInvoices(
   for (const tenant of rows) {
     // Nur Tenants abrechnen die in diesem oder einem früheren Monat gestartet haben
     if (tenant.contract_started_at) {
-      const startYear  = tenant.contract_started_at.getFullYear();
+      const startYear = tenant.contract_started_at.getFullYear();
       const startMonth = tenant.contract_started_at.getMonth() + 1;
       if (startYear > year || (startYear === year && startMonth > month)) {
         results.push({
-          tenantId:   tenant.id,
+          tenantId: tenant.id,
           tenantName: tenant.display_name,
-          skipped:    true,
+          skipped: true,
           skipReason: 'Vertrag startet nach dem Abrechnungsmonat',
         });
         continue;
@@ -213,9 +209,9 @@ export async function generateMonthlyInvoices(
     results.push(result);
   }
 
-  const created  = results.filter((r) => !r.skipped && !r.error).length;
-  const skipped  = results.filter((r) => r.skipped).length;
-  const errored  = results.filter((r) => r.error != null).length;
+  const created = results.filter((r) => !r.skipped && !r.error).length;
+  const skipped = results.filter((r) => r.skipped).length;
+  const errored = results.filter((r) => r.error != null).length;
 
   logger.info(
     { year, month, created, skipped, errored },
@@ -240,9 +236,9 @@ export async function generateSetupFeeInvoice(
   const bruttoCent = PACKAGE_SETUP_FEE_BRUTTO_CENT[tenant.package];
   if (bruttoCent == null) {
     return {
-      tenantId:   tenant.id,
+      tenantId: tenant.id,
       tenantName: tenant.display_name,
-      skipped:    true,
+      skipped: true,
       skipReason: `Unbekanntes Paket: ${tenant.package}`,
     };
   }
@@ -255,28 +251,25 @@ export async function generateSetupFeeInvoice(
   let invoice: InvoiceResponse;
   try {
     invoice = await createInvoice(pool, {
-      tenantId:    tenant.id,
+      tenantId: tenant.id,
       invoiceNumber,
       invoiceType: 'setup',
-      periodYear:  null,
+      periodYear: null,
       periodMonth: null,
       amountNetto,
-      ustRate:     UST_RATE,
+      ustRate: UST_RATE,
       ustAmount,
       amountBrutto,
       dueAt,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error(
-      { tenantId: tenant.id, err: message },
-      '[invoice-generator] Setup-Fee-Fehler',
-    );
+    logger.error({ tenantId: tenant.id, err: message }, '[invoice-generator] Setup-Fee-Fehler');
     return {
-      tenantId:   tenant.id,
+      tenantId: tenant.id,
       tenantName: tenant.display_name,
-      skipped:    false,
-      error:      message,
+      skipped: false,
+      error: message,
     };
   }
 
@@ -286,10 +279,10 @@ export async function generateSetupFeeInvoice(
   );
 
   return {
-    tenantId:      tenant.id,
-    tenantName:    tenant.display_name,
-    invoiceId:     invoice.id,
+    tenantId: tenant.id,
+    tenantName: tenant.display_name,
+    invoiceId: invoice.id,
     invoiceNumber: invoice.invoice_number,
-    skipped:       false,
+    skipped: false,
   };
 }

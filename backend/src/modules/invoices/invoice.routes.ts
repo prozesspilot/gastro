@@ -14,23 +14,19 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { generateMonthlyInvoices } from './invoice.generator';
 import {
   cancelInvoice,
   findInvoiceById,
   listInvoices,
   markInvoicePaid,
 } from './invoice.repository';
-import {
-  invoiceParamsSchema,
-  listInvoicesQuerySchema,
-  markPaidBodySchema,
-} from './invoice.schema';
-import { generateMonthlyInvoices } from './invoice.generator';
+import { invoiceParamsSchema, listInvoicesQuerySchema, markPaidBodySchema } from './invoice.schema';
 
 // ── Zod-Schema für manuellen Trigger ──────────────────────────────────────────
 
 const generateBodySchema = z.object({
-  year:  z.number().int().min(2020).max(2100),
+  year: z.number().int().min(2020).max(2100),
   month: z.number().int().min(1).max(12),
 });
 

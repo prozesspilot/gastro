@@ -38,3 +38,10 @@ prozesspilot.bak-*/
 
 # Claude Code lokale State-Daten (Agent-Memory)
 .claude/agent-memory/
+
+# Claude Code lokale Settings-Overrides (Permissions etc., maschinen-spezifisch)
+.claude/settings.local.json
+
+# Playwright-Test-Outputs (lokale Reports, nicht versionieren)
+webapp/playwright-report/
+webapp/test-results/

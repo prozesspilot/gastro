@@ -174,6 +174,47 @@
 - **Optional:** ENV `POS_CREDENTIALS_RETENTION_DAYS` (default 30) anpassen falls juristisch notwendig
 - **DSGVO-Doku:** Aufbewahrungsfrist von 30 Tagen fuer OAuth-Tokens nach Deaktivierung. Tokens fallen NICHT unter 10-Jahres-Pflicht (§ 147 AO), weil sie keine Geschaeftsdaten sind. Begruendung: nur Zugriffs-Credentials, keine Steuer-/Buchungs-Belege.
 
+### ⏳ Post-Merge Production-Schritte nach autonomem 2026-06-01-Lauf (PRs #83–#97)
+- **Priorität:** P0 (vor Pilot — sonst läuft Backend mit unvollständigem DB-Schema)
+- **Kontext:** Drei parallele Agents (Andreas, Steve, QA) haben 14 PRs eröffnet (alle CI-grün, Lauf-Log: `tasks/AUTONOMOUS_RUN_LOG.md`). Sobald Steve sie squash-mergt, müssen folgende Production-Schritte laufen:
+
+**Migrations (in dieser Reihenfolge, jeweils Backup vor jeder!):**
+  1. **Migration 120 — `tasks` + RLS** (PR #86, T024). Tabellen `tasks`, `task_collaborators`, `task_activity_log` mit RLS-Policies. Rollback: `120_tasks_rollback.sql`.
+  2. **Migration 121 — POS-Cron SECURITY DEFINER Functions** (PR #90, T022). Voraussetzung, bevor RLS auf `pos_credentials` aktiviert wird. Sonst Silent-Empty-Result in `listActiveSumUpTenants`/`purgeInactivePosCredentials`. Rollback: `121_pos_cron_security_definer_fns_rollback.sql`.
+  3. **Migration 122 — `invoices`** (PR #97, T035). Auto-Rechnungs-Generator (Pricing aus CLAUDE.md §1). Wenn PR #97 vor #86 gemergt wird, ist die Reihenfolge tauschbar — Konfliktfrei, weil unterschiedliche Tabellen. Rollback: `122_invoices_rollback.sql`.
+  4. Verifizieren: `SELECT version FROM schema_migrations WHERE version IN ('120','121','122')` → 3 Zeilen.
+  5. Hinweis: Auto-Deploy-Pipeline (`migrate:prod`) sollte das alles automatisch tun. Manuell nur, wenn das Image älter ist.
+
+**Cron-Jobs für T035 (Auto-Rechnung):**
+  - Monatlicher Cron `gastro-invoices-monthly.timer` einrichten, der `node dist/cron/invoices-monthly.js` zum Monatsende ausführt. Analog `gastro-sumup-sync.timer` aufbauen. (Cron-Script ist in PR #97 enthalten — Dateinamen prüfen.)
+  - Idempotenz ist eingebaut (UNIQUE-Constraint auf `(tenant_id, period_year, period_month)`), zweite Ausführung erzeugt keine Duplikate.
+
+**Discord-Bot-Service (T031, PR #88):**
+  - **Pilot-Scope:** nur Webhook-basierte Notifications (`DISCORD_OPS_WEBHOOK_URL` + `DISCORD_DEV_WEBHOOK_URL`). Kein OAuth-Bot, kein Customer-Bridge — das ist Phase-2.
+  - **Production-ENV:** `DISCORD_OPS_WEBHOOK_URL` für #ops-alerts (failed Tasks, failed Crons), `DISCORD_DEV_WEBHOOK_URL` für #dev (Task-Start/Finish/Review).
+  - **Optional:** wenn ihr den Customer-Bridge-Bot später aktiviert, braucht ihr `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_ROLE_ID_GF` — bereits dokumentiert oben unter „Discord-App registrieren".
+
+**Lexware-Export-Adapter T009 + Integrationstests T023:**
+  - Setup-Hinweise unter „Lexware-Office API-Token von Steuerberaterin besorgen" weiter unten unverändert relevant.
+  - T023 (PR #95) bringt nur Tests — keine Production-Schritte.
+
+**M03 Event-Decoupling (T021, PR #94):**
+  - **Pre-Pilot:** Feature-Flag `ENABLE_EVENT_DRIVEN_M03` auf `false` lassen (Default), Inline-Call bleibt aktiv. Erst aktivieren, wenn Multi-Tenant mit Module-Toggle nötig.
+  - **Worker-Process:** Wenn aktiviert, `node dist/workers/bewirtung-detector-worker.js` als systemd-Service betreiben (analog OCR-Worker). Bis dahin nicht nötig.
+
+**API-Snake-Case (T033, PR #96):**
+  - **Wire-Breaking-Change:** `webapp` ruft jetzt `upload_url` statt `uploadUrl` ab. Webapp und Backend müssen zusammen deployt werden, sonst kurz Schema-Mismatch.
+  - **Smoke-Test nach Deploy:** Beleg-Upload via Webapp testen — wenn Upload-URL leer ist, ist die Webapp noch nicht durch.
+
+**E2E + Wizard (T020, T016 — Steve-PRs #85, #87):**
+  - Reine Frontend-Änderungen. Auto-Deploy der Webapp greift.
+  - Wizard ist noch Skeleton: `setup.prozesspilot.net` zeigt 3-Schritt-UI, aber Backend-Endpunkte `POST /api/wizard/{token}/*` existieren noch nicht (Folge-Task). Pilot startet nicht über den Wizard, sondern via Bootstrap-Admin-Skript für Almaz.
+
+**Smoke-Test-Suite (QA, PR #92):**
+  - Neues Skript `scripts/qa-smoke.sh` testet Health/Auth/Belege/Tenants nach Deploy. Lokal: `PP_AUTH_DISABLED=1 bash scripts/qa-smoke.sh`. Production: dieselbe Sequenz gegen `api.prozesspilot.net`.
+
+---
+
 ### ✅ Migration 090 — Soft-Delete für Belege (T015)
 - **Status:** Wird automatisch durch Auto-Deploy-Pipeline angewendet (`migrate:prod` in `deploy-staging.yml`, seit T012)
 - **Was:** `belege` bekommt `deleted_at TIMESTAMPTZ` für Soft-Delete (GoBD-konform)

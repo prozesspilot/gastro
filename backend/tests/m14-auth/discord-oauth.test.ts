@@ -11,15 +11,20 @@
  *
  * Mocking-Strategie:
  *   - discord.service.ts-Funktionen werden via vi.mock vollständig gemockt.
- *   - Redis wird über die Fastify-Instanz genutzt (ioredis MemoryMock via vi.mock).
+ *   - Redis wird als Map-basierter In-Memory-Mock implementiert (kein echter Redis).
  *   - DB (pg Pool) wird gemockt — kein echter DB-Zugriff nötig.
+ *   - Fastify wird isoliert gebaut (nicht buildApp()) um externe Abhängigkeiten zu vermeiden.
  *
- * DECISION: Wir mocken Discord-API und DB komplett, weil die Tests
- * in CI ohne externe Services laufen müssen.
+ * DECISION: Wir bauen eine isolierte Fastify-Instanz statt buildApp() zu nutzen,
+ * analog zu sumup-oauth.test.ts. Das verhindert Timeouts durch fehlenden Redis-Server
+ * in CI/lokal ohne laufende Infrastruktur.
  */
 
-import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import fastifyCookie from '@fastify/cookie';
+import Fastify from 'fastify';
+import type Redis from 'ioredis';
+import type { Pool } from 'pg';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Discord-Service-Mock ────────────────────────────────────────────────────
 vi.mock('../../src/modules/m14-auth/discord.service', () => ({
@@ -49,8 +54,8 @@ vi.mock('../../src/modules/m14-auth/users.repository', () => ({
   logAuthEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { buildApp } from '../../src/app';
 // Nach den mocks importieren
+import { discordAuthRoutes } from '../../src/modules/m14-auth/auth.routes';
 import {
   type DiscordApiError as DiscordApiErrorType,
   checkGuildMembership,
@@ -101,26 +106,73 @@ const MOCK_DB_USER = {
   preferences: {},
 };
 
-// ── Setup ───────────────────────────────────────────────────────────────────
+// ── In-Memory-Redis-Mock ────────────────────────────────────────────────────
 
-let app: FastifyInstance;
-
-// Hilfsfunktion: State in Redis setzen (simuliert /login-Aufruf)
-async function setValidStateInRedis(state: string): Promise<void> {
-  await app.redis.set(`discord:oauth:state:${state}`, '1', 'EX', 300);
+/**
+ * Erstellt einen Map-basierten Redis-Mock der die im discord-oauth-Flow
+ * benötigten Commands implementiert: set, get, getdel, disconnect.
+ * Kein echter Redis-Server erforderlich.
+ */
+function createMockRedis(): InstanceType<typeof Redis> {
+  const store = new Map<string, string>();
+  return {
+    set: vi.fn(async (key: string, value: string) => {
+      store.set(key, value);
+      return 'OK';
+    }),
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    getdel: vi.fn(async (key: string) => {
+      const val = store.get(key) ?? null;
+      store.delete(key);
+      return val;
+    }),
+    disconnect: vi.fn(),
+    // Expose store for test assertions
+    _store: store,
+  } as unknown as InstanceType<typeof Redis>;
 }
 
-beforeAll(async () => {
-  app = await buildApp();
+// ── Isolierter App-Builder ──────────────────────────────────────────────────
+
+async function buildTestApp() {
+  const app = Fastify({ logger: false });
+
+  // Mock-DB (pg Pool) — alle Queries erfolgreich
+  const mockPool = {
+    query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
+  } as unknown as Pool;
+
+  // Mock-Redis (Map-basiert, kein echter Redis-Server nötig)
+  const mockRedis = createMockRedis();
+
+  app.decorate('db', mockPool);
+  app.decorate('redis', mockRedis);
+
+  await app.register(fastifyCookie);
+  await app.register(discordAuthRoutes, { prefix: '/api/v1' });
+
   await app.ready();
-});
+  return { app, mockPool, mockRedis };
+}
 
-afterAll(async () => {
-  await app.close();
-});
+// ── Hilfsfunktion: State in Redis-Mock setzen ───────────────────────────────
 
-beforeEach(() => {
-  // Mocks zurücksetzen (Calls-Counter, etc.)
+async function setValidStateInRedis(
+  mockRedis: InstanceType<typeof Redis>,
+  state: string,
+): Promise<void> {
+  // Direkt in den internen Store schreiben (umgeht vi.fn-Tracking)
+  (mockRedis as unknown as { _store: Map<string, string> })._store.set(
+    `discord:oauth:state:${state}`,
+    '1',
+  );
+}
+
+// ── Setup ───────────────────────────────────────────────────────────────────
+
+let testEnv: Awaited<ReturnType<typeof buildTestApp>>;
+
+beforeEach(async () => {
   vi.clearAllMocks();
 
   // Standard-Mocks wiederherstellen
@@ -129,12 +181,20 @@ beforeEach(() => {
   vi.mocked(checkGuildMembership).mockResolvedValue(MOCK_GUILD_MEMBER);
   vi.mocked(mapDiscordRoleToInternalRole).mockReturnValue('mitarbeiter');
   vi.mocked(upsertDiscordUser).mockResolvedValue(MOCK_DB_USER);
+
+  // Frische App-Instanz pro Test (isolierter Redis-Store)
+  testEnv = await buildTestApp();
+});
+
+afterEach(async () => {
+  await testEnv.app.close();
 });
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe('GET /api/v1/auth/discord/login', () => {
   it('gibt 302-Redirect zu discord.com zurück', async () => {
+    const { app } = testEnv;
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/login',
@@ -147,6 +207,7 @@ describe('GET /api/v1/auth/discord/login', () => {
   });
 
   it('enthält state-Parameter in der Location-URL', async () => {
+    const { app } = testEnv;
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/login',
@@ -154,13 +215,13 @@ describe('GET /api/v1/auth/discord/login', () => {
 
     const location = res.headers.location as string;
     expect(location).toContain('state=');
-    // State sollte nicht leer sein
     const stateMatch = location.match(/state=([^&]+)/);
     expect(stateMatch).not.toBeNull();
     expect((stateMatch?.[1] ?? '').length).toBeGreaterThan(10);
   });
 
   it('speichert den State in Redis', async () => {
+    const { app, mockRedis } = testEnv;
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/login',
@@ -170,16 +231,16 @@ describe('GET /api/v1/auth/discord/login', () => {
     const stateMatch = location.match(/state=([^&]+)/);
     const state = stateMatch?.[1] ?? '';
 
-    // State sollte in Redis vorhanden sein
-    const stored = await app.redis.get(`discord:oauth:state:${state}`);
-    expect(stored).toBe('1');
+    // set() sollte mit dem State-Key aufgerufen worden sein
+    expect(mockRedis.set).toHaveBeenCalledWith(`discord:oauth:state:${state}`, '1', 'EX', 300);
   });
 });
 
 describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
   it('gibt 302-Redirect zurück und setzt pp_auth-Cookie', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'valid-test-state-abc123';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
@@ -188,7 +249,6 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
 
     expect(res.statusCode).toBe(302);
 
-    // Cookie prüfen
     const cookieHeader = res.headers['set-cookie'];
     expect(cookieHeader).toBeDefined();
     const cookieStr = Array.isArray(cookieHeader) ? cookieHeader.join('; ') : (cookieHeader ?? '');
@@ -200,36 +260,38 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
   });
 
   it('löscht State aus Redis nach Verwendung (einmalig-use)', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'one-time-state-xyz789';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     await app.inject({
       method: 'GET',
       url: `/api/v1/auth/discord/callback?code=valid-code&state=${state}`,
     });
 
-    // State sollte nach Callback gelöscht sein
-    const stored = await app.redis.get(`discord:oauth:state:${state}`);
-    expect(stored).toBeNull();
+    // getdel() wurde aufgerufen (atomar: GET + DELETE)
+    expect(mockRedis.getdel).toHaveBeenCalledWith(`discord:oauth:state:${state}`);
+    // State sollte aus dem Store gelöscht sein
+    const store = (mockRedis as unknown as { _store: Map<string, string> })._store;
+    expect(store.has(`discord:oauth:state:${state}`)).toBe(false);
   });
 
   it('JWT-Token im Cookie enthält korrekte Claims', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'jwt-claims-test-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
       url: `/api/v1/auth/discord/callback?code=valid-code&state=${state}`,
     });
 
-    // Cookie-Token extrahieren
     const cookieHeader = res.headers['set-cookie'];
     const cookieStr = Array.isArray(cookieHeader) ? cookieHeader[0] : (cookieHeader ?? '');
     const tokenMatch = cookieStr.match(/pp_auth=([^;]+)/);
     expect(tokenMatch).not.toBeNull();
     const token = tokenMatch?.[1] ?? '';
 
-    // Token verifizieren und Claims prüfen
     const result = verifyM14Token(token);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -242,8 +304,9 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
   });
 
   it('redirectet zu / als Standard-Ziel', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'redirect-default-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
@@ -254,8 +317,9 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
   });
 
   it('redirectet zu sicherer relativer URL wenn redirect-Param gesetzt', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'redirect-custom-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
@@ -266,8 +330,9 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
   });
 
   it('ignoriert unsichere absolute Redirect-URLs (verhindert Open-Redirect)', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'redirect-unsafe-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
@@ -281,18 +346,20 @@ describe('GET /api/v1/auth/discord/callback — gültiger Flow', () => {
 
 describe('GET /api/v1/auth/discord/callback — ungültiger State', () => {
   it('gibt 400 zurück bei unbekanntem State', async () => {
+    const { app } = testEnv;
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/callback?code=some-code&state=unknown-state',
     });
 
     expect(res.statusCode).toBe(400);
-    const body = res.json();
+    const body = res.json() as { error: string };
     expect(body.error).toBe('invalid_state');
   });
 
   it('gibt 400 zurück bei abgelaufenem State', async () => {
-    // Abgelaufener State: nicht in Redis gesetzt (simuliert TTL-Ablauf)
+    const { app } = testEnv;
+    // Abgelaufener State: nicht in Mock-Redis gesetzt (simuliert TTL-Ablauf)
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/callback?code=some-code&state=expired-state-12345',
@@ -302,8 +369,9 @@ describe('GET /api/v1/auth/discord/callback — ungültiger State', () => {
   });
 
   it('gibt 400 zurück wenn code fehlt', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'missing-code-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const res = await app.inject({
       method: 'GET',
@@ -311,18 +379,19 @@ describe('GET /api/v1/auth/discord/callback — ungültiger State', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    const body = res.json();
+    const body = res.json() as { error: string };
     expect(body.error).toBe('missing_params');
   });
 
   it('gibt 400 zurück bei Discord-error-Param', async () => {
+    const { app } = testEnv;
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/discord/callback?error=access_denied&error_description=User+denied+access',
     });
 
     expect(res.statusCode).toBe(400);
-    const body = res.json();
+    const body = res.json() as { error: string; message: string };
     expect(body.error).toBe('access_denied');
     expect(body.message).toContain('denied');
   });
@@ -330,8 +399,9 @@ describe('GET /api/v1/auth/discord/callback — ungültiger State', () => {
 
 describe('GET /api/v1/auth/discord/callback — User nicht im Guild', () => {
   it('gibt 403 mit not_in_guild zurück', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'not-in-guild-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     // checkGuildMembership gibt null zurück (nicht im Guild)
     vi.mocked(checkGuildMembership).mockResolvedValueOnce(null);
@@ -342,7 +412,7 @@ describe('GET /api/v1/auth/discord/callback — User nicht im Guild', () => {
     });
 
     expect(res.statusCode).toBe(403);
-    const body = res.json();
+    const body = res.json() as { error: string; message: string };
     expect(body.error).toBe('not_in_guild');
     expect(body.message).toContain('ProzessPilot-Team-Server');
   });
@@ -350,8 +420,9 @@ describe('GET /api/v1/auth/discord/callback — User nicht im Guild', () => {
 
 describe('GET /api/v1/auth/discord/callback — Discord-API-Fehler', () => {
   it('gibt 502 zurück wenn Token-Exchange fehlschlägt', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'token-error-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     // DiscordApiError importieren (gemockte Klasse)
     const { DiscordApiError } = await import('../../src/modules/m14-auth/discord.service');
@@ -365,13 +436,14 @@ describe('GET /api/v1/auth/discord/callback — Discord-API-Fehler', () => {
     });
 
     expect(res.statusCode).toBe(502);
-    const body = res.json();
+    const body = res.json() as { error: string };
     expect(body.error).toBe('discord_error');
   });
 
   it('gibt 502 zurück wenn User-Info-Abruf fehlschlägt', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'user-info-error-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const { DiscordApiError } = await import('../../src/modules/m14-auth/discord.service');
     vi.mocked(fetchDiscordUser).mockRejectedValueOnce(
@@ -387,8 +459,9 @@ describe('GET /api/v1/auth/discord/callback — Discord-API-Fehler', () => {
   });
 
   it('gibt 502 zurück wenn Guild-Check fehlschlägt', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'guild-error-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     const { DiscordApiError } = await import('../../src/modules/m14-auth/discord.service');
     vi.mocked(checkGuildMembership).mockRejectedValueOnce(
@@ -406,8 +479,9 @@ describe('GET /api/v1/auth/discord/callback — Discord-API-Fehler', () => {
 
 describe('GET /api/v1/auth/discord/callback — Account deaktiviert', () => {
   it('gibt 403 mit account_disabled zurück', async () => {
+    const { app, mockRedis } = testEnv;
     const state = 'disabled-account-state';
-    await setValidStateInRedis(state);
+    await setValidStateInRedis(mockRedis, state);
 
     // User ist inaktiv
     vi.mocked(upsertDiscordUser).mockResolvedValueOnce({
@@ -421,7 +495,7 @@ describe('GET /api/v1/auth/discord/callback — Account deaktiviert', () => {
     });
 
     expect(res.statusCode).toBe(403);
-    const body = res.json();
+    const body = res.json() as { error: string };
     expect(body.error).toBe('account_disabled');
   });
 });
@@ -473,10 +547,6 @@ describe('verifyM14Token — JWT-Validierung', () => {
   });
 
   it('lehnt einen abgelaufenen Token ab', async () => {
-    // Baut einen Token dessen exp in der Vergangenheit liegt.
-    // WICHTIG: Secret muss identisch mit verifyM14Token sein.
-    // verifyM14Token nutzt config.JWT_SECRET wenn >= 32 Zeichen, sonst Dev-Fallback.
-    // Wir importieren config direkt, damit Test und Impl dasselbe Secret nutzen.
     const { config } = await import('../../src/core/config');
     const jwtLib = await import('jsonwebtoken');
     const secret =

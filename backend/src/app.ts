@@ -53,6 +53,7 @@ import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
 import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
+import { invoiceRoutes } from './modules/invoices/invoice.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
@@ -314,6 +315,8 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(statsRoutes, { prefix: '/customers' });
       // M06 Steuerberater-Portal (GET/POST /advisor/...)
       await apiApp.register(m06AdvisorPortalRoutes, { prefix: '/advisor' });
+      // T035 — Rechnungs-Verwaltung + Auto-Rechnungs-Generator
+      await apiApp.register(invoiceRoutes, { prefix: '/invoices' });
       // Plugin-System (POST/GET/PUT/DELETE /plugins/...)
       await apiApp.register(pluginSystemRoutes, { prefix: '/plugins' });
       // DSGVO-Compliance (POST/GET /dsgvo/...)

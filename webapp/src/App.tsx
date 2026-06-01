@@ -20,6 +20,7 @@ import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import UsersPage from './pages/UsersPage';
 import NotFoundPage from './pages/NotFoundPage';
+import OnboardingWizardPage from './pages/setup/OnboardingWizardPage';
 import Layout from './components/Layout';
 import OnboardingModal from './components/OnboardingModal';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -35,6 +36,12 @@ export default function App() {
           <Routes>
             {/* Öffentliche Route — kein Auth erforderlich */}
             <Route path="/login" element={<LoginPage />} />
+            {/* T016 — Onboarding-Wizard für neue Wirte (öffentlich, kein Auth) */}
+            {/* Spec: Onboarding_Wizard.md — setup.prozesspilot.net / Sub-Route */}
+            <Route path="/setup" element={<OnboardingWizardPage />} />
+            <Route path="/setup/step-2" element={<OnboardingWizardPage />} />
+            <Route path="/setup/step-3" element={<OnboardingWizardPage />} />
+            <Route path="/setup/done" element={<OnboardingWizardPage />} />
             {/* Eingeloggt, aber Forced-Change-Password */}
             <Route
               path="/change-password"

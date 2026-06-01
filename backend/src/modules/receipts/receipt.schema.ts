@@ -155,9 +155,11 @@ export interface ReceiptRow {
 }
 
 // ── Upload URL Response ────────────────────────────────────────────────────
+// T033: upload_url (snake_case) — wire-facing JSON-Feld korrigiert.
+// War: uploadUrl (camelCase). Wird noch nicht aktiv genutzt (Route TBD).
 
 export const uploadUrlResponseSchema = z.object({
-  uploadUrl: z.string().url(),
+  upload_url: z.string().url(),
   key: z.string(),
 });
 

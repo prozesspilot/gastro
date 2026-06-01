@@ -95,6 +95,11 @@ const LIST_COLUMNS = [
 ].join(', ');
 
 // ── Zod-Schema für InsertBelegInput (M2) ──────────────────────────────────
+// T033 DECISION: camelCase hier ist BEWUSSTE Ausnahme — dieses Schema ist eine
+// interne TypeScript-Grenze zwischen upload.handler.ts und beleg.repository.ts,
+// nicht wire-facing. JSON-Felder die extern sichtbar sind (API-Responses) nutzen
+// immer snake_case (CLAUDE.md §6.2). Interne TS-Funktionsparameter sind davon
+// ausgenommen.
 
 const InsertBelegInputSchema = z.object({
   tenantId: z.string().uuid({ message: 'tenantId muss eine gültige UUID sein' }),

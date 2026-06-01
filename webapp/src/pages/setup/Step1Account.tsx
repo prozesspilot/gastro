@@ -33,11 +33,15 @@ function validateStep1(data: Partial<Step1Data>): string | null {
 
 // ── Stub: TOTP-Secret generieren ───────────────────────────────────────────────
 // DECISION: Im echten Flow kommt das Secret vom Backend (POST /api/wizard/{token}/totp/setup).
-// Für das Skeleton wird es client-seitig als Placeholder generiert.
+// Für das Skeleton wird es client-seitig als Placeholder generiert. CSPRNG
+// (crypto.getRandomValues), damit CodeQL-„insecure-randomness"-Warnung wegfällt
+// und das Stub-Secret keinem späteren Copy-Paste-Bug zum Opfer fällt.
 
 function generateStubTotpSecret(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
 function buildOtpauthUri(secret: string, email: string): string {

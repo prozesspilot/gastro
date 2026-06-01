@@ -32,16 +32,16 @@ const SESSION_USER = {
 /**
  * Stubt das M14-Backend per page.route().
  *
- * __ppLoggedIn-Flag im window-Scope steuert ob /session 200 oder 401 liefert.
- * Erst nach erfolgreichem POST /notfall/login wird das Flag auf true gesetzt.
- * Damit verhindert die LoginPage keinen initialen Redirect (user-useEffect).
+ * Session-State liegt im Closure (nicht auf window), damit Navigation nach
+ * Login (page.goto('/upload') etc.) den Flag nicht über addInitScript
+ * zurücksetzt. Erst nach erfolgreichem POST /notfall/login liefert /session 200.
  */
 async function stubAuth(page: import('@playwright/test').Page, opts: {
   loginFails?: boolean;
 } = {}) {
-  await page.addInitScript(() => {
-    (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
-  });
+  // Session-State im Closure, NICHT auf window — sonst setzt addInitScript ihn
+  // bei jeder Navigation (page.goto nach Login) wieder auf false.
+  let loggedIn = false;
 
   await page.route('**/api/v1/auth/notfall/login', async (route) => {
     if (opts.loginFails) {
@@ -51,9 +51,7 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
         body: JSON.stringify({ error: 'invalid_credentials', message: 'fail' }),
       });
     }
-    await page.evaluate(() => {
-      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = true;
-    });
+    loggedIn = true;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -63,9 +61,6 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
   });
 
   await page.route('**/api/v1/auth/session', async (route) => {
-    const loggedIn = await page.evaluate(
-      () => (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn === true,
-    );
     if (!loggedIn) {
       return route.fulfill({
         status: 401,
@@ -89,9 +84,7 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
   );
 
   await page.route('**/api/v1/auth/logout', async (route) => {
-    await page.evaluate(() => {
-      (globalThis as { __ppLoggedIn?: boolean }).__ppLoggedIn = false;
-    });
+    loggedIn = false;
     return route.fulfill({
       status: 200,
       contentType: 'application/json',

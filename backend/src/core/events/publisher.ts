@@ -17,6 +17,7 @@ import {
   type CustomerEvent,
   type CustomerEventPayload,
   type CustomerEventType,
+  type ReceiptExtractedPayload,
   STREAMS,
 } from './types';
 
@@ -71,5 +72,28 @@ export async function publishCustomerEvent(
     tenant_id: event.tenant_id,
     timestamp: event.timestamp,
     payload: JSON.stringify(event.payload),
+  });
+}
+
+// ── Receipt-Domain-Publisher (T021) ──────────────────────────────────────────
+
+/**
+ * Publishes 'gastro.receipt.extracted' auf dem gastro:receipts-Stream.
+ * Best-effort — wirft keinen Fehler.
+ *
+ * WICHTIG: raw_text ist OCR-Text und kann Betrags-/Lieferanten-Infos enthalten.
+ * NIEMALS zusaetzliche PII (Name des Bewirters, Anlass etc.) in den Event-Payload.
+ * Der Consumer liest raw_text NUR fuer Bewirtungs-Detection (pure function, kein
+ * Logging des raw_text ausserhalb des Consumer-Handlers).
+ */
+export async function publishReceiptExtractedEvent(
+  redis: Redis,
+  payload: ReceiptExtractedPayload,
+): Promise<void> {
+  await publishEvent(redis, STREAMS.receipts, {
+    type: 'gastro.receipt.extracted',
+    tenant_id: payload.tenant_id,
+    timestamp: new Date().toISOString(),
+    payload: JSON.stringify(payload),
   });
 }

@@ -185,6 +185,19 @@ const envSchema = z.object({
   // Discord-Rollen-ID für die Geschäftsführer-Rolle im Server.
   // Mitglieder mit dieser Rolle erhalten die interne Rolle 'geschaeftsfuehrer'.
   DISCORD_ROLE_ID_GF: z.string().default(''),
+
+  // T021 — Feature-Flag: M03-Bewirtungs-Detector via Redis-Stream-Event entkoppeln.
+  // 0 (default): M01-OCR ruft analyzeBewirtung direkt inline auf (T008-Verhalten, Pilot).
+  // 1: M01-OCR publisht gastro.receipt.extracted; bewirtung-detector-worker konsumiert.
+  ENABLE_EVENT_DRIVEN_M03: z
+    .string()
+    .transform((v) => v === '1')
+    .default('0'),
+
+  // T031 — Discord-Webhook-URLs fuer Notifications (optional, leer = deaktiviert).
+  DISCORD_WEBHOOK_ALERTS: z.string().default(''),
+  DISCORD_WEBHOOK_TASKS: z.string().default(''),
+  DISCORD_WEBHOOK_DEPLOY: z.string().default(''),
 });
 
 export type Config = z.infer<typeof envSchema>;

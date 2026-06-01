@@ -20,11 +20,13 @@
  */
 
 import { GetObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
 import type { OcrAdapter, OcrResult } from '../../../core/adapters/ocr/adapter.interface';
 import { adapterFactory } from '../../../core/adapters/ocr/factory';
 import { config } from '../../../core/config';
+import { publishReceiptExtractedEvent } from '../../../core/events/publisher';
 import { logger } from '../../../core/logger';
 import {
   BEWIRTUNG_REVIEW_THRESHOLD,
@@ -43,6 +45,8 @@ import { extractLightFields } from './ocr-field-extractor';
 export interface OcrServiceDeps {
   s3?: S3Client;
   ocrAdapter?: OcrAdapter;
+  /** Optional: Redis-Client fuer Event-Publishing (T021, ENABLE_EVENT_DRIVEN_M03) */
+  redis?: Redis;
 }
 
 export interface ProcessBelegResult {
@@ -187,14 +191,6 @@ export async function processBeleg(
   // 7. Felder extrahieren
   const light = extractLightFields(ocr.raw_text);
 
-  // 7b. T008/M03: Bewirtungs-Detection-Hook nach OCR + Field-Extraction.
-  //     Pure-Function-Call, kein I/O — Ergebnis landet in payload.bewirtung,
-  //     bei is_bewirtung=true setzen wir zusaetzlich category='bewirtung'.
-  const bewirtung = analyzeBewirtung({
-    rawText: ocr.raw_text,
-    supplierName: light.fields.supplier_name ?? null,
-  });
-
   // 8. Gesamt-Konfidenz: gewichtetes Mittel aus OCR-Konfidenz und Feld-Konfidenz.
   //    Beide gehen 50/50 ein.
   const overallConfidence = (ocr.confidence + light.overall_confidence) / 2;
@@ -238,70 +234,125 @@ export async function processBeleg(
   let newStatus: 'extracted' | 'requires_review' =
     isValid && overallConfidence >= CONFIDENCE_THRESHOLD ? 'extracted' : 'requires_review';
 
-  // T008: Bewirtungs-Detection → wenn match aber Konfidenz <0.7, zwinge
-  // requires_review (Mitarbeiter muss Anlass/Teilnehmer bestaetigen vor
-  // SKR04-Splitting). Pflichtfeld-Check + Buchungs-Splitting kommt in M03 Phase 2.
-  if (bewirtung.is_bewirtung) {
-    issues.push({
-      code: 'BEWIRTUNG_DETECTED',
-      field: 'category',
-      message: `Bewirtungs-Beleg erkannt (Konfidenz ${bewirtung.confidence.toFixed(2)}). Anlass + Teilnehmer als Pflichtfelder eintragen.`,
-    });
-    if (bewirtung.confidence < BEWIRTUNG_REVIEW_THRESHOLD) {
-      newStatus = 'requires_review';
-    }
-  }
-
-  // T008: Optionale Category-Override — nur wenn noch keine gesetzt war.
-  // Wenn ein User die category schon explizit gesetzt hat (zukuenftiges
-  // Reprocess-Szenario), ueberschreiben wir nichts.
-  const categoryForDenorm =
-    bewirtung.is_bewirtung && !beleg.category ? 'bewirtung' : beleg.category;
-
-  // 10. Persistieren
-  await updateBelegOcrResult(pool, tenantId, belegId, {
-    newStatus,
-    extraction: {
-      engine: ocrAdapter.id,
-      engine_version: ocrAdapter.version,
-      confidence: overallConfidence,
-      raw_text: ocr.raw_text,
-      fields: {
-        ...light.fields,
-        fields_confidence: light.confidence_per_field,
-        ocr_confidence: ocr.confidence,
-        ...(bewirtung.trinkgeld_cents !== null
-          ? { trinkgeld_cents: bewirtung.trinkgeld_cents }
-          : {}),
+  // T021 — Feature-Flag: ENABLE_EVENT_DRIVEN_M03
+  // Wenn aktiv: Bewirtungs-Detection wird vom Worker uebernommen (nach Event).
+  // Wenn inaktiv (Default, Pilot): direkter Inline-Call wie bisher (T008).
+  if (config.ENABLE_EVENT_DRIVEN_M03) {
+    // ── Event-Driven-Pfad (T021) ──────────────────────────────────────────
+    // Ohne Bewirtungs-Detection persistieren — Worker macht das asynchron.
+    await updateBelegOcrResult(pool, tenantId, belegId, {
+      newStatus,
+      extraction: {
+        engine: ocrAdapter.id,
+        engine_version: ocrAdapter.version,
+        confidence: overallConfidence,
+        raw_text: ocr.raw_text,
+        fields: {
+          ...light.fields,
+          fields_confidence: light.confidence_per_field,
+          ocr_confidence: ocr.confidence,
+        },
+        warnings: [],
       },
-      // T008-Review-Fix: warning nur bei Bewirtungs-Belegen. Sonst leakte das
-      // false-positive Splitting-Warning auch in non-Bewirtungs-Belege (Metro
-      // mit "7%" + "19%" im Volltext → splitting_required=true, aber kein
-      // Bewirtungs-Kontext, kein SKR04-Splitting noetig).
-      warnings:
-        bewirtung.is_bewirtung && bewirtung.tax_split.splitting_required
-          ? ['tax_split_required:7_19']
-          : [],
-    },
-    validation: { is_valid: isValid, issues, checks },
-    denormalized: {
-      supplier_name: light.fields.supplier_name ?? null,
-      document_date: light.fields.document_date ?? null,
-      total_gross: light.fields.total_gross ?? null,
-      currency: light.fields.currency ?? null,
-      category: categoryForDenorm,
-    },
-    audit: { actorType: 'system', actorId: 'module:M01-OCR' },
-    bewirtung: bewirtung.is_bewirtung
-      ? {
-          confidence: bewirtung.confidence,
-          indicators: bewirtung.indicators,
-          tax_split: bewirtung.tax_split,
-          trinkgeld_cents: bewirtung.trinkgeld_cents,
-          matched_positions: bewirtung.matched_positions,
-        }
-      : undefined,
-  });
+      validation: { is_valid: isValid, issues, checks },
+      denormalized: {
+        supplier_name: light.fields.supplier_name ?? null,
+        document_date: light.fields.document_date ?? null,
+        total_gross: light.fields.total_gross ?? null,
+        currency: light.fields.currency ?? null,
+        category: beleg.category,
+      },
+      audit: { actorType: 'system', actorId: 'module:M01-OCR' },
+    });
+
+    // Publish Event → M03-Worker konsumiert, detektiert Bewirtung, updated Beleg
+    if (deps.redis) {
+      await publishReceiptExtractedEvent(deps.redis, {
+        beleg_id: belegId,
+        tenant_id: tenantId,
+        raw_text: ocr.raw_text,
+        supplier_name: light.fields.supplier_name ?? null,
+      });
+      logger.info(
+        { belegId, tenantId },
+        '[m01-ocr] gastro.receipt.extracted Event gepublisht (M03-Worker uebernimmt)',
+      );
+    } else {
+      logger.warn(
+        { belegId },
+        '[m01-ocr] ENABLE_EVENT_DRIVEN_M03=1 aber kein Redis — Bewirtungs-Detection uebersprungen',
+      );
+    }
+  } else {
+    // ── Inline-Pfad (T008, Default, Pilot-Modus) ──────────────────────────
+    // T008/M03: Bewirtungs-Detection-Hook nach OCR + Field-Extraction.
+    //     Pure-Function-Call, kein I/O — Ergebnis landet in payload.bewirtung,
+    //     bei is_bewirtung=true setzen wir zusaetzlich category='bewirtung'.
+    const bewirtung = analyzeBewirtung({
+      rawText: ocr.raw_text,
+      supplierName: light.fields.supplier_name ?? null,
+    });
+
+    // T008: Bewirtungs-Detection → wenn match aber Konfidenz <0.7, zwinge
+    // requires_review (Mitarbeiter muss Anlass/Teilnehmer bestaetigen vor
+    // SKR04-Splitting). Pflichtfeld-Check + Buchungs-Splitting kommt in M03 Phase 2.
+    if (bewirtung.is_bewirtung) {
+      issues.push({
+        code: 'BEWIRTUNG_DETECTED',
+        field: 'category',
+        message: `Bewirtungs-Beleg erkannt (Konfidenz ${bewirtung.confidence.toFixed(2)}). Anlass + Teilnehmer als Pflichtfelder eintragen.`,
+      });
+      if (bewirtung.confidence < BEWIRTUNG_REVIEW_THRESHOLD) {
+        newStatus = 'requires_review';
+      }
+    }
+
+    // T008: Optionale Category-Override — nur wenn noch keine gesetzt war.
+    const categoryForDenorm =
+      bewirtung.is_bewirtung && !beleg.category ? 'bewirtung' : beleg.category;
+
+    // 10. Persistieren
+    await updateBelegOcrResult(pool, tenantId, belegId, {
+      newStatus,
+      extraction: {
+        engine: ocrAdapter.id,
+        engine_version: ocrAdapter.version,
+        confidence: overallConfidence,
+        raw_text: ocr.raw_text,
+        fields: {
+          ...light.fields,
+          fields_confidence: light.confidence_per_field,
+          ocr_confidence: ocr.confidence,
+          ...(bewirtung.trinkgeld_cents !== null
+            ? { trinkgeld_cents: bewirtung.trinkgeld_cents }
+            : {}),
+        },
+        // T008-Review-Fix: warning nur bei Bewirtungs-Belegen.
+        warnings:
+          bewirtung.is_bewirtung && bewirtung.tax_split.splitting_required
+            ? ['tax_split_required:7_19']
+            : [],
+      },
+      validation: { is_valid: isValid, issues, checks },
+      denormalized: {
+        supplier_name: light.fields.supplier_name ?? null,
+        document_date: light.fields.document_date ?? null,
+        total_gross: light.fields.total_gross ?? null,
+        currency: light.fields.currency ?? null,
+        category: categoryForDenorm,
+      },
+      audit: { actorType: 'system', actorId: 'module:M01-OCR' },
+      bewirtung: bewirtung.is_bewirtung
+        ? {
+            confidence: bewirtung.confidence,
+            indicators: bewirtung.indicators,
+            tax_split: bewirtung.tax_split,
+            trinkgeld_cents: bewirtung.trinkgeld_cents,
+            matched_positions: bewirtung.matched_positions,
+          }
+        : undefined,
+    });
+  }
 
   return {
     beleg_id: belegId,

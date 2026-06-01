@@ -15,6 +15,8 @@ export const STREAMS = {
   customers: 'pp:customers',
   documents: 'pp:documents', // für D8/D9
   jobs: 'pp:jobs', // für D9
+  // T021: M01-OCR → M03-Bewirtungs-Detector Entkoppelung
+  receipts: 'gastro:receipts',
 } as const;
 
 export type StreamName = (typeof STREAMS)[keyof typeof STREAMS];
@@ -34,6 +36,26 @@ export interface BaseEvent {
   tenant_id: string;
   /** ISO-8601-Timestamp */
   timestamp: string;
+}
+
+// ── Receipt-Events (T021) ─────────────────────────────────────────────────────
+
+/**
+ * Event-Typ fuer den gastro:receipts-Stream.
+ * Wird von M01-OCR nach erfolgreicher Extraction gepublisht.
+ * M03-Bewirtungs-Detector-Worker konsumiert ihn (wenn ENABLE_EVENT_DRIVEN_M03=1).
+ */
+export type ReceiptEventType =
+  | 'gastro.receipt.extracted' // OCR fertig, Felder extrahiert
+  | 'gastro.receipt.bewirtung_detected'; // M03-Detector fertig
+
+export interface ReceiptExtractedPayload {
+  beleg_id: string;
+  tenant_id: string;
+  /** OCR-Volltext — wird fuer Bewirtungs-Detection benoetigt */
+  raw_text: string;
+  /** Erkannter Lieferant (null wenn nicht extrahiert) */
+  supplier_name: string | null;
 }
 
 // ── Customer-Events ───────────────────────────────────────────────────────────

@@ -1000,3 +1000,67 @@ export async function getOcrCallCountToday(
     client.release();
   }
 }
+
+/**
+ * T021 — Schreibt Bewirtungs-Detektor-Ergebnis in belege.payload.bewirtung
+ * und aktualisiert ggf. category + status (requires_review bei niedriger Konfidenz).
+ *
+ * Wird vom bewirtung-detector-worker nach Konsumierung des gastro.receipt.extracted
+ * Events aufgerufen. Separates UPDATE — OCR-Ergebnis bleibt unangetastet.
+ */
+export async function updateBelegBewirtung(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  input: {
+    bewirtung: Record<string, unknown>;
+    /** Wird auf 'bewirtung' gesetzt wenn is_bewirtung=true */
+    category?: string | null;
+    /** Wird auf 'requires_review' gesetzt wenn Konfidenz unter Schwelle */
+    newStatus?: 'extracted' | 'requires_review';
+  },
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    // Merge bewirtung-Sektion in bestehenden payload via jsonb_set
+    await client.query(
+      `UPDATE belege
+          SET payload  = jsonb_set(payload, '{bewirtung}', $3::jsonb),
+              category = COALESCE($4, category),
+              status   = COALESCE($5::text, status)
+        WHERE id = $1 AND tenant_id = $2`,
+      [
+        belegId,
+        tenantId,
+        JSON.stringify(input.bewirtung),
+        input.category ?? null,
+        input.newStatus ?? null,
+      ],
+    );
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.bewirtung_detected',
+      actor: { type: 'system', id: 'worker:bewirtung-detector' },
+      payloadBefore: {},
+      payloadAfter: {
+        is_bewirtung: (input.bewirtung as { is_bewirtung?: boolean }).is_bewirtung ?? false,
+        confidence: (input.bewirtung as { confidence?: number }).confidence,
+        category: input.category,
+        newStatus: input.newStatus,
+      },
+    });
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

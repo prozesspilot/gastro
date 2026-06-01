@@ -306,6 +306,20 @@ export const belegeHandlers = [
   ),
 ];
 
+// ── n8n Proxy ─────────────────────────────────────────────────────────────
+// SettingsPage pingt /n8n/healthz über den Vite-Proxy (→ n8n localhost:5678).
+// In Tests gibt es keinen echten n8n-Server → Mock antwortet mit 200.
+
+export const n8nHandlers = [http.get('/n8n/healthz', () => new Response(null, { status: 200 }))];
+
+// ── SSE-Events ────────────────────────────────────────────────────────────
+// useReceiptEvents nutzt /api/v1/events als SSE-Stream.
+// MSW kann keine echten SSE-Streams simulieren → sofort mit leerem 200
+// antworten, damit der Hook graceful reconnectet und kein Unhandled-Warning
+// in Tests erscheint.
+
+export const eventsHandlers = [http.get(`${BASE}/events`, () => new Response(null, { status: 200 }))];
+
 // ── M14: Auth ─────────────────────────────────────────────────────────────
 // Default: /auth/refresh schlägt fehl (Cold-Start) → nicht eingeloggt.
 // Tests, die einen eingeloggten User brauchen, überschreiben das per server.use().
@@ -327,6 +341,8 @@ export const authHandlers = [
 
 export const handlers = [
   ...authHandlers,
+  ...n8nHandlers,
+  ...eventsHandlers,
   ...receiptHandlers,
   ...customerHandlers,
   ...tenantHandlers,

@@ -55,6 +55,15 @@ const envSchema = z.object({
   // nur geloggt — kein extern sichtbarer Side-Effect.
   DISCORD_OPS_WEBHOOK_URL: z.string().default(''),
 
+  // T031 — Discord-Channel-Webhooks (optional, Pilot-Setup: Discord_Integration.md §10.1).
+  // Alle Webhooks sind best-effort — wenn leer, wird nur geloggt.
+  // #alerts-critical: kritische Fehler, Notfall-Login, Production-Issues
+  DISCORD_WEBHOOK_ALERTS: z.string().default(''),
+  // #tasks-neu: neue Tasks aus Auto-Trigger-Engine (T027)
+  DISCORD_WEBHOOK_TASKS: z.string().default(''),
+  // #deployment: CI/CD-Status-Notifications
+  DISCORD_WEBHOOK_DEPLOY: z.string().default(''),
+
   // D10: Opt-in Loki-Transport (npm install pino-loki, dann LOKI_URL setzen)
   LOKI_URL: z.string().optional(),
 

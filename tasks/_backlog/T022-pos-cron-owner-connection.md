@@ -3,6 +3,8 @@
 **Priorität:** P1 — Blocker, sobald RLS auf `pos_credentials` aktiviert wird
 **Modul:** M15 (pos-connector)
 **Herkunft:** Review-Findings aus PR #60 (T005) + PR #61 (T018)
+**Implementierung in Review:** PR #90 (`andreas/T022-pos-cron-owner-connection`, OPEN, Stand 2026-06-02) — `SECURITY DEFINER`-Variante.
+**Merge-Reihenfolge (per Lane-A-Bug-Audit 2026-06-02):** PR #90 MUSS vor jedem RLS-Aktivierungs-PR auf `pos_credentials` gemerged werden, sonst silent-empty-Cron.
 
 ## Problem
 

@@ -1,7 +1,7 @@
 # Manuelle Aufgaben (Steve / Andreas)
 
 > Sammlung aller manuellen Schritte, die NICHT per Code lösbar sind und außerhalb des Repos passieren müssen.
-> Letzte Aktualisierung: 2026-05-19
+> Letzte Aktualisierung: 2026-06-02
 >
 > **Format:** Jede Aufgabe hat Owner, Priorität, Status, Quelle (welche Task/PR sie ausgelöst hat).
 > **Status-Werte:** ⏳ offen · 🔄 in Arbeit · ✅ erledigt · ❌ blockiert
@@ -10,7 +10,12 @@
 
 ## 🎯 Steve — Frontend / Sales / Externe Konten
 
-### ⏳ Discord Developer Portal — App registrieren (T001)
+### ✅ Discord Developer Portal — App registriert (T001) — verifiziert 2026-06-02
+- **Status:** `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` in `/opt/gastro/.env.prod` gesetzt (Backend startet ohne Hard-Fail). Discord-OAuth-Endpoints sind live.
+- **Pending:** `DISCORD_ROLE_ID_GF` fehlt noch — Steve muss Rollen-ID der „geschaeftsfuehrer"-Rolle aus Discord-Server-Settings ergänzen. Notfall-Login-Privileg-Check ist sonst broken.
+- **Pending:** `DISCORD_OPS_WEBHOOK_URL` fehlt noch — Webhook in `#ops-alerts` anlegen, dann OCR-Final-Fails + Cron-Crashes silent.
+- **Access-Note 2026-06-02:** Andreas ist (noch) nicht im „Gastro Team"-Discord-Server, nur im ProzessPilot-Server. Beide Discord-ID-Beschaffungen liegen daher auf Steves Lane. Steve: Andreas einladen sobald Ops-Sichtbarkeit (#ops-alerts) auch ihn erreichen soll.
+- **Ursprünglich:**
 - **Priorität:** P0 (Login funktioniert sonst nicht)
 - **Was:** Discord-App "ProzessPilot Admin" registrieren
 - **Wo:** https://discord.com/developers/applications
@@ -78,8 +83,29 @@
 
 ## 🔧 Andreas — Backend / Infrastructure / DB
 
-### ⏳ TRUST_PROXY ENV-Variable in Production setzen (T017)
-- **Priorität:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht und ist als DoS-Vektor ausnutzbar)
+### ⏳ MinIO-Root-Credentials rotieren (Leak 2026-06-02)
+- **Priorität:** P1 (Bucket ist intern-only — kein extern erreichbarer Listener auf 9000/9001 — und aktuell leer, daher kein akuter Exploit-Pfad; deadline: **vor erstem Echt-Beleg in `prozesspilot-raw`**)
+- **Kontext:** Beim Bucket-Setup am 2026-06-02 wurde `MINIO_ROOT_PASSWORD` durch Paste-Wrapping einer Shell-Zeile als `command not found`-Output in Mac-Scrollback + Claude-Code-Chat-Log geleaked. Server-Bash-History ist sauber (Variable nur expandiert, nie als Wert getippt).
+- **Was:** Neues MinIO-Root-Passwort generieren, `MINIO_SECRET_KEY` in `/opt/gastro/.env.prod` ersetzen, MinIO-Container über offiziellen Rotation-Mechanismus neu starten.
+- **Schritte:**
+  1. Auf Server: Backup `cp /opt/gastro/.env.prod /opt/gastro/.env.prod.bak.<ts>`
+  2. Neues Passwort: `NEW=$(openssl rand -base64 33 | tr -d '/+=\n')`
+  3. Alten Wert sichern: `OLD=$(grep ^MINIO_SECRET_KEY= /opt/gastro/.env.prod | cut -d= -f2-)`
+  4. Ersetzen via `sed -i "s|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=$NEW|" /opt/gastro/.env.prod`
+  5. Rotation-OLD anhängen: `echo "MINIO_ROOT_PASSWORD_OLD=$OLD" >> /opt/gastro/.env.prod` (docker-compose mapped `MINIO_SECRET_KEY` auf `MINIO_ROOT_PASSWORD` — der OLD-Wert muss als echter MinIO-Var-Name eingetragen werden, damit MinIO ihn beim Restart liest)
+  6. MinIO neu erstellen (nicht restart — `restart` re-liest die `.env` nicht): `cd /opt/gastro && docker compose -f docker-compose.prod.yml up -d --force-recreate minio`
+  7. Logs prüfen: `docker logs gastro-minio-1 --tail 30` muss `Rotation of root credentials successful` oder vergleichbar zeigen
+  8. mc-Alias neu setzen (siehe Schritt-3-Procedure von 2026-06-02 — alter Alias hat noch alten Wert)
+  9. Backend recreaten damit es neuen Secret-Key liest: `docker compose -f docker-compose.prod.yml up -d --force-recreate backend`
+  10. Smoke-Test: `curl -sI https://api.prozesspilot.net/api/v1/health` → HTTP/2 200
+  11. Cleanup: `sed -i '/^MINIO_ROOT_PASSWORD_OLD=/d' /opt/gastro/.env.prod && docker compose -f docker-compose.prod.yml up -d --force-recreate minio`
+  12. Backup-Datei `/opt/gastro/.env.prod.bak.*` löschen oder in 1Password sichern (enthält alten Wert)
+  13. Mac-Scrollback in `Terminal.app`: `Cmd+K` (löscht Scrollback der aktuellen Session)
+- **Rollback bei Fehlern in Schritt 7:** `.env.prod.bak.<ts>` zurückkopieren, `docker compose up -d --force-recreate minio` — alter Wert ist wieder aktiv.
+
+### ✅ TRUST_PROXY ENV-Variable in Production gesetzt (T017) — erledigt 2026-06-02
+- **Status:** `TRUST_PROXY=loopback` in `/opt/gastro/.env.prod`, Backend-Container hat ENV geladen (`docker exec gastro-backend-1 env | grep TRUST_PROXY` zeigt `TRUST_PROXY=loopback`), Health-Endpoint antwortet HTTP/2 200 mit `X-Forwarded-For`-Header.
+- **Priorität ursprünglich:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht und ist als DoS-Vektor ausnutzbar)
 - **Dependencies:** T012 (Caddy-Setup) ✅ erledigt
 - **Was:** ENV-Variable `TRUST_PROXY` setzen, damit Fastify `X-Forwarded-For` korrekt verarbeitet
 - **Schritte:**
@@ -109,10 +135,10 @@
   - [x] Postgres 16 läuft als Docker-Container
   - [x] Redis 7 läuft als Docker-Container
   - [x] MinIO läuft als Docker-Container
-  - [ ] **MinIO-Bucket `prozesspilot-raw` anlegen** (für Beleg-Uploads, T006) — noch offen
+  - [x] **MinIO-Bucket `prozesspilot-raw` anlegen** (für Beleg-Uploads, T006) — ✅ 2026-06-02, leer, owner = MinIO-Root (Service-Account-Subdelegation siehe Rotation-Task)
   - [x] Docker / docker-compose installiert
   - [x] SSH-Key von Steve hinterlegt
-  - [ ] SSH-Key von Andreas hinterlegen — noch offen
+  - [x] SSH-Key von Andreas hinterlegen — ✅ 2026-06-02 verifiziert (Login klappt `root@ubuntu`)
   - [x] UFW / Firewall konfiguriert (22/80/443 offen)
 
 ### ⏳ GitHub-Secrets pflegen (alle Tasks mit ENV-Vars)
@@ -137,10 +163,10 @@
 - **Hinweis:** Reguläres `npm run migrate` über Production-Image scheiterte an fehlendem `tsx`-Binary
   → Backend muss in CI vor Deploy migrieren ODER via `node dist/core/db/migrate.js` (Build-Output)
 
-### ⏳ POS-Credentials-Cleanup-Cron einrichten (T018)
-- **Priorität:** P1 (DSGVO)
-- **Was:** Daily-Cron, der inaktive `pos_credentials` (active=false) nach 30 Tagen Hard-Delete + Audit-Log
-- **Status:** Code implementiert (T018, PR offen). Setup auf IONOS noch erforderlich.
+### ✅ POS-Credentials-Cleanup-Cron eingerichtet (T018) — 2026-06-02
+- **Status:** systemd-Timer `gastro-pos-cleanup.timer` armed (04:30 UTC daily), aktiviert + persistent. Erster Run: 2026-06-02 04:30 UTC. Smoke-Test ausstehend bis Bug-Check-Agent Live-Trigger freigibt.
+- **Code-Quelle:** T018 (PR mittlerweile gemerged via Auto-Deploy — siehe Folge-Verify).
+- **Vorgaben unverändert:**
 - **Setup (systemd-Timer):**
   ```bash
   ssh root@87.106.8.111
@@ -181,8 +207,11 @@
 - **Rollback:** `090_belege_soft_delete_rollback.sql` griffbereit (entfernt Spalte + Partial-Index)
 - **Hinweis:** NICHT manuell via psql ausführen — dann läuft sie nochmal automatisch und gibt schema_migrations-Duplikat-Error.
 
-### ⏳ SumUp Daily-Sync-Cron einrichten (T005)
-- **Priorität:** P1 (manueller Sync ist via UI moeglich, Cron automatisiert)
+### ✅ SumUp Daily-Sync-Cron eingerichtet (T005) — 2026-06-02
+- **Status:** systemd-Timer `gastro-sumup-sync.timer` armed (03:00 UTC daily), aktiviert + persistent. Erster Run: 2026-06-02 03:00 UTC.
+- **Verifikation:** `systemctl list-timers gastro-*` zeigt beide Timer. Smoke-Test (`docker compose exec backend node dist/cron/sumup-daily.js`) ausstehend bis Bug-Check-Agent grünes Licht gibt für Live-Trigger.
+- **Pending Dependency:** Almaz SumUp-OAuth-Flow muss noch durchlaufen sein (T004) — bis dahin loggen die Runs "0 tenants synced".
+- **Vorgaben unverändert:**
 - **Dependencies:** T004 SumUp-OAuth muss durchlaufen sein (pos_credentials mit aktivem Token)
 - **Was:** Daily-Cron taeglich 03:00 UTC, der `node dist/cron/sumup-daily.js` ausfuehrt
 - **Variante A (empfohlen, IONOS-systemd-Timer):**
@@ -219,15 +248,10 @@
 - **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/sumup-daily.js` → Exit-Code 0 + Logs zeigen Anzahl gepullter Transaktionen
 - **Monitoring:** Bei Fehler verschickt der Service einen Discord-Alert via `DISCORD_OPS_WEBHOOK_URL` (siehe T017). Optional: `systemctl status gastro-sumup-sync` zeigt Last-Run-Result.
 
-### ⏳ Migration 110 in Production laufen lassen (T005)
-- **Priorität:** P0 (Sync schlaegt sonst beim ersten INSERT fehl)
-- **Was:** Macht `kasse_transactions.integration_id` nullable (T005 nutzt pos_credentials, nicht kasse_integrations)
-- **Schritte:**
-  1. Backup ziehen (`pg_dump`)
-  2. SQL via psql: `\i /opt/gastro/migrations/110_kasse_transactions_fk_relax.sql`
-  3. Verifizieren: `\d kasse_transactions` zeigt `integration_id uuid` (kein NOT NULL)
-  4. `INSERT INTO schema_migrations(filename) VALUES ('110_kasse_transactions_fk_relax.sql')`
-- **Rollback:** `110_kasse_transactions_fk_relax_rollback.sql` (failt wenn schon Rows mit integration_id=NULL existieren)
+### ✅ Migration 110 in Production applied (T005) — verifiziert 2026-06-02
+- **Status:** Auto-Deploy `migrate:prod` hat 110 schon angewendet. `kasse_transactions.integration_id` ist `is_nullable=YES` (verifiziert via `information_schema`), `schema_migrations` enthält `110_kasse_transactions_fk_relax.sql`.
+- **Doc-Drift-Hinweis:** `schema_migrations`-Tabelle hat Spalte `version` (nicht `filename`); ältere Eintraege hier sind falsch. Korrekter INSERT: `INSERT INTO schema_migrations(version) VALUES ('110_kasse_transactions_fk_relax.sql') ON CONFLICT DO NOTHING`.
+- **Backup vor Verifikation:** `/root/db-backups/pre-migrations-100-110-20260602-023048.dump` (103K, manuell pg_dump-Fc).
 
 ### ⏳ Lexware-Office API-Token von Steuerberaterin besorgen (T009)
 - **Priorität:** P0 (ohne Token kein Export — Pilot-Blocker)
@@ -257,17 +281,14 @@
 - **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
 - **Dependencies:** Migration 100 muss vorher gelaufen sein.
 
-### ⏳ Migration 100 in Production laufen lassen (T009)
-- **Priorität:** P0 (Token-Storage existiert sonst nicht)
-- **Was:** `belege` bekommt nichts; neue Tabelle `booking_credentials` (Lexware-Token-Storage)
-- **Schritte:**
-  1. Backup ziehen
-  2. SQL via psql: `\i /opt/gastro/migrations/100_booking_credentials.sql`
-  3. Verifizieren: `\d booking_credentials`
-  4. `INSERT INTO schema_migrations(filename) VALUES ('100_booking_credentials.sql')`
-- **Rollback:** `100_booking_credentials_rollback.sql`
+### ✅ Migration 100 in Production applied (T009) — verifiziert 2026-06-02
+- **Status:** Auto-Deploy `migrate:prod` hat 100 schon angewendet. Tabelle `booking_credentials` existiert (CREATE schlug mit "relation already exists" fehl), `schema_migrations` enthält `100_booking_credentials.sql`.
+- **Folgeaufgabe (separat):** Lexware-API-Token von Almaz' Steuerberaterin besorgen + via `bootstrap-lexware-token.js` ablegen — siehe nächster Eintrag.
 
 ### ⏳ Google Cloud Vision API — Projekt + Service-Account einrichten (T007)
+- **Owner-Reassignment 2026-06-02:** Steve macht GCP-Setup (kein Andreas-Zugang). Andreas verarbeitet die JSON-Key + ENV-Eintragung Server-Side, sobald JSON in 1Password/Discord-DM geteilt ist.
+- **Hängt von:** PR #99 muss vor Live-Schaltung gemerged sein (sonst Vision-Calls in US-Region — DSGVO-Verletzung).
+- **Bei ENV setzen:** `OCR_DAILY_LIMIT_PER_TENANT=900` (nicht 1000) — Race-Puffer per Bug-Audit M02/M12 2026-06-02.
 - **Priorität:** P0 (ohne Vision-Credentials keine echte OCR — Service läuft sonst nur im Mock-Modus)
 - **Was:** GCP-Projekt anlegen, Vision-API aktivieren, Service-Account erzeugen, JSON-Key herunterladen
 - **Wo:** https://console.cloud.google.com
@@ -300,6 +321,13 @@
 - **Output:** Discord-Alert in #ops-alerts wenn ein Beleg nach 3 OCR-Versuchen failed
 
 ### ⏳ SMTP-Account für ausgehende DSGVO-Mails (T010) — NUR EU-HOSTING!
+- **Owner-Reassignment 2026-06-02:** Steve macht IONOS-Mail-Setup + DNS-Records (Andreas hat keinen IONOS-Account-Zugang). Andreas trägt Mailbox-Credentials Server-Side in `.env.prod` ein, sobald Steve sie via 1Password/Discord-DM teilt.
+- **Reihenfolge wegen DNS-Propagation (1–24h Lead-Time):**
+  1. Mailbox `noreply@prozesspilot.net` anlegen
+  2. DKIM in IONOS aktivieren → Selector + Key notieren
+  3. DNS-Records setzen: SPF (`v=spf1 include:_spf.kundenserver.de ~all`), DKIM (Wert aus IONOS), DMARC (`v=DMARC1; p=quarantine; rua=mailto:dmarc@prozesspilot.net; pct=100; adkim=s; aspf=s`)
+  4. Credentials teilen → Andreas trägt SMTP_HOST/PORT/USER/PASS/FROM ein
+- **Hängt von:** PR #100 (SMTP_FROM-Default `.de`→`.net`) gemerged, damit Fallback-Strings korrekt sind.
 - **Priorität:** P0 (vor Pilot — sonst können DSGVO-Auskünfte + Lösch-Confirms nicht versendet werden)
 - **Was:** Transaktionalen SMTP-Versand-Service einrichten — **AUSSCHLIESSLICH EU-Anbieter** (DSGVO!)
 - **Erlaubte Anbieter:**

@@ -38,3 +38,6 @@ prozesspilot.bak-*/
 
 # Claude Code lokale State-Daten (Agent-Memory)
 .claude/agent-memory/
+
+# Claude Code lokale Permission-Overrides (persönlich, nicht im Repo)
+.claude/settings.local.json

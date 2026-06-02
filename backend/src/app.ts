@@ -19,7 +19,6 @@ import { operatorNotificationsRoutes } from './modules/_shared/customers/notific
 import { errorRoutes } from './modules/_shared/errors/error.routes';
 import { receiptsCompleteRoutes } from './modules/_shared/receipts/complete.routes';
 import { customerRoutes } from './modules/customers/customer.routes';
-import { documentRoutes } from './modules/documents/document.routes';
 import { dsgvoV2Routes } from './modules/dsgvo/dsgvo-v2.routes';
 import { dsgvoRoutes } from './modules/dsgvo/routes';
 import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
@@ -27,7 +26,6 @@ import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
 import { m02ArchiveRoutes } from './modules/m02-archive/routes';
 import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
 import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
-import { m03OcrRoutes } from './modules/m03-ocr/ocr.routes';
 import { m04DatevRoutes } from './modules/m04-datev/routes';
 import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
 import {
@@ -56,10 +54,8 @@ import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { pluginSystemRoutes } from './modules/plugin-system/routes';
 import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
 import { receiptRoutes } from './modules/receipts/receipt.routes';
-import { reportRoutes } from './modules/reports/report.routes';
 import { routingPlanRoutes } from './modules/routing/plan.routes';
 import { routingRoutes } from './modules/routing/routing.routes';
-import { statsRoutes } from './modules/stats/routes';
 import { tenantRoutes } from './modules/tenants/tenant.routes';
 import { authProtectedRoutes, authPublicRoutes, usersRoutes } from './modules/users/routes';
 import { docsRoutes } from './routes/docs';
@@ -268,14 +264,12 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(customerRoutes, { prefix: '/customers' });
       await apiApp.register(profileRoutes, { prefix: '/customers' });
       await apiApp.register(internalProfileRoutes, { prefix: '/internal' });
-      await apiApp.register(documentRoutes, { prefix: '/documents' });
       await apiApp.register(routingRoutes, { prefix: '/routing' });
       await apiApp.register(m10WhatsAppRoutes, { prefix: '/internal/whatsapp' });
       await apiApp.register(m11ImapRoutes, { prefix: '/internal/imap' });
       await apiApp.register(receiptRoutes, { prefix: '/receipts' });
       await apiApp.register(m01ReceiptIntakeRoutes, { prefix: '/receipts' });
       await apiApp.register(m02ArchiveRoutes, { prefix: '/receipts' });
-      await apiApp.register(m03OcrRoutes, { prefix: '/receipts' });
       // M03 Kategorisierung — Endpoint POST /receipts/:id/categorize
       await apiApp.register(m03CategorizationRoutes, { prefix: '/receipts' });
       // M03 Kategorien-Liste (GET /categories)
@@ -297,7 +291,6 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       // /receipts/:id/complete (Master-Workflow Final-Status)
       await apiApp.register(receiptsCompleteRoutes, { prefix: '/receipts' });
       await apiApp.register(m07SpreadsheetRoutes, { prefix: '/receipts' });
-      await apiApp.register(reportRoutes, { prefix: '/reports' });
       // M08 Monatsreporting (customer-scoped: /customers/:id/reports/...)
       await apiApp.register(m08ReportingRoutes, { prefix: '/customers' });
       // Konzept-konformer Routing-Plan (parallel zu D9 routingRoutes /jobs)
@@ -310,8 +303,6 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
       await apiApp.register(hookRoutes, { prefix: '/hooks' });
       // Error-Log (Pipeline-Fehler-Tracking)
       await apiApp.register(errorRoutes, { prefix: '/errors' });
-      // Stats-Aggregationen (GET /customers/:customerId/stats)
-      await apiApp.register(statsRoutes, { prefix: '/customers' });
       // M06 Steuerberater-Portal (GET/POST /advisor/...)
       await apiApp.register(m06AdvisorPortalRoutes, { prefix: '/advisor' });
       // Plugin-System (POST/GET/PUT/DELETE /plugins/...)

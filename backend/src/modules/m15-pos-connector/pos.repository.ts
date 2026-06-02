@@ -350,7 +350,7 @@ export interface PurgedPosCredential {
  * Jetzt:
  *   BEGIN
  *     DELETE … RETURNING
- *     -- pro Row: set_config('app.tenant_id', <row.tenant_id>) + audit_log-INSERT
+ *     -- pro Row: set_config('app.current_tenant', <row.tenant_id>) + audit_log-INSERT
  *   COMMIT
  *
  * Bei jedem Fehler im Block: ROLLBACK → DELETE rueckabgewickelt, kein
@@ -361,7 +361,7 @@ export interface PurgedPosCredential {
  * (global, ohne tenant_id, fuer Login/Logout gedacht). Sonst taucht die
  * Loeschung bei einem DSGVO-Auskunftsersuchen NICHT im tenant-isolierten
  * Audit-Trail des Kunden auf. Der INSERT laeuft pro Row mit gesetztem
- * `app.tenant_id` → die RLS-INSERT-Policy `tenant_id = current_tenant_id()`
+ * `app.current_tenant` → die RLS-INSERT-Policy `tenant_id = current_tenant_id()`
  * greift auch fuer die gastro_app-Rolle (kein Bypass noetig).
  *
  * ⚠️ RLS-Grenze beim DELETE (Review-Fix #2): `pos_credentials` hat aktuell
@@ -414,7 +414,8 @@ export async function purgeInactivePosCredentials(
     // `audit_log` (tenant-isoliert). Pro Row den Tenant-Context setzen, damit
     // die RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
     for (const p of purged) {
-      await client.query("SELECT set_config('app.tenant_id', $1, true)", [p.tenant_id]);
+      // T041: Key MUSS app.current_tenant sein (von RLS-Policy current_tenant_id() gelesen).
+      await client.query("SELECT set_config('app.current_tenant', $1, true)", [p.tenant_id]);
       await logAuditEvent(client, {
         tenantId: p.tenant_id,
         entityType: 'pos_credentials',

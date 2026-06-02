@@ -214,7 +214,7 @@ export async function uploadHandler(req: FastifyRequest, reply: FastifyReply): P
 
   // B4: SHA256-First — Duplikat-Check VOR MinIO-Upload (verhindert verwaiste Objekte)
   // N1-Fix: getBelegBySha256 verwendet eigenen BEGIN/COMMIT-Block mit setTenantContext(local=true).
-  //   Vorher: set_config('app.tenant_id', $1, false) — session-scoped, vergiftet Connection im Pool.
+  //   Vorher: set_config(..., $1, false) — session-scoped, vergiftet Connection im Pool.
   //   Jetzt: korrekte Repository-Funktion mit RLS-Disziplin.
   const existing = await getBelegBySha256(req.server.db, tenantId, fileSha256);
 

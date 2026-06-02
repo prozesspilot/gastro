@@ -7,9 +7,10 @@
  *   Die belege-Tabelle hat FORCE ROW LEVEL SECURITY. Die Policy prüft
  *   `is_rls_bypassed() OR tenant_id = current_tenant_id()`.
  *
- *   `set_config('app.tenant_id', id, true)` ist LOCAL — wirkt nur innerhalb
+ *   `set_config('app.current_tenant', id, true)` ist LOCAL — wirkt nur innerhalb
  *   einer Transaktion (B2-Fix). Deshalb werden alle Funktionen mit einem
- *   expliziten BEGIN/COMMIT-Block ausgeführt.
+ *   expliziten BEGIN/COMMIT-Block ausgeführt. Der Key MUSS app.current_tenant
+ *   heißen (T041), sonst liest current_tenant_id() NULL und die Policy blockt alles.
  *
  * DECISION: Wir verwenden pool.connect() + explizites BEGIN/COMMIT:
  *   1. `set_config(..., true)` ohne TX würde in Auto-Commit sofort gelten und
@@ -127,7 +128,8 @@ export interface ListBelegeOptions {
  * Muss INNERHALB einer Transaktion (nach BEGIN) aufgerufen werden.
  */
 async function setTenantContext(client: PoolClient, tenantId: string): Promise<void> {
-  await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+  // T041: Key MUSS app.current_tenant sein (von RLS-Policy current_tenant_id() gelesen).
+  await client.query("SELECT set_config('app.current_tenant', $1, true)", [tenantId]);
 }
 
 // ── Repository-Funktionen ──────────────────────────────────────────────────

@@ -1,8 +1,16 @@
 /**
  * D2 — Tenant-Context-Helper
  *
- * Setzt die Postgres-Session-Variable `app.current_tenant_id` vor jeder Query,
+ * Setzt die Postgres-Session-Variable `app.current_tenant` vor jeder Query,
  * damit die RLS-Policies greifen können.
+ *
+ * WICHTIG (T041): Der GUC-Key MUSS exakt `app.current_tenant` heißen — das ist
+ * der einzige Key, den die RLS-Policy-Funktion `current_tenant_id()`
+ * (migrations/002_helpers.sql) liest. Frühere Stellen setzten fälschlich
+ * `app.tenant_id` bzw. `app.current_tenant_id`; unter der Prod-Rolle
+ * `gastro_app` (NOBYPASSRLS) ergab das `current_tenant_id() = NULL` →
+ * RLS blockt alle Zeilen. Immer die exportierte Konstante TENANT_GUC nutzen,
+ * nie den String-Literal duplizieren.
  *
  * Verwendung:
  *   import { withTenant } from './core/db/tenant';
@@ -14,12 +22,18 @@
 
 import type { Pool, PoolClient, QueryResult } from 'pg';
 
+/**
+ * Kanonischer Name der Postgres-Session-Variable für den Tenant-Kontext.
+ * Single Source of Truth — von `current_tenant_id()` in 002_helpers.sql gelesen.
+ */
+export const TENANT_GUC = 'app.current_tenant' as const;
+
 type TenantCallback<T> = (client: PoolClient) => Promise<T>;
 
 /**
  * Führt `fn` in einer DB-Transaktion mit gesetztem Tenant-Kontext aus.
  *
- * Die Session-Variable `app.current_tenant_id` gilt nur für diese Transaktion
+ * Die Session-Variable `app.current_tenant` gilt nur für diese Transaktion
  * (SET LOCAL), sodass kein Kontext in andere parallele Verbindungen leckt.
  */
 export async function withTenant<T>(
@@ -31,7 +45,7 @@ export async function withTenant<T>(
   try {
     await client.query('BEGIN');
     // SET LOCAL gilt nur für die aktuelle Transaktion — kein Kontext-Leak
-    await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant_id', tenantId]);
+    await client.query('SELECT set_config($1, $2, true)', [TENANT_GUC, tenantId]);
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -60,7 +74,7 @@ export async function queryAsTenant(
   try {
     // SET LOCAL braucht eine offene Transaktion
     await client.query('BEGIN');
-    await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant_id', tenantId]);
+    await client.query('SELECT set_config($1, $2, true)', [TENANT_GUC, tenantId]);
     const result = await client.query(text, values);
     await client.query('COMMIT');
     return result;

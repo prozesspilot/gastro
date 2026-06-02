@@ -38,7 +38,7 @@ afterEach(() => {
 describe('Google-Vision Adapter — EU-Region Pflicht (CLAUDE.md §5.4)', () => {
   it('M01 BullMQ-Adapter übergibt Default-EU-Endpoint an ImageAnnotatorClient', async () => {
     process.env.GOOGLE_VISION_KEY_FILE = '/tmp/fake-key.json';
-    delete process.env.VISION_API_ENDPOINT;
+    Reflect.deleteProperty(process.env, 'VISION_API_ENDPOINT');
 
     vi.resetModules();
     const { GoogleVisionAdapter, __resetVisionClientForTests } = await import(
@@ -74,7 +74,7 @@ describe('Google-Vision Adapter — EU-Region Pflicht (CLAUDE.md §5.4)', () => 
 
   it('M03 Inline-Handler übergibt Default-EU-Endpoint an ImageAnnotatorClient', async () => {
     process.env.GOOGLE_VISION_KEY_FILE = '/tmp/fake-key.json';
-    delete process.env.VISION_API_ENDPOINT;
+    Reflect.deleteProperty(process.env, 'VISION_API_ENDPOINT');
 
     vi.resetModules();
     const m03 = await import('../../src/modules/m03-ocr/ocr.handler');

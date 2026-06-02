@@ -20,6 +20,7 @@
 import { Pool } from 'pg';
 import { config } from '../core/config';
 import { logger } from '../core/logger';
+import { notifyCronCrash } from '../core/notify/discord-alert';
 import { purgeInactivePosCredentials } from '../modules/m15-pos-connector/pos.repository';
 
 export async function runPosCredentialsCleanup(): Promise<{ purged: number }> {
@@ -51,11 +52,13 @@ export async function runPosCredentialsCleanup(): Promise<{ purged: number }> {
 if (require.main === module) {
   runPosCredentialsCleanup()
     .then(() => process.exit(0))
-    .catch((err) => {
+    .catch(async (err) => {
       logger.error(
         { err: err instanceof Error ? err.message : String(err) },
         '[pos-cleanup-cron] crashed',
       );
+      // T038 — Top-Level Discord-Alert. Best-effort, schluckt eigene Fehler.
+      await notifyCronCrash({ scriptName: 'pos-credentials-cleanup.ts', error: err });
       process.exit(1);
     });
 }

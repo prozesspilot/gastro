@@ -20,6 +20,7 @@ import Redis from 'ioredis';
 import { Pool } from 'pg';
 import { config } from '../core/config';
 import { logger } from '../core/logger';
+import { notifyCronCrash } from '../core/notify/discord-alert';
 import { listActiveSumUpTenants } from '../modules/m15-pos-connector/kasse-transactions.repository';
 import { syncDay } from '../modules/m15-pos-connector/sumup-sync.service';
 
@@ -80,11 +81,13 @@ if (require.main === module) {
     .then((summary) => {
       process.exit(summary.failed > 0 ? 1 : 0);
     })
-    .catch((err) => {
+    .catch(async (err) => {
       logger.error(
         { err: err instanceof Error ? err.message : String(err) },
         '[sumup-daily-cron] crashed',
       );
+      // T038 — Top-Level Discord-Alert. Best-effort, schluckt eigene Fehler.
+      await notifyCronCrash({ scriptName: 'sumup-daily.ts', error: err });
       process.exit(2);
     });
 }

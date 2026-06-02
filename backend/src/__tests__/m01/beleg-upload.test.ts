@@ -952,7 +952,7 @@ describe('GET /api/v1/belege/:id', () => {
     const pool = makePoolWithTxClient((sql: string, params?: unknown[]) => {
       if (/BEGIN|COMMIT|ROLLBACK/i.test(sql)) return { rows: [] };
       if (/set_config/i.test(sql)) {
-        // set_config('app.tenant_id', '<uuid>', true) — $1 ist tenant_id
+        // set_config('app.current_tenant', '<uuid>', true) — $1 ist tenant_id
         setConfigCalls.push(String(params?.[0]));
         return { rows: [] };
       }

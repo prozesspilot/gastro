@@ -74,7 +74,7 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
     // Reihenfolge: BEGIN → DELETE → set_config(tenant) → INSERT audit_log → COMMIT
     const beginIdx = sqlCalls.findIndex((s) => s === 'BEGIN');
     const deleteIdx = sqlCalls.findIndex((s) => s.startsWith('DELETE FROM pos_credentials'));
-    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.current_tenant'"));
     const auditIdx = sqlCalls.findIndex((s) => s.includes('INSERT INTO audit_log'));
     const commitIdx = sqlCalls.findIndex((s) => s === 'COMMIT');
 
@@ -104,7 +104,7 @@ describe('purgeInactivePosCredentials — Atomicity (Review-Fix #1)', () => {
 
     // Tenant-Context wird auf die tenant_id der Row gesetzt, damit die
     // RLS-INSERT-Policy `tenant_id = current_tenant_id()` greift.
-    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.tenant_id'"));
+    const tenantCtxIdx = sqlCalls.findIndex((s) => s.includes("'app.current_tenant'"));
     expect(paramsCalls[tenantCtxIdx]).toEqual([TENANT]);
   });
 

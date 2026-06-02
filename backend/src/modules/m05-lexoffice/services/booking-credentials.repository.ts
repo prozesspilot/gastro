@@ -26,7 +26,8 @@ export interface BookingCredential {
 }
 
 async function setTenantContext(client: PoolClient, tenantId: string): Promise<void> {
-  await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+  // T041: Key MUSS app.current_tenant sein (von RLS-Policy current_tenant_id() gelesen).
+  await client.query("SELECT set_config('app.current_tenant', $1, true)", [tenantId]);
 }
 
 /**

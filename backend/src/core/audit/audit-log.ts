@@ -58,7 +58,7 @@ export interface AuditLogInput {
  *
  * MUSS in derselben Transaktion wie der Daten-Insert aufgerufen werden
  * (Atomicity-Garantie für GoBD). RLS-Policy erwartet den Tenant-Context
- * (app.tenant_id GUC) bereits gesetzt.
+ * (GUC `app.current_tenant`, via setTenantContext/withTenant) bereits gesetzt.
  *
  * @param client  PoolClient mit aktiver Transaktion + gesetztem Tenant-Context
  * @param input   Audit-Log-Daten

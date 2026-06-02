@@ -54,10 +54,27 @@ async function getVisionClient(): Promise<VisionLazyClient> {
   if (cachedVisionClient) return cachedVisionClient;
   const mod = await import('@google-cloud/vision');
   const ctor = (
-    mod as { ImageAnnotatorClient: new (opts: { keyFilename?: string }) => VisionLazyClient }
+    mod as {
+      ImageAnnotatorClient: new (opts: {
+        keyFilename?: string;
+        apiEndpoint?: string;
+      }) => VisionLazyClient;
+    }
   ).ImageAnnotatorClient;
-  cachedVisionClient = new ctor({ keyFilename: config.GOOGLE_VISION_KEY_FILE });
+  // CLAUDE.md §5.4 — EU-Region zwingend (DSGVO). Default 'eu-vision.googleapis.com'.
+  cachedVisionClient = new ctor({
+    keyFilename: config.GOOGLE_VISION_KEY_FILE,
+    apiEndpoint: config.VISION_API_ENDPOINT,
+  });
   return cachedVisionClient;
+}
+
+export function __resetM03VisionClientForTests(): void {
+  cachedVisionClient = null;
+}
+
+export async function __triggerM03VisionClientForTests(): Promise<void> {
+  await getVisionClient();
 }
 
 interface VisionResp {

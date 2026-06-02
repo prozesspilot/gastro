@@ -60,6 +60,9 @@ const CallbackQuerySchema = z.object({
 });
 type CallbackQuery = z.infer<typeof CallbackQuerySchema>;
 
+// T033 DECISION: `tenantId` (camelCase) ist BEWUSSTE Ausnahme — dies ist ein
+// URL-Path-Parameter (:tenantId). Fastify parst URL-Params immer als camelCase
+// in req.params — das ist keine wire-facing JSON-Feld-Benennung.
 const DisconnectParamsSchema = z.object({
   tenantId: z.string().uuid({ message: 'tenantId muss eine gültige UUID sein' }),
 });

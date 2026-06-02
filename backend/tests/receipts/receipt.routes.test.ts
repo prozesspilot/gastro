@@ -578,7 +578,8 @@ describe.skipIf(!E2E)('GET /api/v1/receipts mit search-Parameter', () => {
 // ── GET /:id/upload-url ───────────────────────────────────────────────────
 
 describe.skipIf(!E2E)('GET /api/v1/receipts/:id/upload-url', () => {
-  it('gibt eine uploadUrl zurück', async () => {
+  it('gibt eine upload_url zurück', async () => {
+    // T033: upload_url (snake_case) statt uploadUrl (camelCase)
     const created = (await createTestReceipt()).json();
     const res = await app.inject({
       method: 'GET',
@@ -586,7 +587,7 @@ describe.skipIf(!E2E)('GET /api/v1/receipts/:id/upload-url', () => {
       headers: headers(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.uploadUrl).toMatch(/^https?:\/\//);
+    expect(res.json().data.upload_url).toMatch(/^https?:\/\//);
     expect(res.json().data.key).toContain(tenantId);
   });
 

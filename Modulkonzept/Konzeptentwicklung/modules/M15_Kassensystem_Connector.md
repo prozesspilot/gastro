@@ -1,8 +1,9 @@
 # M15 — Kassensystem-Connector
 
-> **Status (2026-05-15):** Neu konzipiert. Noch nicht implementiert.
+> **Status (2026-05-15):** Teilimplementiert. OAuth-Flow + POS-Credentials implementiert; Tagesabschluss-Pull in Arbeit.
 > **Code-Zielort:** `backend/src/modules/m15-pos-connector/`, `n8n/workflows/WF-M15-*.json`
-> **Migration:** `040_pos_credentials.sql`, `041_pos_daily_close.sql`
+> **Migration:** `022_pos_credentials.sql` (POS-OAuth-Credentials-Tabelle) + `040_kasse.sql` (Kasse-Integrationen + Tagesabschluss-Tabelle `kasse_transactions`).
+> **Audit-Finding F14 (2026-05-26):** Spec hatte fälschlicherweise `040_pos_credentials.sql` + `041_pos_daily_close.sql` angegeben. Real existieren `022_pos_credentials.sql` und `040_kasse.sql`. Die Tabelle `pos_daily_close` heißt im Code `kasse_transactions` (nähere Erklärung in §3.2).
 > **Paket:** Standard, Pro, Filiale (nicht Solo — Solo-Wirte haben oft keine Cloud-Kasse)
 > **Vorausgesetzt durch:** Pilot-Wirt nutzt SumUp Lite
 
@@ -88,9 +89,13 @@ CREATE POLICY tenant_isolation ON pos_credentials
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 ```
 
-### 3.2 Tabelle `pos_daily_close`
+### 3.2 Tabelle `kasse_transactions` (Spec-Name war `pos_daily_close`)
+
+> **Hinweis (Audit-Finding F14, 2026-05-26):** Die Spec verwendete ursprünglich den Namen `pos_daily_close`. Im realen Code (Migration `040_kasse.sql`) heißt diese Tabelle `kasse_transactions`. Die Migration enthält außerdem eine Tabelle `kasse_integrations` (entspricht `pos_credentials` aus der Spec, ergänzt `022_pos_credentials.sql`). Die Spec-Struktur unten bleibt als Soll-Referenz — der Code weicht im Tabellennamen ab, nicht in der Semantik.
 
 ```sql
+-- Real-Name im Code: kasse_transactions (in backend/migrations/040_kasse.sql)
+-- Spec-Name: pos_daily_close (veraltet)
 CREATE TABLE pos_daily_close (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -138,7 +143,8 @@ ALTER TABLE tenants ADD COLUMN pos_system VARCHAR(30) NULL;
 ### 4.1 Setup bei SumUp Developer Portal
 
 - App registriert: "ProzessPilot POS-Connector"
-- OAuth-Redirect-URI: `https://api.prozesspilot.net/api/m15/oauth/sumup/callback`
+- OAuth-Redirect-URI: `https://api.prozesspilot.net/api/v1/m15/oauth/sumup/callback`
+  > **Korrektur (Audit-Finding F16, 2026-05-26):** Spec hatte fälschlicherweise `/api/m15/…` angegeben. Realer Pfad laut `backend/src/app.ts` und `.env.example`: `/api/v1/m15/oauth/sumup/callback` (mit `/v1/`-Präfix).
 - Scopes: `transactions.history.read`, `user.profile_readonly`
 - Client-ID + Secret in `.env.prod`
 
@@ -146,7 +152,7 @@ ALTER TABLE tenants ADD COLUMN pos_system VARCHAR(30) NULL;
 
 ```
 1. Wirt im Onboarding-Wizard Schritt 6: "Mit SumUp verbinden"
-   → Frontend: GET /api/m15/oauth/sumup/start?wizard_token=<TOKEN>
+   → Frontend: GET /api/v1/m15/oauth/sumup/start?wizard_token=<TOKEN>
 2. Backend:
    a. Generiert state-Token, speichert in Redis
    b. Redirect zu SumUp:
@@ -157,7 +163,7 @@ ALTER TABLE tenants ADD COLUMN pos_system VARCHAR(30) NULL;
         scope=transactions.history.read user.profile_readonly&
         state=<state>
 3. Wirt loggt sich bei SumUp ein, bestätigt Berechtigungen
-4. SumUp redirected zu /api/m15/oauth/sumup/callback?code=<code>&state=<state>
+4. SumUp redirected zu /api/v1/m15/oauth/sumup/callback?code=<code>&state=<state>
 5. Backend:
    a. Validiert state
    b. Tauscht code gegen Tokens:
@@ -305,15 +311,17 @@ Analog, aber via Lexware-Buchungs-API direkt.
 
 ## 8. API-Endpoints
 
+> **Pfad-Korrektur (Audit-Finding F16):** Alle Pfade verwenden den `/api/v1/`-Präfix (wie in `backend/src/app.ts` und `.env.example`). Spec hatte fälschlicherweise `/api/` ohne `v1` angegeben.
+
 | Methode | Pfad | Zweck | Auth |
 |---|---|---|---|
-| GET | /api/m15/oauth/sumup/start | OAuth-Flow initiieren | Wizard-Token oder Mitarbeiter |
-| GET | /api/m15/oauth/sumup/callback | OAuth-Callback verarbeiten | öffentlich |
-| POST | /api/m15/pull/:tenant_id | Manueller Pull | HMAC oder Mitarbeiter |
-| GET | /api/m15/daily-close/:tenant_id | Tagesabschluss-Liste | Mitarbeiter |
-| GET | /api/m15/daily-close/:tenant_id/:date | einzelner Tagesabschluss | Mitarbeiter |
-| POST | /api/m15/reauth/:tenant_id | Re-OAuth-Link generieren | Mitarbeiter |
-| DELETE | /api/m15/connection/:tenant_id | Verbindung trennen | Mitarbeiter |
+| GET | /api/v1/m15/oauth/sumup/start | OAuth-Flow initiieren | Wizard-Token oder Mitarbeiter |
+| GET | /api/v1/m15/oauth/sumup/callback | OAuth-Callback verarbeiten | öffentlich |
+| POST | /api/v1/m15/pull/:tenant_id | Manueller Pull | HMAC oder Mitarbeiter |
+| GET | /api/v1/m15/daily-close/:tenant_id | Tagesabschluss-Liste | Mitarbeiter |
+| GET | /api/v1/m15/daily-close/:tenant_id/:date | einzelner Tagesabschluss | Mitarbeiter |
+| POST | /api/v1/m15/reauth/:tenant_id | Re-OAuth-Link generieren | Mitarbeiter |
+| DELETE | /api/v1/m15/connection/:tenant_id | Verbindung trennen | Mitarbeiter |
 
 ---
 
@@ -345,7 +353,7 @@ Analog, aber via Lexware-Buchungs-API direkt.
 
 - Wizard-Schritt 6: Wirt verbindet SumUp-Sandbox
 - Test-Pull aus Mitarbeiter-Webapp triggert
-- Daten erscheinen in pos_daily_close
+- Daten erscheinen in `kasse_transactions` (Code-Name, Spec-Name war `pos_daily_close`)
 
 ---
 
@@ -353,7 +361,7 @@ Analog, aber via Lexware-Buchungs-API direkt.
 
 ### 11.1 P1.1 (KW 22)
 
-- DB-Migration `040_pos_credentials.sql`, `041_pos_daily_close.sql`
+- DB-Migration `022_pos_credentials.sql` (POS-Credentials) + `040_kasse.sql` (Kasse-Integrationen + `kasse_transactions`) — Spec hatte fälschlicherweise `040_pos_credentials.sql` + `041_pos_daily_close.sql`
 - SumUp-Developer-Account anlegen
 - OAuth-Endpoints implementieren
 - Manueller Pull-Endpoint

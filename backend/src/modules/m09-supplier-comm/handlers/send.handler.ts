@@ -76,7 +76,7 @@ export function buildSendHandler() {
       const fromAddr =
         (config as unknown as Record<string, string>).SMTP_FROM ??
         draft.from ??
-        'noreply@prozesspilot.de';
+        'noreply@prozesspilot.net';
 
       if (!transporter) {
         // Mock-Mode: nur loggen

@@ -153,7 +153,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
-  SMTP_FROM: z.string().default('noreply@prozesspilot.de'),
+  SMTP_FROM: z.string().default('noreply@prozesspilot.net'),
 
   // ── M15: SumUp OAuth 2.0 ────────────────────────────────────────────────
   // SumUp Developer Portal → Apps → ProzessPilot POS-Connector

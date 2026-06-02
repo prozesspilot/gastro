@@ -142,7 +142,7 @@ export function buildSendHandler() {
         });
 
         const info = await transporter.sendMail({
-          from: process.env.SMTP_FROM ?? 'ProzessPilot <noreply@prozesspilot.de>',
+          from: process.env.SMTP_FROM ?? 'ProzessPilot <noreply@prozesspilot.net>',
           to: taxAdvisorEmail,
           subject: `DATEV-Export ${period} — ${exportRow.receipt_ids.length} Belege`,
           text: mailBody,

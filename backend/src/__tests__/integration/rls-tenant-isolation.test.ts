@@ -49,11 +49,27 @@ let dbAvailable = false;
  * mit dem übergebenen GUC-Key als Tenant-Kontext. Gibt die sichtbaren tenant_ids
  * zurück. Per BEGIN/SET LOCAL ROLE/ROLLBACK vollständig isoliert.
  */
+/**
+ * Stellt sicher, dass die Connection wirklich unter der NOBYPASSRLS-Rolle
+ * `gastro_app` läuft. Ohne diesen Guard könnte ein still fehlgeschlagenes
+ * `SET ROLE` (z.B. fehlende Rollen-Membership) die Tests als Superuser/BYPASSRLS
+ * laufen lassen → die RLS-Assertions wären wirkungslos (false-grün).
+ */
+async function assertRunningAsGastroApp(client: pg.PoolClient): Promise<void> {
+  const who = await client.query<{ current_user: string }>('SELECT current_user');
+  if (who.rows[0]?.current_user !== 'gastro_app') {
+    throw new Error(
+      `[T041] SET ROLE gastro_app griff nicht (current_user=${who.rows[0]?.current_user}) — der RLS-Test wäre wirkungslos.`,
+    );
+  }
+}
+
 async function visibleTenantsAs(gucKey: string, tenantId: string): Promise<string[]> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SET LOCAL ROLE gastro_app');
+    await assertRunningAsGastroApp(client);
     await client.query('SELECT set_config($1, $2, true)', [gucKey, tenantId]);
     const res = await client.query<{ tenant_id: string }>(
       'SELECT tenant_id FROM belege WHERE tenant_id = ANY($1::uuid[]) ORDER BY tenant_id',
@@ -151,6 +167,13 @@ describe('T041 — RLS Tenant-Isolation unter gastro_app (NOBYPASSRLS)', () => {
       void client.query('SET ROLE gastro_app');
     });
     try {
+      // Beweisen, dass der Pool wirklich als gastro_app agiert — sonst liefe der
+      // Test als Superuser (Bypass) und `total===1` wäre wegen WHERE tenant_id
+      // auch ohne RLS erfüllt (false-grün).
+      const probe = await gaPool.connect();
+      await assertRunningAsGastroApp(probe);
+      probe.release();
+
       const resA = await listBelege(gaPool, TENANT_A, { limit: 10, offset: 0 });
       expect(resA.total).toBe(1);
       expect(resA.belege.every((b) => b.tenant_id === TENANT_A)).toBe(true);
@@ -170,6 +193,7 @@ describe('T041 — RLS Tenant-Isolation unter gastro_app (NOBYPASSRLS)', () => {
     try {
       await client.query('BEGIN');
       await client.query('SET LOCAL ROLE gastro_app');
+      await assertRunningAsGastroApp(client);
       await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant', TENANT_A]);
       // Kontext = Tenant A, aber INSERT für Tenant B → WITH CHECK-Verletzung.
       await expect(

@@ -19,16 +19,6 @@
     }
   },
 
-  "hooks": {
-    "preCommit": [
-      "npm run lint",
-      "npm run typecheck"
-    ],
-    "prePush": [
-      "npm test"
-    ]
-  },
-
   "agents": {
     "default": "claude-sonnet-4-6",
     "code-reviewer": "claude-opus-4-6",

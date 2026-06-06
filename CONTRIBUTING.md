@@ -3,6 +3,8 @@
 > **Voraussetzung:** Lies erst `Modulkonzept/Konzeptentwicklung/Claude_Code_Workflow.md` — dort steht das Gesamtbild. Diese Datei ist die Kurz-Referenz für tägliches Arbeiten.
 >
 > **Naming-Konvention:** Das System heißt intern **Gastro** (Code, Repo, Tech-Doku). Die Firma + Brand für Außen-Kommunikation heißt **ProzessPilot** (AGB, Sales, Customer-Touchpoints).
+>
+> **Stand 2026-06-06.** Verifizierter Code-Stand (was wirklich läuft): [`.claude/CLAUDE.md`](.claude/CLAUDE.md) §3.
 
 ---
 
@@ -15,7 +17,7 @@
 /start-task T015
 ```
 
-→ Liest Task-Spec, erstellt Branch, beginnt Implementation.
+→ Liest die Task-Spec, **verschiebt sie nach `_in_progress/`** (mit Owner-Name), **erstellt den Branch**, macht den Initial-Commit, sendet eine **Discord-Notification** und beginnt die Implementation.
 
 ### Wenn du fertig bist
 
@@ -24,7 +26,7 @@
 /finish-task
 ```
 
-→ Tests + Lint + Push + PR.
+→ Quality-Gates (**Lint, Type-Check, Tests, Build**), prüft die Akzeptanz-Kriterien, aktualisiert ggf. `tasks/MANUELLE_AUFGABEN.md`, **pusht den Branch**, **eröffnet den PR via GitHub-MCP** und sendet eine **Discord-Notification**. Merged NICHT selbst — das entscheidet der Review.
 
 ### Wenn du einen PR reviewen sollst
 
@@ -33,15 +35,15 @@
 /review-pr 42
 ```
 
-→ code-reviewer-Agent läuft automatisch, postet Findings auf GitHub.
+→ Checkt den PR-Branch aus, verifiziert lokal (install/lint/typecheck/test), lässt den **code-reviewer-Agent** laufen, postet **Inline- + Summary-Kommentare** auf GitHub, sendet Discord-Notification und trifft die **Merge-Entscheidung** (Approve + grüne CI). **Self-Review ist verboten** — der jeweils andere review't.
 
 ---
 
 ## Erstmaliges Setup auf einem neuen Mac
 
 ```bash
-# 1. Repo clonen
-git clone https://github.com/<owner>/prozesspilot.git
+# 1. Repo clonen (Repo heißt "gastro" auf GitHub; lokaler Ordner beliebig)
+gh repo clone <owner>/gastro prozesspilot
 cd prozesspilot
 
 # 2. Git-Identity setzen (lokal pro Repo!)
@@ -60,12 +62,12 @@ claude auth login
 # 6. Discord-Webhook URLs in lokale Env packen
 echo "DISCORD_DEV_WEBHOOK_URL=https://discord.com/api/webhooks/..." >> ~/.zshrc
 
-# 7. Dependencies installieren
-npm install
+# 7. Dependencies installieren (kein Root-package.json — pro App)
+cd backend && npm install && cd ../webapp && npm install && cd ..
 
 # 8. Erste Test-Session
 claude
-> /start-task T001-bootstrap-workflow
+> /start-task T000-bootstrap-workflow
 ```
 
 ---

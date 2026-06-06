@@ -1,8 +1,10 @@
 # ADR-001: PDF-Engine für M08 Monatsreporting
 
-**Status:** Vorgeschlagen  
+**Status:** Vorgeschlagen — nicht umgesetzt; Implementierung weicht ab (siehe Ist-Stand)  
 **Datum:** 2026-05-04  
 **Entscheider:** Solo-Agent (autonom/solo)
+
+> **⚠️ Ist-Stand (2026-06-06): NICHT wie vorgeschlagen umgesetzt.** M08 rendert PDFs mit **`pdf-lib`** (programmatische Draw-Calls), nicht mit Puppeteer — `backend/src/modules/m08-reporting/services/pdf-renderer.ts:12` (`import { PDFDocument } from 'pdf-lib'`). `puppeteer` ist **keine** Dependency (`backend/package.json`), `PUPPETEER_EXECUTABLE_PATH` wird nirgends genutzt, `backend/src/modules/m08-reporting/templates/` existiert nicht. Faktisch wurde also **Option B (programmatisch)** gewählt — mit `pdf-lib` statt `pdfkit`. Der Vorschlag unten bleibt als historischer Kontext stehen; M08 selbst ist derzeit eingefroren (siehe `.claude/CLAUDE.md` §3).
 
 ## Kontext
 

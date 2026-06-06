@@ -1,5 +1,7 @@
 # M08 — Monatsreporting
 
+> ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Stand veraltet; diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
+
 > **Paket:** Standard, Pro
 > **Phase:** 2
 > **Verantwortlich:** Monatlicher Bericht an den Kunden (PDF + WhatsApp/Mail-Zusammenfassung)

@@ -1,5 +1,7 @@
 # M09 — Lieferanten-Kommunikation
 
+> ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Stand veraltet; diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
+
 > **Paket:** Pro
 > **Phase:** 3
 > **Verantwortlich:** Automatische Bestätigungen und Rückfragen per E-Mail

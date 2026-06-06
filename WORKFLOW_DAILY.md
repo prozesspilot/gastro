@@ -1,10 +1,14 @@
 # Workflow-Anleitung für Steve & Andreas
 
-> **Stand:** 2026-05-18
+> **Stand:** 2026-06-06 (Doku-Wahrheits-Pass; Basis 2026-05-18)
 > **Für wen:** Steve und Andreas (Coding-Anfänger)
 > **Zweck:** Damit wir nicht abdriften, uns nicht in die Quere kommen, und beide immer den gleichen Stand haben.
 >
 > **Goldene Regel:** Wenn du unsicher bist — lies hier nach, dann fragst du im Discord-Channel `#dev-coordination`. Nicht raten, nicht ignorieren.
+
+> **⚠️ Stand 2026-06-06 — der primäre Weg ist heute Claude Code, nicht Handarbeit.**
+> Tasks startest/beendest/review'st du mit den Slash-Commands **`/start-task`**, **`/finish-task`** und **`/review-pr`** (siehe [`.claude/commands/`](.claude/commands/) + [`README.md`](README.md)). Die automatisieren Branch-Erstellung, Task-Verschiebung (`_backlog` → `_in_progress` → `_done`), PR-Erstellung, Discord-Notification und die Merge-Entscheidung.
+> Die manuellen Git-Schritte unten zeigen, **was dabei unter der Haube passiert** — als Fallback und zum Verständnis. Sie bleiben gültig, **mit einer wichtigen Korrektur in Schritt 8** (kein Direkt-Push auf `main`).
 
 ---
 
@@ -155,12 +159,13 @@ git branch -d andreas/T012-caddy-setup
 
 ### Schritt 8 — Task-Datei nach `_done/` verschieben
 
-Das macht der **Reviewer mit beim Merge** oder du im nächsten kleinen Cleanup-Commit:
+Die Verschiebung läuft über **denselben PR-Workflow** (bei `/finish-task`/`/review-pr` passiert das automatisch beim Merge) — **niemals per Direkt-Push auf `main`**. Branch-Protection blockt jeden Push auf `main`, auch reine Datei-Verschiebungen.
 
 ```bash
+# Auf deinem Feature-Branch (NICHT auf main):
 git mv tasks/_in_progress/T012-andreas-caddy-setup.md tasks/_done/T012-andreas-caddy-setup.md
 git commit -m "chore: T012 nach _done verschoben"
-git push origin main  # OK weil pure Datei-Verschiebung
+git push   # in den PR — landet via Merge in main
 ```
 
 ---
@@ -320,4 +325,4 @@ Wenn diese Anleitung etwas nicht abdeckt oder unklar ist:
 
 ---
 
-**Letztes Update:** 2026-05-18 nach Foundation-Setup (GitHub, Discord, IONOS, DNS, Secrets, IONOS-Rebrand). Nächste Etappe: Caddy + erster echter Deploy + erste Module.
+**Letztes Update:** 2026-06-06 (Doku-Wahrheits-Pass: Slash-Command-Banner oben + Branch-Protection-Korrektur in Schritt 8). Basis: Foundation-Setup 2026-05-18.

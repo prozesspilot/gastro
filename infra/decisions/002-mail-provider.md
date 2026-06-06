@@ -1,8 +1,10 @@
 # ADR-002: Mail-Provider für M08/M09
 
-**Status:** Vorgeschlagen  
+**Status:** Vorgeschlagen — nicht umgesetzt; Implementierung weicht ab (siehe Ist-Stand)  
 **Datum:** 2026-05-04  
 **Entscheider:** Solo-Agent (autonom/solo)
+
+> **⚠️ Ist-Stand (2026-06-06): NICHT umgesetzt.** Es gibt **keinen** Resend-Adapter und **kein** `backend/src/core/mail/`. Der Mailversand für M08 ist ein **Stub**, der `MAIL_NOT_CONFIGURED` wirft, wenn `SMTP_HOST` fehlt — `backend/src/modules/m08-reporting/services/mail-sender.ts:28-31` (`// TODO Phase 2: nodemailer SMTP-Implementation`). `@resend/resend` ist **keine** Dependency; `nodemailer` ist als Dep vorhanden, aber noch nicht verdrahtet. Tendenz also Richtung **Fallback (Nodemailer/SMTP)**, nicht Resend. M08/M09 sind derzeit eingefroren (siehe `.claude/CLAUDE.md` §3).
 
 ## Kontext
 

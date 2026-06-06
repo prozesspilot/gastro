@@ -55,21 +55,85 @@ Beide haben **kaum Coding-Erfahrung**. Wir entwickeln **vollständig mit Claude 
 
 ---
 
-## 3. Aktueller Stand (Stand Mai 2026)
+## 3. Aktueller Stand — die WAHRHEIT (verifiziert 2026-06-06)
+
+> Dieser Abschnitt ist der **Realitäts-Anker**. Erstellt am 2026-06-06 durch beweisgestützte Code-Verifikation (Read-only-Agenten, je Befund mit Datei:Zeile + Migration-Abgleich) gegen `main`.
+> **Anker-Logik:** `Modulkonzept/` = **Ziel-Zustand** · dieser Abschnitt = **was WIRKLICH läuft** · `/start-task` = **der Weg dazwischen**.
+> Wenn eine Modul-Spec und dieser Abschnitt sich widersprechen, gilt für „was geht" **dieser Abschnitt**. Specs beschreiben das Ziel, nicht den Ist-Zustand.
+
+### 3.1 Zwei-Welten-Realität (Wurzel des Drifts)
+
+Es gab einen Schema-Reboot auf die **`tenants`/`belege`-Welt**. Real existieren genau **14 Tabellen** (`CREATE TABLE` in `backend/migrations/`, angewendet von `backend/src/core/db/migrate.ts`):
+`tenants` · `tenant_settings` · `users` · `auth_sessions` · `auth_audit_log` · `belege` · `kasse_integrations` · `kasse_transactions` · `pos_credentials` · `export_log` · `audit_log` · `ocr_cost_log` · `dsgvo_requests` · `booking_credentials`.
+
+Die **alte Welt** (`receipts`, `customers`, `customer_profiles`, `categories`, `suppliers_global`, `monthly_reports`, `communications`, `customer_credentials`, `customer_hooks`, … 20+ „Geister-Tabellen") existiert **nirgends** — kein `CREATE TABLE` im ganzen Repo (die `CREATE TABLE IF NOT EXISTS` in `Modulkonzept/.../prompts/terminal-tasks/*.txt` sind Prompt-Text, werden nie ausgeführt). **Jeder Code-Pfad, der eine Geister-Tabelle anfasst, wirft zur Laufzeit HTTP 500.**
+
+In `backend/src/app.ts` sind **beide Welten gleichzeitig registriert**:
+- **LIVE-Block** (≈ Z. 224–257): lebende belege-Welt + Auth + M15 + Health/SSE/Docs/Webhooks.
+- **Toter `apiApp`-Block** (≈ Z. 263–313): ~30 Routen auf `/receipts`- und `/customers`-Prefixen gegen Geister-Tabellen → 500. **Alle n8n-Workflows rufen genau diese toten Pfade** → die n8n-Pipeline bringt nichts durch.
+
+### 3.2 Was WIRKLICH läuft (LIVE-Kern, beweisgestützt)
+
+| Bereich | Status | Beweis |
+|---|---|---|
+| Belege-Upload + OCR (M01, belege-Pfad) | ✅ LIVE | `belege.routes.ts` → `app.ts:233` `/api/v1/belege/*`; OCR läuft **async via Queue/Worker** (`ocr-worker.ts`) beim Upload + `/belege/:id/reprocess` — es gibt **keinen** `/extract`-Endpoint |
+| Lexware-Office-Export (M05, belege-Pfad) | ✅ LIVE | `belege-routes.ts` → `app.ts:236` `/api/v1/belege/:id/exports/lexware` + `/exports/lexware/batch` (`booking_credentials`/`export_log`) |
+| DSGVO (M12, **v2**) | ✅ LIVE | `dsgvoV2Routes` → `app.ts:240` `/api/v1/dsgvo` (`dsgvo_requests`/`belege`/`audit_log`) |
+| Auth (M14, **Discord-OAuth + Notfall-TOTP**) | ✅ LIVE | `m14-auth/` → `app.ts:224-225` (`users`/`auth_sessions`/`auth_audit_log`) |
+| SumUp / Kasse (M15) | ✅ LIVE | `app.ts:228/230` `/api/v1/m15/*` (`kasse_*`/`pos_credentials`) — vollständig live |
+| Multi-Tenancy / RLS-Fundament | ✅ LIVE | RLS-GUC `app.current_tenant` (T041); Tabellen `tenants`/`tenant_settings` |
+| GoBD-Basics auf belege-Pfad | ✅ LIVE | zentrales `logAuditEvent` (richtige Spalten), Idempotenz-Hash, Soft-Delete |
+
+### 3.3 Die EINE offene Bau-Lücke (Pilot-Blocker)
+
+**Kategorisieren auf belege fehlt (M03 = Schritt F2).** Die M03-Logik existiert nur auf der toten `/receipts`-Welt (5 Geister-Tabellen: `receipts`, `categories`, `customer_categories`, `suppliers_global`, `categorization_cache` + `audit_log`-Spalten-Mismatch). Es gibt **keinen** `POST /api/v1/belege/:id/categorize`. Das ist die **einzige** funktionale Bruchstelle im sauberen Pilot-Pfad. (Nur `GET /categories` funktioniert — liefert eine In-Memory-Konstante.)
+
+### 3.4 Tote Hülle — eingefroren, NICHT anfassen
+
+**Spec'd, aber nicht lauffähig** (laufen gegen Geister-Tabellen → 500). Einfrieren ≠ Löschen — bleiben für Post-Pilot-Reaktivierung:
+
+- **Komplett tot:** M02 (Archiv) · M04 (DATEV) · M06 (sevDesk) · M07 (Excel/Sheets) · M08 (Reporting) · M09 (Lieferanten-Komm.) · M10 (WhatsApp) · M11 (IMAP) · M13 (Steuerberater-Portal, Ordner `m06-advisor-portal`).
+- **Tote Legacy-Module:** `customers` · `profiles` · `receipts` · `_shared/receipts` · `_shared/customers` · `plugin-system` · `routing` · `core/hooks` · das **`users`-Modul** (Email+Passwort, Token-Refresh — **gefährlich im LIVE-Block** `app.ts:241-243`, aber gegen Geister `refresh_tokens`/`auth_events` + falsche `users`-Spalten → 500).
+- **Halbtot (lebender Kern + tote Alt-Routen am selben Modul):** M01 (`/receipts/:id/extract` tot) · M05 (`/receipts`+`/customers`-Routen tot) · M12 (alt-`dsgvoRoutes` tot) · **`/tenants`-Management-Route** (Spalten-Drift `name`/`active` → 500, vgl. Memory `legacy-welt-schema-drift`).
+
+### 3.5 Restliche Bestandsaufnahme
 
 | Bereich | Stand |
 |---|---|
-| **Konzept** | Komplett dokumentiert in `Modulkonzept/Konzeptentwicklung/` |
-| **Code-Repo-Name** | `gastro` auf GitHub |
-| **Firma** | ProzessPilot, Einzelunternehmen Steve Bernhardt, Schneverdingen |
-| **Backend** | Existiert, wird gerade auf Gastro-Fokus umgestellt |
-| **Module** | M01–M14 implementiert, M15 (SumUp) noch nicht |
-| **Webapp** | Existiert, wird komplett umgebaut zu rein-internem Mitarbeiter-Tool |
-| **Onboarding-Wizard** | Noch nicht gebaut |
-| **Web-Chat-Widget** | Noch nicht gebaut |
-| **Discord-Integration** | Noch nicht gebaut |
-| **CI/CD** | Wird gerade aufgesetzt |
-| **Pilot-Wirt** | Bekannt, Lexware Office Steuerberaterin, SumUp Lite Kasse, sofortiger Start ab KW 22 |
+| **Konzept** | Ziel-Zustand, dokumentiert in `Modulkonzept/Konzeptentwicklung/` |
+| **Code-Repo / Firma** | Repo `gastro`; Firma ProzessPilot (Einzelunternehmen Steve Bernhardt, Schneverdingen) |
+| **Webapp** | Existiert, Umbau zu rein-internem Mitarbeiter-Tool |
+| **Onboarding-Wizard / Web-Chat-Widget / Discord-Integration** | Noch nicht gebaut (eingefroren bis der Pilot zahlt) |
+| **CI/CD** | Aktiv (`.github/workflows/ci-backend.yml`). ⚠️ DB-Tests **skippen still** ohne `PP_E2E=1` → „grün" verbirgt toten Code |
+| **Pilot-Wirt** | Lexware-Office-Steuerberaterin, SumUp Lite Kasse |
+
+### 3.6 Pilot-Scope — das EINZIGE bis zum ersten zahlenden Kunden
+
+Ein Pilotkunde. Der Pilot wird **durch Streichen** fertig, nicht durch Bauen.
+
+```
+Beleg rein (1 Kanal: Foto/Upload)
+  → OCR            (M01, belege — async via OCR-Worker, KEIN /extract-Endpoint)
+  → Kategorisieren (M03, auf belege — DIE Bau-Lücke F2)
+  → Lexware-Export (M05, belege → Lexware Office)
+  → sichtbar, dass es geklappt hat (Smoke-Test)
+```
+
+- Eingangsbelege (Ausgaben) **und** täglicher Z-Bon/Tagesabschluss (Einnahmen) gehen denselben Upload-Weg; der Wirt lädt den Z-Bon manuell hoch.
+- **M15/SumUp-Auto-Connector ist NICHT im Pilot-Kern** (Z-Bon manuell). Code läuft, bleibt liegen — kein kritischer Pfad.
+- Multi-Tenancy/RLS läuft mit — nicht ausbauen, nur nicht anfassen.
+- **Keine** Pilot-Hardcodes (`if tenant == pilot`); alles Kundenabhängige in Tenant-Config/Profil → Kunde 2 = neue Tenant-Zeile, kein Rewrite.
+
+**Offene Pilot-Schritte (Reihenfolge):** **F1** Legacy-Routen/-Module aus `app.ts` entfernen → **F2** `POST /belege/:id/categorize` bauen (M03-Logik auf belege umhängen) → **F3** EINEN n8n-Pilot-Workflow auf belege (`upload → OCR-Worker → categorize → lexware/batch`) → **F4** Smoke-Test (echter Beleg bis Lexware Office) → **F5** grün + kein aktiver `customers`/`receipts`-Bezug mehr.
+
+### 3.7 Arbeitsregeln (verbindlich, gelten für jeden Auftrag)
+
+- **Eine Aufgabe zur Zeit. Ein Terminal. Keine autonomen Parallel-Schreib-Läufe**, bis der Pilot zahlt — Parallelität war der Drift-Motor.
+- **Tor pro Bau-Schritt:** `npm run build` + `npm test` grün **und** Pilot-Smoke-Test grün, **bevor** der nächste Schritt startet.
+- **Jede Task nennt ihren Anker:** den betroffenen Konzept-§ (z. B. „nach `M05_Lexoffice_Integration.md` §4") oder das Code-Modul. Bei Spec-Lücke Frage dokumentieren, **nicht raten**.
+- **Der Weg ist `/start-task`** (Backlog → Branch → PR → Review → Merge). Kein direkter Push auf `main`.
+- **Read-only-Workflows** (dynamic) sind für Breite/Discovery/Review erlaubt; **Schreiben nur sequenziell** durch den Orchestrator — nie durch parallele Schreib-Agenten.
+- **Neue Funktion / neues Modul = „nach dem Pilot". Immer.**
 
 ---
 

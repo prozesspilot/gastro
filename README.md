@@ -1,6 +1,6 @@
 # Gastro
 
-> **Stand:** 2026-05-15 (post Konzept-Reboot)
+> **Stand:** 2026-06-06 (Doku-Wahrheits-Pass; Basis-Reboot 2026-05-15) — verifizierter Code-Stand: [`.claude/CLAUDE.md`](.claude/CLAUDE.md) §3
 >
 > **Naming-Konvention:** Das System/Produkt heißt intern **Gastro** (Code, Repo, Tech-Doku, ENV-Vars, DB). Die Firma + Brand für die Außen-Kommunikation heißt **ProzessPilot** (AGB, Rechnungen, Marketing, Customer-Touchpoints).
 
@@ -24,13 +24,13 @@ Modulares SaaS-System für deutsche **Gastronomie-Kleinunternehmer**, das deren 
 | [`backend/`](backend/) | Backend-Code (Fastify + TypeScript), Modul-Code für M01–M15 |
 | [`webapp/`](webapp/) | Mitarbeiter-Webapp Frontend (React + Vite, wird zu `webapp-internal/` umbenannt) |
 | [`n8n/workflows/`](n8n/workflows/) | n8n-Workflow-JSONs (versioniert) |
-| [`migrations/`](migrations/) | PostgreSQL-Migrationen (chronologisch nummeriert) |
-| [`scripts/`](scripts/) | Hilfs-Skripte (Bootstrap, Backup, Deploy) |
+| [`backend/migrations/`](backend/migrations/) | PostgreSQL-Migrationen (chronologisch nummeriert, 001…110) |
+| [`scripts/`](scripts/) | Repo-weite Hilfs-Skripte (API-Contract-Check, Dev-Seed) — Bootstrap-Skripte liegen in [`backend/scripts/`](backend/scripts/) |
 | [`infra/`](infra/) | Docker-Compose, Caddy, Grafana, Runbooks, Backups, ADRs, Security-Checklist, Load-Tests |
 | [`docs/`](docs/) | OpenAPI-Spec, Tech-Doku, Archive |
 | [`.claude/`](.claude/) | Geteilte Claude-Code-Konfiguration (Sub-Agents, Slash-Commands, CLAUDE.md) |
 | [`.github/workflows/`](.github/workflows/) | CI/CD (Lint, Tests, Discord-Notify, Auto-Deploy, Security) |
-| [`tasks/`](tasks/) | Aufgaben-System: `_backlog/`, `_in_progress/`, `_done/` |
+| [`tasks/`](tasks/) | Aufgaben-System: `_backlog/`, `_in_progress/` (von `/start-task` angelegt), `_done/` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Schnell-Referenz fürs tägliche Arbeiten |
 | [`Modulkonzept/Konzeptentwicklung/`](Modulkonzept/Konzeptentwicklung/) | Konzept-Doku |
 | [`Modulkonzept/Konzeptentwicklung/legal/`](Modulkonzept/Konzeptentwicklung/legal/) | Vertrags-Vorlagen für Anwalt |
@@ -171,7 +171,9 @@ Vollständige Workflow-Doku in [`Claude_Code_Workflow.md`](Modulkonzept/Konzepte
 
 ## Status
 
-Aktueller Live-Stand: [STATUS.html](Modulkonzept/Konzeptentwicklung/STATUS.html)
+**Verifizierter Code-Stand (was wirklich läuft):** [`.claude/CLAUDE.md`](.claude/CLAUDE.md) §3 — der Realitäts-Anker.
+
+Status-Snapshot: [STATUS.html](Modulkonzept/Konzeptentwicklung/STATUS.html) (kann veralten)
 
 Roadmap: [05_Roadmap.md](Modulkonzept/Konzeptentwicklung/05_Roadmap.md)
 
@@ -179,4 +181,4 @@ Pilot-Strategie: [00_Pilot_Strategie.md](Modulkonzept/Konzeptentwicklung/00_Pilo
 
 ---
 
-**Letzte Aktualisierung:** 2026-05-15 (komplett neu nach Konzept-Reboot)
+**Letzte Aktualisierung:** 2026-06-06 (Doku-Wahrheits-Pass: Migrations-/scripts-/tasks-Pfade korrigiert)

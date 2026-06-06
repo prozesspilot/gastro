@@ -1,5 +1,7 @@
 # M11 — IMAP / E-Mail Eingang
 
+> ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Die „✅ implementiert"-Zeile unten ist **überholt** (das Modul läuft gegen `customer_profiles`/`customers`/`receipts`, die es nicht gibt). Diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
+
 > **Status (2026-05-07):** ✅ implementiert. Spec wurde nachgezogen, weil das Modul ursprünglich nicht in der Konzeption stand.
 > **Code:** `backend/src/modules/m11-imap/`
 > **n8n-Workflow:** `n8n/workflows/WF-INPUT-IMAP.json`

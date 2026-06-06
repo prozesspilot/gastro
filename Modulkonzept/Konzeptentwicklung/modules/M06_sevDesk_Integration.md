@@ -1,5 +1,7 @@
 # M06 — sevDesk-Integration
 
+> ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Stand veraltet; diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
+
 > **Paket:** Standard, Pro
 > **Phase:** 2
 > **Verantwortlich:** Push der kategorisierten Belege als Voucher nach sevDesk

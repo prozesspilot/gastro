@@ -1,5 +1,7 @@
 # M04 — DATEV-Export
 
+> ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Stand veraltet; diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
+
 > **Paket:** Pro
 > **Phase:** 3
 > **Verantwortlich:** Monatliche Erstellung & Versand des DATEV-Exports an den Steuerberater

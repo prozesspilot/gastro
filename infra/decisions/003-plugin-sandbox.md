@@ -1,8 +1,10 @@
 # ADR-003: Plugin-Sandbox-Library
 
-**Status:** Vorgeschlagen  
+**Status:** Vorgeschlagen — (noch) nicht relevant; kein Code-Sandboxing umgesetzt (siehe Ist-Stand)  
 **Datum:** 2026-05-04  
 **Entscheider:** Solo-Agent (autonom/solo)
+
+> **⚠️ Ist-Stand (2026-06-06): kein Code-Sandboxing umgesetzt — die Frage stellt sich (noch) nicht.** Das Plugin-System führt **keinen** Kunden-Code aus. `backend/src/modules/plugin-system/services/plugin-dispatcher.ts` sendet nur **HTTP-POST an registrierte Plugin-Webhooks** (HMAC-signiert, SSRF-Schutz, 10s-Timeout) — Plugins sind externe Services, keine sandboxed In-Process-Ausführung. `isolated-vm` ist **keine** Dependency. Diese ADR wird erst relevant, falls echtes In-Process-Code-Sandboxing gebaut wird. Das Plugin-System ist derzeit tot/eingefroren (siehe `.claude/CLAUDE.md` §3).
 
 ## Kontext
 

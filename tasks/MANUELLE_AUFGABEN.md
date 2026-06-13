@@ -150,8 +150,8 @@
   - `DATABASE_URL` mit Production-Credentials
   - `REDIS_URL`
   - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
-  - `CLAUDE_API_KEY` (für M03 OCR)
-  - `GOOGLE_VISION_KEY_FILE` (für M02 OCR)
+  - `CLAUDE_API_KEY` (M03 KI-Kategorisierung, T048 — **ohne Key landet jeder Beleg in `requires_review` statt automatisch kategorisiert zu werden**)
+  - `GOOGLE_VISION_KEY_FILE` (M01 OCR via Google Vision; EU-Region ist per `VISION_API_ENDPOINT`-Default `eu-vision.googleapis.com` erzwungen, T046 — nicht überschreiben)
 
 ### ✅ Postgres-Migrations auf Production laufen lassen (erledigt 2026-05-19)
 - **Was:** Alle Migrations 001-022 manuell via psql auf Production angewendet, schema_migrations gepflegt

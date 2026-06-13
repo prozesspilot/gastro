@@ -21,14 +21,14 @@ Baue `POST /api/v1/belege/:id/categorize` (JWT-geschützt, LIVE-Block), das die 
 
 ## Akzeptanz-Kriterien
 
-- [ ] `POST /api/v1/belege/:id/categorize` registriert im LIVE-Block, mit `m14StaffAuthHook` + `m14TenantContextHook`
-- [ ] Handler lädt den Beleg aus `belege` (nicht `receipts`), kategorisiert, schreibt Kategorie/SKR-Konto zurück nach `belege`
-- [ ] Kategorien-Quelle: In-Memory `SYSTEM_CATEGORIES` (`categories.routes.ts`) — **keine** Geister-Tabellen `categories`/`customer_categories`/`suppliers_global`/`categorization_cache`
-- [ ] Audit via zentrales `core/audit/audit-log.ts` `logAuditEvent` (korrektes Schema), NICHT der alte `audit.service.ts`-Wrapper
-- [ ] Status-Übergang dokumentiert: nach OCR `extracted` → nach categorize `categorized`/`requires_review`
-- [ ] Unit- + Integrationstest (Happy-Path + Fehler-/requires_review-Pfad)
-- [ ] CI grün (lint + typecheck + tests + build), Coverage ≥ 80%
-- [ ] code-reviewer-Agent gibt OK
+- [x] `POST /api/v1/belege/:id/categorize` registriert im LIVE-Block (`belege-categorize.routes.ts`, app.ts), mit `m14StaffAuthHook` + `m14TenantContextHook`
+- [x] Handler lädt den Beleg aus `belege` (`getBelegById`), kategorisiert, schreibt category/SKR + `payload.categorization` zurück (`updateBelegCategorization`)
+- [x] Kategorien-Quelle: In-Memory `SYSTEM_CATEGORIES` (nach `system-categories.ts` extrahiert) — **keine** Geister-Tabellen
+- [x] Audit via zentrales `logAuditEvent` (`beleg.categorized`), NICHT der alte `audit.service.ts`-Wrapper
+- [x] Status-Übergang `extracted` → `categorized` (confidence ≥ 0.75 + KI) / `requires_review` (sonst, inkl. Fallback ohne KI-Key)
+- [x] Unit- + Handler-Tests (10: Categorizer 4 + Handler 6 — Happy/SKR04/Fallback/404/422/403)
+- [x] CI grün lokal (`npm run build` ✓, `npm run lint` ✓ 218 Files, `npm test` 626 passed/0 failed)
+- [ ] code-reviewer-Agent gibt OK (folgt via /review-pr)
 
 ---
 

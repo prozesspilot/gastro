@@ -740,6 +740,102 @@ export async function updateBelegStatus(
 }
 
 /**
+ * T048/F2 — Schreibt das Kategorisier-Ergebnis: Status (categorized/requires_review),
+ * denormalisierte `category`-Spalte und `payload.categorization`. Transaktional mit
+ * Audit (`beleg.categorized`). Vorlage: updateBelegOcrResult.
+ */
+export async function updateBelegCategorization(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  input: {
+    newStatus: 'categorized' | 'requires_review';
+    category: string;
+    categorization: {
+      engine: string;
+      category: string;
+      category_label: string;
+      skr_account: string | null;
+      skr_chart: string;
+      confidence: number;
+      rationale: string;
+      categorized_at: string;
+    };
+    audit: { actorType: 'system' | 'staff'; actorId: string };
+  },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const currentRow = await client.query<{
+      status: BelegStatus;
+      payload: Record<string, unknown>;
+    }>('SELECT status, payload FROM belege WHERE id = $1 AND tenant_id = $2', [belegId, tenantId]);
+    if (currentRow.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const oldStatus = currentRow.rows[0].status;
+    const existingPayload = currentRow.rows[0].payload ?? {};
+    const auditEvents = Array.isArray(
+      (existingPayload as { audit?: { events?: unknown[] } }).audit?.events,
+    )
+      ? (existingPayload as { audit: { events: unknown[] } }).audit.events
+      : [];
+
+    const newPayload: Record<string, unknown> = {
+      ...existingPayload,
+      categorization: input.categorization,
+      audit: {
+        ...((existingPayload as { audit?: Record<string, unknown> }).audit ?? {}),
+        events: [
+          ...auditEvents,
+          {
+            at: input.categorization.categorized_at,
+            type: input.newStatus,
+            actor: { type: input.audit.actorType, id: input.audit.actorId },
+          },
+        ],
+      },
+    };
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+         SET status = $3, category = $4, payload = $5
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [belegId, tenantId, input.newStatus, input.category, JSON.stringify(newPayload)],
+    );
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.categorized',
+      actor: { type: input.audit.actorType, id: input.audit.actorId },
+      payloadBefore: { status: oldStatus },
+      payloadAfter: {
+        status: input.newStatus,
+        category: input.category,
+        skr_account: input.categorization.skr_account,
+        confidence: input.categorization.confidence,
+        engine: input.categorization.engine,
+      },
+    });
+
+    await client.query('COMMIT');
+    return updateResult.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * T007/M01 — Schreibt das OCR-Ergebnis in belege.payload und setzt den
  * Folge-Status (extracted / requires_review). Optional werden denormalisierte
  * Felder (supplier_name, document_date, total_gross) auf dem Row mit-aktualisiert.

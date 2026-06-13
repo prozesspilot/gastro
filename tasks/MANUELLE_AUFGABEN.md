@@ -1,7 +1,7 @@
 # Manuelle Aufgaben (Steve / Andreas)
 
 > Sammlung aller manuellen Schritte, die NICHT per Code lösbar sind und außerhalb des Repos passieren müssen.
-> Letzte Aktualisierung: 2026-05-19
+> Letzte Aktualisierung: 2026-06-13
 >
 > **Format:** Jede Aufgabe hat Owner, Priorität, Status, Quelle (welche Task/PR sie ausgelöst hat).
 > **Status-Werte:** ⏳ offen · 🔄 in Arbeit · ✅ erledigt · ❌ blockiert
@@ -63,6 +63,25 @@
   2. Almaz' SumUp-Lite-Login bereit für OAuth-Flow
   3. 5-10 echte Beleg-Bilder von Almaz als Test-Daten sammeln (für T014 UI-Test)
   4. Pilot-Vertrag unterschreiben lassen
+
+### ⏳ Pilot-Smoke-Test gegen Staging/Prod fahren (T050 — F4-Tor)
+- **Priorität:** P0 (Pilot-Finish F4 — das eigentliche Qualitäts-Tor)
+- **Was:** Einen echten, PII-freien Beleg per `scripts/qa-smoke.sh` komplett durch die Pipeline laufen lassen, bis er in Lexware Office landet. Beweist, dass der belege-Pfad **live** funktioniert (inkl. OCR-Worker, KI-Kategorisierung, Lexware-Export).
+- **Voraussetzung:** Instanz läuft + Lexware-Token (T009) + Vision-Credentials (T007) gesetzt; Geschäftsführer-Account (Bootstrap ✅) mit TOTP zur Hand.
+- **Schritte:**
+  1. TOTP-Code aus 1Password/Authenticator bereithalten (läuft nach 30 s ab).
+  2. Aufruf (Anleitung: `scripts/qa-smoke.README.md`):
+     ```bash
+     BASE_URL=https://api.prozesspilot.net \
+     PP_SMOKE_TENANT_ID=<almaz-tenant-uuid> \
+     PP_SMOKE_EMAIL=bernhardt@prozesspilot.net \
+     PP_SMOKE_PASSWORD='***' \
+     PP_SMOKE_TOTP=<6-stellig> \
+     ./scripts/qa-smoke.sh
+     ```
+  3. Erwartung: Exit 0 + „SMOKE ERFOLGREICH — echter Beleg bis Lexware Office". Danach in Lexware Office prüfen, dass der Beleg im Posteingang liegt.
+  4. Bei Bedarf einen realistischen (aber PII-freien) Beleg via `PP_SMOKE_FILE` statt der Default-Fixture verwenden.
+- **Output:** Bestätigter End-to-End-Durchlauf = F4 abgehakt. Ergebnis kurz im Pilot-Channel dokumentieren.
 
 ### ⏳ ProzessPilot-AGB / Datenschutzerklärung schreiben (Pilot-Strategie)
 - **Priorität:** P1 (vor erstem zahlenden Kunden)

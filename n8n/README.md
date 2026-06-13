@@ -1,115 +1,32 @@
 # ProzessPilot n8n Workflows
 
-Dieses Verzeichnis enthaelt alle n8n-Workflow-Exports fuer ProzessPilot.
+> **Stand 2026-06-13 (T049/F3): Der Pilot läuft Webapp-getrieben, nicht über n8n.**
 
-## Voraussetzungen
+## Warum hier (fast) nichts aktiv ist
 
-- n8n >= 1.0.0 (empfohlen: aktuellste Version)
-- ProzessPilot Backend laeuft und ist erreichbar
-- SMTP-Credentials in n8n konfiguriert (fuer Benachrichtigungen)
+Der Pilot-Beleg-Pfad ist **Mitarbeiter/Webapp-getrieben** und vollständig JWT-geschützt:
 
-## Import-Anleitung
-
-### Einzelner Workflow
-
-1. n8n-UI oeffnen (Standard: http://localhost:5678)
-2. "Workflows" -> "Import from File" auswaehlen
-3. Gewuenschte `.json`-Datei aus diesem Verzeichnis auswaehlen
-4. Workflow aktivieren (Toggle oben rechts)
-
-### Alle Workflows auf einmal (CLI)
-
-```bash
-# n8n CLI verwenden
-n8n import:workflow --input=./workflows/
-
-# Oder via Docker:
-docker exec -it <n8n-container> n8n import:workflow --input=/workflows/
+```
+Upload (Webapp, JWT)
+  → OCR            (Worker, automatisch beim Upload)
+  → Categorize     (POST /api/v1/belege/:id/categorize, JWT)
+  → Lexware-Export (POST /api/v1/belege/:id/exports/lexware, JWT)
 ```
 
-## Credentials konfigurieren
+Alle belege-Endpoints verlangen einen **M14-JWT-Cookie + `X-PP-Tenant-ID`** (`m14StaffAuthHook` + `m14TenantContextHook`). n8n authentifiziert per **HMAC** und kann diese Endpoints daher **nicht** aufrufen. Es gibt im Pilot bewusst **keinen aktiven n8n-Workflow** — `n8n/deploy.sh` deployt entsprechend nichts (kein Fehler).
 
-### Backend URL + HMAC Secret
+## `_eingefroren/`
 
-Alle Workflows benoetigen folgende Environment-Variablen in n8n:
+Die 17 alten Workflows liegen in [`workflows/_eingefroren/`](workflows/_eingefroren/). Sie rufen die **entfernte** `/receipts`-/`/customers`-Welt (T047) → liefen gegen HTTP 404. Sie bleiben als Referenz für die **Post-Pilot-Reaktivierung** erhalten — relevant, sobald ein automatischer Multi-Channel-Eingang (WhatsApp/IMAP) gebaut wird (M10/M11, eingefroren).
 
-| Variable | Beschreibung | Beispiel |
-|---|---|---|
-| `BACKEND_URL` | URL des ProzessPilot-Backends | `http://backend:3000` |
-| `PP_TENANT_ID` | UUID des Standard-Mandanten | `550e8400-e29b-41d4-a716-446655440000` |
-| `PP_HMAC_SECRET` | HMAC-Secret fuer API-Signierung | `your-32-char-secret` |
+## Post-Pilot: Wann n8n wieder ins Spiel kommt
 
-Diese Variablen in n8n unter **Settings > Environment Variables** setzen.
+n8n wird gebraucht, sobald Belege **nicht** mehr nur manuell über die Webapp hochgeladen werden, sondern automatisch über WhatsApp/E-Mail/Web-Chat einlaufen. Dann braucht es:
+1. einen HMAC- oder Service-Token-Pfad zu den belege-Endpoints (n8n→Backend ohne JWT-Cookie), und
+2. einen neuen Pilot-Workflow auf der belege-Welt (kein `/receipts` mehr).
 
-### SMTP-Credentials (fuer Benachrichtigungen)
+Bis dahin: nichts importieren. Der Webapp-Pfad ist die Pilot-Pipeline.
 
-1. n8n-UI: **Credentials > New Credential > SMTP**
-2. Name: `SMTP Credentials`
-3. Host, Port, User, Password aus `.env.prod` uebernehmen
-4. Credential-ID `smtp-cred` vergeben (oder Workflows entsprechend anpassen)
+## Deploy
 
-## Workflow-Uebersicht
-
-### Haupt-Pipeline
-
-| Datei | Beschreibung | Trigger |
-|---|---|---|
-| `WF-MASTER-RECEIPT.json` | Haupt-Belegverarbeitung: M01 → M03 → M02 → M07 | Webhook |
-| `WF-INPUT-WHATSAPP.json` | WhatsApp-Eingang → Backend | Meta Webhook |
-| `WF-ERROR-HANDLER.json` | Fehler klassifizieren + Benachrichtigungen | Von anderen Workflows |
-
-### Modul-Workflows
-
-| Datei | Modul | Beschreibung |
-|---|---|---|
-| `WF-M01.json` | M01 Eingang | Belegempfang und initiale Verarbeitung |
-| `WF-M02.json` | M02 Archiv | Archivierung in MinIO/S3 |
-| `WF-M03.json` | M03 OCR | Google Vision OCR + Extraktion |
-| `WF-M04.json` | M04 DATEV | DATEV-Export-Workflow |
-| `WF-M05.json` | M05 Lexoffice | Lexoffice-Export-Workflow |
-| `WF-M06.json` | M06 sevDesk | sevDesk-Export-Workflow |
-| `WF-M07.json` | M07 Benachrichtigung | WhatsApp/E-Mail-Bestaetigungen |
-| `WF-M08.json` | M08 Reporting | Monatsbericht-Generierung (Cron) |
-
-### Neue Workflows (Phase 4)
-
-| Datei | Beschreibung | Trigger |
-|---|---|---|
-| `WF-M09-SUPPLIER-COMM.json` | Lieferanten-Kommunikation bei requires_review | Webhook POST `/webhook/m09-supplier-comm` |
-| `WF-PLUGIN-DISPATCHER.json` | Plugin-Fehler-Monitoring und -Benachrichtigung | Cron stuendlich |
-| `WF-CRON-M09-EXPECTED.json` | Woechentlicher Expected-Check fuer alle Kunden | Cron Montag 09:00 |
-
-## Aktivierungs-Reihenfolge
-
-Aktiviere die Workflows in dieser Reihenfolge, um Abhaengigkeiten zu vermeiden:
-
-1. `WF-ERROR-HANDLER` (wird von anderen aufgerufen)
-2. `WF-M01` (Basis-Eingang)
-3. `WF-M02` (Archivierung)
-4. `WF-M03` (OCR)
-5. `WF-MASTER-RECEIPT` (Haupt-Orchestrator)
-6. `WF-INPUT-WHATSAPP` (Eingangskanal)
-7. `WF-M07` (Benachrichtigungen)
-8. `WF-M08` (Reporting, Cron)
-9. `WF-M09-SUPPLIER-COMM` (Lieferanten-Komm.)
-10. `WF-PLUGIN-DISPATCHER` (Plugin-Monitoring, Cron)
-11. `WF-CRON-M09-EXPECTED` (Expected-Check, Cron)
-
-## Webhook-URLs
-
-Nach dem Aktivieren sind folgende Webhook-URLs aktiv:
-
-| Workflow | Webhook-Pfad |
-|---|---|
-| WF-MASTER-RECEIPT | `/webhook/master-receipt` |
-| WF-INPUT-WHATSAPP | `/webhook/whatsapp-input` |
-| WF-M09-SUPPLIER-COMM | `/webhook/m09-supplier-comm` |
-
-Die vollstaendige URL hat das Format: `http://n8n:5678/webhook/<pfad>`
-
-## Fehlerbehebung
-
-- **Workflow startet nicht**: Pruefen ob Credentials korrekt konfiguriert sind
-- **HTTP 401 vom Backend**: HMAC-Secret oder Timestamp-Skew pruefen
-- **HTTP 404**: BACKEND_URL und Route-Prefix pruefen
-- **SMTP-Fehler**: SMTP-Credentials in n8n pruefen; Port 587 + STARTTLS empfohlen
+`./deploy.sh` importiert nur top-level `workflows/WF-*.json` (nicht `_eingefroren/`). Aktuell = 0 Workflows = nichts zu tun.

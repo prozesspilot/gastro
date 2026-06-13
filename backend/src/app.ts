@@ -7,57 +7,23 @@ import { Pool } from 'pg';
 import { hmacMiddleware } from './core/auth/hmac.middleware';
 import { config } from './core/config';
 import { setHookRunnerDeps } from './core/hooks/hook-runner';
-import { hookRoutes } from './core/hooks/hook.routes';
 import { requestLoggingPlugin } from './core/hooks/request-logging';
 import { logger } from './core/logger';
 import { httpRequestDuration, httpRequestsTotal, registry } from './core/metrics';
 import { captureException } from './core/sentry';
 import { createS3Client } from './core/storage/storage.service';
 import { startWorker as startWebhookWorker } from './core/webhooks/webhook.queue';
-import { internalCustomersRoutes } from './modules/_shared/customers/internal.routes';
-import { operatorNotificationsRoutes } from './modules/_shared/customers/notifications.routes';
-import { errorRoutes } from './modules/_shared/errors/error.routes';
-import { receiptsCompleteRoutes } from './modules/_shared/receipts/complete.routes';
-import { customerRoutes } from './modules/customers/customer.routes';
+// F1 (T047): nur noch die lebende belege/tenants-Welt + Auth + Health/SSE/Docs/Webhooks.
+// Die tote /receipts+/customers-Welt (M02/M04/M06–M11, customers/receipts/profiles,
+// routing, plugin-system, users, alt-Pfade von M01/M05/M12) wurde entfernt.
 import { dsgvoV2Routes } from './modules/dsgvo/dsgvo-v2.routes';
-import { dsgvoRoutes } from './modules/dsgvo/routes';
 import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
-import { m01ReceiptIntakeRoutes } from './modules/m01-receipt-intake/routes';
-import { m02ArchiveRoutes } from './modules/m02-archive/routes';
 import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
-import { m03CategorizationRoutes } from './modules/m03-categorization/routes';
-import { m04DatevRoutes } from './modules/m04-datev/routes';
 import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
-import {
-  m05CustomerLexofficeRoutes,
-  m05IntegrationRoutes,
-  m05LexofficeRoutes,
-} from './modules/m05-lexoffice/routes';
-import { m06AdvisorPortalRoutes } from './modules/m06-advisor-portal/routes';
-import {
-  m06CustomerSevdeskRoutes,
-  m06IntegrationRoutes,
-  m06SevdeskRoutes,
-} from './modules/m06-sevdesk/routes';
-import { m07SpreadsheetRoutes } from './modules/m07-spreadsheet/routes';
-import { m08ReportingRoutes } from './modules/m08-reporting/routes';
-import {
-  m09CommunicationRoutes,
-  m09InboundWebhookRoutes,
-} from './modules/m09-supplier-comm/routes';
-import { m10WhatsAppRoutes } from './modules/m10-whatsapp/routes';
-import { m11ImapRoutes } from './modules/m11-imap/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
 import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
-import { pluginSystemRoutes } from './modules/plugin-system/routes';
-import { internalProfileRoutes, profileRoutes } from './modules/profiles/profile.routes';
-import { receiptRoutes } from './modules/receipts/receipt.routes';
-import { routingPlanRoutes } from './modules/routing/plan.routes';
-import { routingRoutes } from './modules/routing/routing.routes';
-import { tenantRoutes } from './modules/tenants/tenant.routes';
-import { authProtectedRoutes, authPublicRoutes, usersRoutes } from './modules/users/routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
 import { sseRoutes } from './routes/sse';
@@ -238,9 +204,6 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm
   await app.register(dsgvoV2Routes, { prefix: '/api/v1/dsgvo' });
-  await app.register(authPublicRoutes, { prefix: '/api/v1/auth' });
-  await app.register(authProtectedRoutes, { prefix: '/api/v1/auth' });
-  await app.register(usersRoutes, { prefix: '/api/v1/users' });
 
   // Öffentliche Endpoints — kein Auth (D1)
   await app.register(healthRoutes, { prefix: '/api/v1' });
@@ -253,64 +216,14 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
 
   // D7: Webhook-Empfänger für n8n (kein HMAC, eigene Signaturprüfung)
   await app.register(webhookRoutes, { prefix: '/webhooks' });
-  // M09 Inbound-Mail-Webhook (kein HMAC — Mailgun/Postmark Webhook-Format)
-  await app.register(m09InboundWebhookRoutes, { prefix: '/webhooks' });
 
-  // /api/v1 — HMAC-Auth bewacht alle API-Routen (D3)
+  // /api/v1 — HMAC-Auth (D3). Nach F1 (T047) nur noch die lebende Kategorien-Liste;
+  // die tote /receipts+/customers-Welt wurde entfernt (siehe CLAUDE.md §3).
   await app.register(
     async (apiApp) => {
       apiApp.addHook('preHandler', hmacMiddleware);
-      await apiApp.register(tenantRoutes, { prefix: '/tenants' });
-      await apiApp.register(customerRoutes, { prefix: '/customers' });
-      await apiApp.register(profileRoutes, { prefix: '/customers' });
-      await apiApp.register(internalProfileRoutes, { prefix: '/internal' });
-      await apiApp.register(routingRoutes, { prefix: '/routing' });
-      await apiApp.register(m10WhatsAppRoutes, { prefix: '/internal/whatsapp' });
-      await apiApp.register(m11ImapRoutes, { prefix: '/internal/imap' });
-      await apiApp.register(receiptRoutes, { prefix: '/receipts' });
-      await apiApp.register(m01ReceiptIntakeRoutes, { prefix: '/receipts' });
-      await apiApp.register(m02ArchiveRoutes, { prefix: '/receipts' });
-      // M03 Kategorisierung — Endpoint POST /receipts/:id/categorize
-      await apiApp.register(m03CategorizationRoutes, { prefix: '/receipts' });
-      // M03 Kategorien-Liste (GET /categories)
+      // M03 Kategorien-Liste (GET /categories, in-memory SYSTEM_CATEGORIES)
       await apiApp.register(categoriesRoutes, { prefix: '/categories' });
-      // M05 Lexoffice-Push (POST /receipts/:id/exports/lexoffice)
-      await apiApp.register(m05LexofficeRoutes, { prefix: '/receipts' });
-      // M05 Customer-Exports (GET /customers/:id/exports/lexoffice)
-      await apiApp.register(m05CustomerLexofficeRoutes, { prefix: '/customers' });
-      // M05 Integration-Test + Sync (POST /integrations/lexoffice/test|sync-categories)
-      await apiApp.register(m05IntegrationRoutes, { prefix: '/integrations/lexoffice' });
-      // M06 sevDesk Push (POST /receipts/:id/exports/sevdesk)
-      await apiApp.register(m06SevdeskRoutes, { prefix: '/receipts' });
-      // M06 Customer-Exports (GET /customers/:id/exports/sevdesk)
-      await apiApp.register(m06CustomerSevdeskRoutes, { prefix: '/customers' });
-      // M06 Integration-Test + Sync (POST /integrations/sevdesk/test|sync-accounts)
-      await apiApp.register(m06IntegrationRoutes, { prefix: '/integrations/sevdesk' });
-      // M04 DATEV Export (POST/GET /customers/:id/datev/...)
-      await apiApp.register(m04DatevRoutes, { prefix: '/customers' });
-      // /receipts/:id/complete (Master-Workflow Final-Status)
-      await apiApp.register(receiptsCompleteRoutes, { prefix: '/receipts' });
-      await apiApp.register(m07SpreadsheetRoutes, { prefix: '/receipts' });
-      // M08 Monatsreporting (customer-scoped: /customers/:id/reports/...)
-      await apiApp.register(m08ReportingRoutes, { prefix: '/customers' });
-      // Konzept-konformer Routing-Plan (parallel zu D9 routingRoutes /jobs)
-      await apiApp.register(routingPlanRoutes, { prefix: '/routing' });
-      // Internal-Endpoints für n8n (kein Tenant-Hook):
-      // GET /api/v1/internal/customers, POST /api/v1/internal/notifications/operator
-      await apiApp.register(internalCustomersRoutes, { prefix: '/internal' });
-      await apiApp.register(operatorNotificationsRoutes, { prefix: '/internal' });
-      // Pro-Hook-CRUD
-      await apiApp.register(hookRoutes, { prefix: '/hooks' });
-      // Error-Log (Pipeline-Fehler-Tracking)
-      await apiApp.register(errorRoutes, { prefix: '/errors' });
-      // M06 Steuerberater-Portal (GET/POST /advisor/...)
-      await apiApp.register(m06AdvisorPortalRoutes, { prefix: '/advisor' });
-      // Plugin-System (POST/GET/PUT/DELETE /plugins/...)
-      await apiApp.register(pluginSystemRoutes, { prefix: '/plugins' });
-      // DSGVO-Compliance (POST/GET /dsgvo/...)
-      await apiApp.register(dsgvoRoutes, { prefix: '/dsgvo' });
-      // M09 Lieferanten-Kommunikation (POST/GET /communications/...)
-      await apiApp.register(m09CommunicationRoutes, { prefix: '/communications' });
     },
     { prefix: '/api/v1' },
   );

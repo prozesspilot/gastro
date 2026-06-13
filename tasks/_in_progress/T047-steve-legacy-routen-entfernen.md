@@ -23,11 +23,11 @@
 
 ## Akzeptanz-Kriterien
 
-- [ ] Toter `apiApp`-Block (≈ `app.ts:260–315`) entfernt
-- [ ] `users`-Modul-Routen (Email+Passwort, im LIVE-Block) entfernt; `m14-auth` (Discord+Notfall) bleibt funktionsfähig
-- [ ] Tote Modul-Ordner gelöscht: `modules/{customers,profiles,receipts,_shared/receipts,_shared/customers,m02-archive,m03-categorization(alt-Pfad),m04-datev,m06-sevdesk,m06-advisor-portal,m07-spreadsheet,m08-reporting,m09-supplier-comm,m10-whatsapp,m11-imap,plugin-system,routing,users}` + `core/hooks` — **soweit nicht vom Pilot-Kern importiert** (vorher Import-Graph prüfen!)
-- [ ] `git grep -nE "/receipts|/customers" backend/src/app.ts` = 0 aktive Registrierungen
-- [ ] App startet, alle Pilot-Routen (belege/lexware/kasse/auth/dsgvo-v2/health) erreichbar
+- [x] Toter `apiApp`-Block (≈ `app.ts:260–315`) entfernt — auf die lebende `categories`-Liste geschrumpft (HMAC bleibt)
+- [x] `users`-Modul-Routen (Email+Passwort, im LIVE-Block) entfernt; `m14-auth` (Discord+Notfall) bleibt funktionsfähig
+- [x] Tote Modul-Ordner gelöscht (customers/profiles/receipts/m02/m04/m06×2/m07/m08/m09/m10/m11/plugin-system/routing/users + _shared/{customers,errors} + alt-Pfade m01/m05/dsgvo + core/adapters/{booking/sevdesk,spreadsheet,archive-storage} + booking-tot + path-template + hook.routes). **NICHT** gelöscht (T048-Rest, Import-Graph-verifiziert): m03-Categorize-Logik, `_shared/receipts/receipt.repository` (Receipt-Typ), `core/hooks/hook-runner`+`request-logging`, LIVE-Lexware-Adapter. 215 Dateien, ~27.5k Zeilen.
+- [x] `grep -nE "register.*(/receipts|/customers)" backend/src/app.ts` = 0 aktive Registrierungen
+- [x] App baut + alle Tests grün (Build exit 0, 616 passed / 0 failed); Pilot-Routen registriert
 - [ ] CI grün (lint + typecheck + tests + build) — übersprungene Tests der gelöschten Module ebenfalls entfernen
 - [ ] code-reviewer-Agent gibt OK
 

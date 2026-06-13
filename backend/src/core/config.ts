@@ -37,6 +37,10 @@ const envSchema = z.object({
   CLAUDE_API_KEY: z.string().default(''),
   CLAUDE_MODEL: z.string().default('claude-sonnet-4-6'),
   GOOGLE_VISION_KEY_FILE: z.string().default(''),
+  // CLAUDE.md §5.4 — Google Vision API muss in EU-Region laufen (DSGVO).
+  // 'eu-vision.googleapis.com' = europe-west3 (Frankfurt). Override nur für
+  // Tests/Local-Dev sinnvoll.
+  VISION_API_ENDPOINT: z.string().default('eu-vision.googleapis.com'),
   // M01 §15 — Timeout für OCR-Adapter (Default 15 s).
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
   // T007 — BullMQ-Worker für OCR. '0' deaktiviert das Auto-Enqueue beim Upload

@@ -21,14 +21,14 @@ Der Google-Vision-OCR-Adapter muss die **EU-Region** (`europe-west3` / Endpoint 
 
 ## Akzeptanz-Kriterien
 
-- [ ] `core/adapters/ocr/google-vision.adapter.ts` nutzt einen konfigurierbaren EU-Endpoint (Default EU)
-- [ ] Neue ENV-Variable `VISION_API_ENDPOINT` (Default `eu-vision.googleapis.com`) in `core/config.ts` + `.env.example`
-- [ ] Adapter wird vom OCR-Worker/`ocr.service.ts` korrekt mit EU-Endpoint konsumiert
-- [ ] **Keine** Referenz auf den in #105 gelöschten `m03-ocr/ocr.handler.ts`
-- [ ] Unit-Test verifiziert, dass der EU-Endpoint gesetzt wird
-- [ ] CI grün (lint + typecheck + tests + build)
-- [ ] Test-Coverage ≥ 80% für neue/geänderte Dateien
-- [ ] code-reviewer-Agent gibt OK
+- [x] `core/adapters/ocr/google-vision.adapter.ts` nutzt einen konfigurierbaren EU-Endpoint (Default EU)
+- [x] Neue ENV-Variable `VISION_API_ENDPOINT` (Default `eu-vision.googleapis.com`) in `core/config.ts` + `.env.example`
+- [x] Adapter wird vom OCR-Worker/`ocr.service.ts` korrekt mit EU-Endpoint konsumiert (Adapter liest `config.VISION_API_ENDPOINT` direkt)
+- [x] **Keine** Referenz auf den in #105 gelöschten `m03-ocr/ocr.handler.ts` (nur M01-Adapter-Tests übernommen)
+- [x] Unit-Test verifiziert, dass der EU-Endpoint gesetzt wird (`tests/adapters/google-vision-eu-region.test.ts`, 3 Cases)
+- [x] CI grün (lint + typecheck + tests + build) — lokal: `npm run build` ✓, `npm run lint` ✓, `npm test` 837 passed ✓
+- [x] Test-Coverage ≥ 80% für neue/geänderte Dateien (getVisionClient mit/ohne keyFilename + Override abgedeckt)
+- [ ] code-reviewer-Agent gibt OK (folgt via /review-pr)
 
 ---
 

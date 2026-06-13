@@ -21,7 +21,7 @@ import type { OcrAdapter, OcrBlock, OcrResult, OcrWord } from './adapter.interfa
 
 // Lazy-Import: Vision SDK nur laden, wenn der Adapter wirklich benutzt wird.
 // So kann das Modul auch in Tests/CI ohne installiertes SDK importiert werden.
-type VisionClientCtor = new (opts: { keyFilename?: string }) => {
+type VisionClientCtor = new (opts: { keyFilename?: string; apiEndpoint?: string }) => {
   documentTextDetection(req: unknown, opts?: unknown): Promise<unknown[]>;
   batchAnnotateFiles(req: unknown, opts?: unknown): Promise<unknown[]>;
   close(): Promise<void>;
@@ -36,9 +36,18 @@ async function getVisionClient(): Promise<InstanceType<VisionClientCtor>> {
   const mod = await import('@google-cloud/vision');
   const ImageAnnotatorClient = (mod as { ImageAnnotatorClient: VisionClientCtor })
     .ImageAnnotatorClient;
-  const opts = config.GOOGLE_VISION_KEY_FILE ? { keyFilename: config.GOOGLE_VISION_KEY_FILE } : {};
+  // CLAUDE.md §5.4 — EU-Region zwingend (DSGVO). Default 'eu-vision.googleapis.com'.
+  const opts: { keyFilename?: string; apiEndpoint: string } = {
+    apiEndpoint: config.VISION_API_ENDPOINT,
+  };
+  if (config.GOOGLE_VISION_KEY_FILE) opts.keyFilename = config.GOOGLE_VISION_KEY_FILE;
   cachedClient = new ImageAnnotatorClient(opts);
   return cachedClient;
+}
+
+/** Test-Only: invalidiert den lazy-cached Vision-Client zwischen Test-Cases. */
+export function __resetVisionClientForTests(): void {
+  cachedClient = null;
 }
 
 // ── Vertex/BBox-Helfer ────────────────────────────────────────────────────────

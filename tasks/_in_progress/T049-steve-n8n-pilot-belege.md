@@ -13,24 +13,24 @@
 
 ## Was zu tun ist
 
-**Alle** n8n-Workflows rufen heute die toten `/receipts`- bzw. `/customers`-Endpoints (CLAUDE.md §3.1) → die Pipeline bricht. Schreibe **EINEN** sauberen Pilot-Workflow, der die lebenden belege-Endpoints kettet:
+**SCOPE-KORREKTUR (2026-06-13, beweisgestützt):** Die ursprüngliche Annahme „EIN n8n-Workflow ruft die belege-Endpoints" ist **architektonisch nicht umsetzbar**: alle belege-Endpoints (upload/categorize/lexware) sind **JWT-geschützt** (`m14StaffAuthHook` + `m14TenantContextHook`, Mitarbeiter/Webapp), n8n nutzt **HMAC** → n8n kann sie nicht aufrufen. Der OCR-Worker kettet zudem nicht automatisch weiter. Der Pilot-Pfad ist faktisch **Webapp-getrieben** (Upload → OCR-Worker → Categorize-Button → Lexware-Export-Button, alles JWT).
 
-```
-Upload → (OCR-Worker, async) → POST /api/v1/belege/:id/categorize → POST /api/v1/exports/lexware/batch
-```
+→ **Neuer Scope (Entscheidung Steve, 2026-06-13):** n8n **aufräumen** statt einen (nicht funktionsfähigen) Workflow zu bauen:
+- Alle 17 toten Workflow-JSONs (rufen die in T047 entfernte `/receipts`-/`/customers`-Welt) nach `n8n/workflows/_eingefroren/` verschieben.
+- `n8n/README.md` ehrlich umschreiben: Pilot ist Webapp/JWT-getrieben, n8n erst Post-Pilot bei Multi-Channel-Eingang (WhatsApp/IMAP) + dann mit HMAC-/Service-Token-Pfad zu belege.
+- `n8n/deploy.sh`: 0 Workflows ist kein Fehler mehr (exit 0 statt exit 1).
 
-Alle anderen Workflow-JSONs nach `n8n/workflows/_eingefroren/` verschieben und das `n8n/README.md` entsprechend kürzen. **Wichtig:** Es gibt KEINEN `/extract`-Endpoint — OCR läuft automatisch über den Worker beim Upload (`/belege/:id/reprocess` re-runnt).
+n8n-Reaktivierung (HMAC-/Service-Pfad + belege-Workflow) ist Post-Pilot.
 
 ---
 
 ## Akzeptanz-Kriterien
 
-- [ ] Genau ein neuer Pilot-Workflow (`WF-PILOT-BELEGE.json` o.ä.) ruft nur `/api/v1/belege/...`-Endpoints (HMAC-Header)
-- [ ] Workflow-Kette: Upload-Trigger → warte auf OCR-Status → `categorize` → `exports/lexware/batch`
-- [ ] Alle übrigen `n8n/workflows/*.json` nach `n8n/workflows/_eingefroren/` verschoben
-- [ ] `n8n/README.md` beschreibt nur noch den Pilot-Workflow + den `_eingefroren/`-Hinweis
-- [ ] Kein aktiver Workflow ruft mehr `/receipts` oder `/customers` (`grep` über `n8n/workflows/*.json`)
-- [ ] code-reviewer-Agent gibt OK
+- [x] Alle 17 toten Workflows nach `n8n/workflows/_eingefroren/` verschoben (+ `_eingefroren/README.md`)
+- [x] `n8n/README.md` beschreibt den Webapp-getriebenen Pilot-Pfad + warum n8n inaktiv ist (JWT vs HMAC) + Post-Pilot-Bedingungen
+- [x] `n8n/deploy.sh` behandelt 0 aktive Workflows graceful (exit 0, Hinweis) statt Fehler
+- [x] Kein aktiver Workflow (top-level `n8n/workflows/`) ruft mehr `/receipts` oder `/customers`
+- [ ] code-reviewer-Agent gibt OK (folgt via /review-pr)
 
 ---
 

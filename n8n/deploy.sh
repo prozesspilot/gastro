@@ -76,8 +76,12 @@ echo "→ Pass 1/3: importing workflows from ${WORKFLOW_DIR}"
 shopt -s nullglob
 files=( "${WORKFLOW_DIR}"/WF-*.json )
 if (( ${#files[@]} == 0 )); then
-  echo "No WF-*.json files found in ${WORKFLOW_DIR}" >&2
-  exit 1
+  # T049/F3: Der Pilot laeuft Webapp/JWT-getrieben (Upload->OCR-Worker->Categorize->
+  # Lexware-Export, alles ueber die Mitarbeiter-Webapp). Es gibt bewusst KEINE aktiven
+  # n8n-Workflows mehr — die alten liegen in workflows/_eingefroren/ (tot gegen die
+  # entfernte /receipts-Welt). Das ist KEIN Fehler.
+  echo "Keine aktiven WF-*.json in ${WORKFLOW_DIR} — Pilot ist Webapp-getrieben, nichts zu deployen." >&2
+  exit 0
 fi
 
 # Exclude *_clean.json variants — they're duplicates

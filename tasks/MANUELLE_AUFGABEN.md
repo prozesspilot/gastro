@@ -78,6 +78,28 @@
 
 ## 🔧 Andreas — Backend / Infrastructure / DB
 
+### ⏳ MinIO-Root-Passwort rotieren (P0-Sicherheit, vor erstem echten Beleg)
+- **Priorität:** P0 (Secret-Leak — Pilot-Sicherheit/Compliance)
+- **Herkunft:** Audit 2026-06-05 (L8) — MinIO-Root-Passwort am 02.06. kurz in Mac-Scrollback + Chat-Log geleakt (Server-History sauber, Bucket leer). Prod nutzt `${PP_S3_SECRET_KEY:-minioadmin}` als Default in `docker-compose.prod.yml`.
+- **Was:** `MINIO_ROOT_PASSWORD` / `PP_S3_SECRET_KEY` in `.env.prod` auf einen neuen, starken Wert setzen und MinIO neu aufsetzen.
+- **Schritte:**
+  1. Neues Secret generieren (z. B. `openssl rand -base64 32`), in 1Password ablegen.
+  2. In `/opt/gastro/.env.prod` auf dem Server `PP_S3_SECRET_KEY=<neu>` setzen (kein `minioadmin`-Default mehr).
+  3. **Wichtig:** `.env.prod`-Änderungen greifen NUR via `docker compose up -d --force-recreate` — **nicht** `restart` (siehe Memory `prod-env-change-recreate`).
+  4. Verifizieren, dass Backend + MinIO mit dem neuen Key verbinden (Upload-Smoke-Test).
+- **Output:** rotiertes `PP_S3_SECRET_KEY` in `.env.prod` + 1Password; kein Default-Passwort mehr aktiv.
+
+### ⏳ JWT_SECRET + Discord-Bot-Token rotieren (P0/P1-Sicherheit)
+- **Priorität:** P1 (lokale `.env` enthält Klartext-Secrets — nie committet, aber rotieren)
+- **Herkunft:** Audit 2026-06-05 (L8) — lokale `.env` enthält Klartext `JWT_SECRET`, Discord-Client-Secret, **Bot-Token**, Dev-Log-Webhook.
+- **Was:** `JWT_SECRET` (≥ 32 Zeichen, Prod erzwingt das) und das Discord-Bot-Token neu erzeugen.
+- **Schritte:**
+  1. Neues `JWT_SECRET` generieren (`openssl rand -base64 48`), in `.env.prod` + 1Password setzen — **invalidiert alle aktiven Sessions** (Re-Login nötig).
+  2. Discord-Bot-Token im Developer-Portal regenerieren, alten widerrufen, neuen in `.env.prod` + 1Password.
+  3. Prod via `docker compose up -d --force-recreate` neu aufsetzen.
+  4. Notfall-Login (Email + TOTP) testen, danach Discord-OAuth.
+- **Output:** rotiertes `JWT_SECRET` + Discord-Bot-Token; alte Werte widerrufen.
+
 ### ⏳ TRUST_PROXY ENV-Variable in Production setzen (T017)
 - **Priorität:** P0 (vor Production-Cutover — sonst funktioniert IP-Rate-Limiting nicht und ist als DoS-Vektor ausnutzbar)
 - **Dependencies:** T012 (Caddy-Setup) ✅ erledigt

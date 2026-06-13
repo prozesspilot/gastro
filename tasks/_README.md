@@ -8,10 +8,13 @@ Dieser Ordner ist das **zentrale Aufgaben-Tracking** für ProzessPilot. Jede Auf
 tasks/
 ├── _README.md           # Diese Datei
 ├── _template.md         # Vorlage für neue Tasks
-├── _backlog/            # Tasks, die noch nicht gestartet wurden
+├── _backlog/            # NUR der aktive Pilot-Pfad (P0-Sicherheit + F1–F5)
 ├── _in_progress/        # Aktuell in Arbeit (Filename enthält Owner)
-└── _done/               # Fertig + gemerged
+├── _done/               # Fertig + gemerged
+└── _eingefroren/        # Post-Pilot — gültige Tasks, eingefroren bis der Pilot zahlt (siehe _eingefroren/_README.md)
 ```
+
+> **Fokus-Regel (Stand 2026-06-13):** `_backlog/` enthält ausschließlich den Pilot-Pfad aus `.claude/CLAUDE.md` §3.6. Post-Pilot-Tasks liegen in `_eingefroren/` und werden erst reaktiviert, wenn der Pilot zahlt.
 
 ## Task-Lebenszyklus
 

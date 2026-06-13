@@ -195,8 +195,9 @@ export async function categorizeBeleg(
     });
     const parsed = parseToolUse(resp);
     if (!parsed || !isKnownCategory(parsed.category_id)) {
+      // Kein rationale loggen (KI-Freitext kann PII spiegeln — CLAUDE.md §6.6).
       logger.warn(
-        { parsed },
+        { category_id: parsed?.category_id, confidence: parsed?.confidence },
         'belege-categorizer: ungültige KI-Antwort — Fallback → requires_review',
       );
       return buildResult(

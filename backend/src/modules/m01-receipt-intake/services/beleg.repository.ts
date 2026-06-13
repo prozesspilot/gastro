@@ -795,7 +795,7 @@ export async function updateBelegCategorization(
           {
             at: input.categorization.categorized_at,
             type: input.newStatus,
-            actor: input.audit.actorType,
+            actor: { type: input.audit.actorType, id: input.audit.actorId },
           },
         ],
       },

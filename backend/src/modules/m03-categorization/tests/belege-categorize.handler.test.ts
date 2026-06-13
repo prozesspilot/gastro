@@ -5,7 +5,10 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BelegCategorizationResult } from '../services/belege-categorizer';
+import type {
+  BelegCategorizationResult,
+  BelegCategorizerInput,
+} from '../services/belege-categorizer';
 
 const { getBelegById, updateBelegCategorization } = vi.hoisted(() => ({
   getBelegById: vi.fn(),
@@ -138,5 +141,48 @@ describe('belege-categorize.handler (T048/F2)', () => {
 
     expect(reply.statusCode).toBe(403);
     expect(getBelegById).not.toHaveBeenCalled();
+  });
+
+  it('401 wenn Tenant-Context fehlt', async () => {
+    const handler = buildBelegeCategorizeHandler({ categorize: async () => result() });
+    const reply = mockReply();
+
+    await handler(mockReq({ tenantId: undefined }), reply);
+
+    expect(reply.statusCode).toBe(401);
+    expect(getBelegById).not.toHaveBeenCalled();
+  });
+
+  it('extrahiert OCR-Felder + Bewirtungs-Hinweis korrekt aus payload', async () => {
+    getBelegById.mockResolvedValue({
+      status: 'extracted',
+      payload: {
+        extraction: {
+          fields: {
+            supplier_name: 'METRO',
+            document_date: '2026-06-01',
+            total_gross: 42,
+            currency: 'EUR',
+            tax_lines: [{ rate: 7, amount: 3 }],
+            line_items: [{ description: 'Brot', total: 2 }],
+          },
+        },
+        bewirtung: { is_bewirtung: true },
+      },
+    });
+    updateBelegCategorization.mockResolvedValue({ status: 'categorized' });
+    const categorize = vi.fn(async (_input: BelegCategorizerInput) => result());
+    const handler = buildBelegeCategorizeHandler({ categorize });
+
+    await handler(mockReq(), mockReply());
+
+    expect(categorize).toHaveBeenCalledTimes(1);
+    const input = categorize.mock.calls[0]?.[0];
+    expect(input?.supplierName).toBe('METRO');
+    expect(input?.documentDate).toBe('2026-06-01');
+    expect(input?.totalGross).toBe(42);
+    expect(input?.isBewirtung).toBe(true);
+    expect(input?.taxLines).toEqual([{ rate: 7, amount: 3 }]);
+    expect(input?.lineItems).toEqual([{ description: 'Brot', total: 2 }]);
   });
 });

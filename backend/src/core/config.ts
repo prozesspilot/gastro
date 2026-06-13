@@ -39,8 +39,12 @@ const envSchema = z.object({
   GOOGLE_VISION_KEY_FILE: z.string().default(''),
   // CLAUDE.md §5.4 — Google Vision API muss in EU-Region laufen (DSGVO).
   // 'eu-vision.googleapis.com' = europe-west3 (Frankfurt). Override nur für
-  // Tests/Local-Dev sinnvoll.
-  VISION_API_ENDPOINT: z.string().default('eu-vision.googleapis.com'),
+  // Tests/Local-Dev sinnvoll. Leerstring/Whitespace fällt auf den EU-Default
+  // zurück (Zod .default() greift nur bei undefined, nicht bei '').
+  VISION_API_ENDPOINT: z
+    .string()
+    .default('eu-vision.googleapis.com')
+    .transform((v) => v.trim() || 'eu-vision.googleapis.com'),
   // M01 §15 — Timeout für OCR-Adapter (Default 15 s).
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
   // T007 — BullMQ-Worker für OCR. '0' deaktiviert das Auto-Enqueue beim Upload
@@ -227,6 +231,18 @@ function loadConfig(): Config {
   if (cfg.NODE_ENV === 'production' && !cfg.TRUST_PROXY) {
     console.error(
       'FATAL: TRUST_PROXY fehlt in Production — req.ip waere die Reverse-Proxy-IP, IP-Rate-Limit waere DoS-Vektor (Geschaeftsfuehrer aussperrbar). Setze TRUST_PROXY=loopback (Caddy auf gleichem Host) oder CIDR fuer externen LB.',
+    );
+    process.exit(1);
+  }
+
+  // T046 / CLAUDE.md §5.4 — Vision-API MUSS in der EU laufen (DSGVO). Ein
+  // Nicht-EU-Endpoint (z. B. us-vision.googleapis.com oder der globale
+  // vision.googleapis.com) würde PII-Beleg-Bilder in die USA senden. Hard-Fail
+  // statt stiller Fehlkonfiguration — die Garantie ist im Code erzwungen, nicht
+  // nur dokumentiert.
+  if (cfg.NODE_ENV === 'production' && !cfg.VISION_API_ENDPOINT.startsWith('eu-')) {
+    console.error(
+      `FATAL: VISION_API_ENDPOINT "${cfg.VISION_API_ENDPOINT}" ist kein EU-Endpoint (DSGVO §5.4). Erwartet z. B. 'eu-vision.googleapis.com'.`,
     );
     process.exit(1);
   }

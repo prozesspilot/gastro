@@ -81,4 +81,26 @@ describe('Google-Vision-Adapter — EU-Region Pflicht (CLAUDE.md §5.4)', () => 
     expect(constructorCalls[0]?.apiEndpoint).toBe('eu-vision.googleapis.com');
     expect(constructorCalls[0]?.keyFilename).toBeUndefined();
   });
+
+  it('setzt den EU-Endpoint auch auf dem PDF-Pfad (batchAnnotateFiles)', async () => {
+    process.env.GOOGLE_VISION_KEY_FILE = '/tmp/fake-key.json';
+    Reflect.deleteProperty(process.env, 'VISION_API_ENDPOINT');
+
+    const { GoogleVisionAdapter } = await loadAdapter();
+    // %PDF-Magic-Bytes → Adapter geht in den PDF-Pfad (batchAnnotateFiles).
+    await new GoogleVisionAdapter().extract(Buffer.from([0x25, 0x50, 0x44, 0x46]));
+
+    expect(constructorCalls).toHaveLength(1);
+    expect(constructorCalls[0]?.apiEndpoint).toBe('eu-vision.googleapis.com');
+  });
+
+  it('fällt bei leerem VISION_API_ENDPOINT auf den EU-Default zurück', async () => {
+    process.env.GOOGLE_VISION_KEY_FILE = '/tmp/fake-key.json';
+    process.env.VISION_API_ENDPOINT = '';
+
+    const { GoogleVisionAdapter } = await loadAdapter();
+    await new GoogleVisionAdapter().extract(JPEG);
+
+    expect(constructorCalls[0]?.apiEndpoint).toBe('eu-vision.googleapis.com');
+  });
 });

@@ -6,7 +6,6 @@ import Redis from 'ioredis';
 import { Pool } from 'pg';
 import { hmacMiddleware } from './core/auth/hmac.middleware';
 import { config } from './core/config';
-import { setHookRunnerDeps } from './core/hooks/hook-runner';
 import { requestLoggingPlugin } from './core/hooks/request-logging';
 import { logger } from './core/logger';
 import { httpRequestDuration, httpRequestsTotal, registry } from './core/metrics';
@@ -90,9 +89,6 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   app.decorate('db', db);
   app.decorate('redis', redis);
   app.decorate('s3', createS3Client());
-
-  // Hook-Runner verdrahten — lädt customer_hooks aus DB, signiert HTTP-Hooks.
-  setHookRunnerDeps({ pool: db, pgcryptoKey: config.PP_PGCRYPTO_KEY });
 
   // D3: Rohen Request-Body als Buffer in req.rawBody ablegen,
   // damit die HMAC-Middleware ihn für die Signaturberechnung nutzen kann.

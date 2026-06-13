@@ -112,14 +112,7 @@ n8n/workflows/
 
 ## Hooks
 
-| Hook                | Wo aufgerufen                | Erwartet                          |
-|---------------------|------------------------------|-----------------------------------|
-| `before_extraction` | extract.handler vor OCR-Call | optional Receipt-Mutation         |
-| `after_extraction`  | nach Field-Extraktion        | optional Field-Korrektur          |
-
-Im Stub (`core/hooks/hook-runner.ts`) sind beide No-ops. Ab Phase 2 lädt der
-Runner aus `customer_hooks` und führt `http_webhook` / `js_inline` /
-`plugin_id` aus (04 §3).
+> **Stand T051 (2026-06-13):** Das Hook-System (`core/hooks/hook-runner.ts` + `customer_hooks`) wurde entfernt — es war ein No-op-Stub gegen die abgebaute Geister-Tabellen-Welt und wurde nur vom ebenfalls entfernten Alt-`categorize.handler` aufgerufen. Erweiterbarkeit per Customer-Hooks ist Post-Pilot (Konzept 04 §3) und wird bei Bedarf neu auf der belege-Welt gebaut.
 
 ---
 
@@ -215,7 +208,7 @@ in-memory Fake-Pool).
 | 1 | Extraktion liefert für 80 % von 20 Belegen `is_valid=true` ∧ Confidence ≥ 0.8 | `tests/fixtures/m01/fixture_01_supermarkt.json` (2 weitere Beispiele dort + Erweiterung in Sprint-1-MVP); end-to-end-Pfad in [extract.handler.ts:74](backend/src/modules/m01-receipt-intake/handlers/extract.handler.ts:74) |
 | 2 | Steuerzeilen-Konsistenz + Brutto-Netto-Match werden korrekt validiert | [validator.ts](backend/src/modules/m01-receipt-intake/services/validator.ts) `totals_match` + `tax_lines_consistent`; Tests in [validator.test.ts](backend/src/modules/m01-receipt-intake/tests/validator.test.ts) |
 | 3 | Bei niedriger Confidence wird Status `requires_review` gesetzt + Event emittiert | [extract.handler.ts:108](backend/src/modules/m01-receipt-intake/handlers/extract.handler.ts) (newStatus-Logik); Event in [event-emitter.ts](backend/src/modules/m01-receipt-intake/services/event-emitter.ts) |
-| 4 | Hooks `before_extraction` und `after_extraction` werden aufgerufen | [extract.handler.ts](backend/src/modules/m01-receipt-intake/handlers/extract.handler.ts) (`hookRunner.run('before_extraction', ...)` + `'after_extraction'`); Stub in [hook-runner.ts](backend/src/core/hooks/hook-runner.ts) |
+| 4 | ~~Hooks `before_extraction`/`after_extraction`~~ | Hook-System in T051 entfernt (Post-Pilot — siehe Hooks-Abschnitt oben). |
 | 5 | OCR-Adapter ist austauschbar (Mindee-Stub mockbar) | [factory.ts](backend/src/core/adapters/ocr/factory.ts) + [mindee.adapter.ts](backend/src/core/adapters/ocr/mindee.adapter.ts); E2E mockt den Adapter komplett ([e2e.test.ts](backend/src/modules/m01-receipt-intake/tests/e2e.test.ts)) |
 | 6 | Claude-Fallback wird nur aufgerufen, wenn Regex unzureichend | [field-extractor.ts](backend/src/modules/m01-receipt-intake/services/field-extractor.ts) (`shouldUseClaude = regexConfidence < 0.6 \|\| supplierMissing`); Tests in [field-extractor.test.ts](backend/src/modules/m01-receipt-intake/tests/field-extractor.test.ts) |
 | 7 | Idempotenz: gleicher Aufruf zweimal → identisches Ergebnis, nur 1 Audit-Eintrag | UNIQUE `(customer_id, file_sha256)` in [migrations/010_m10_minimal.sql:72](migrations/010_m10_minimal.sql); D3 dedupliziert pro `Idempotency-Key` 24 h. Re-Run mit Status `requires_review` ist ausdrücklich erlaubt (M01 §3) |

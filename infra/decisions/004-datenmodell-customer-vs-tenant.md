@@ -1,11 +1,13 @@
 # ADR-004: Datenmodell — Legacy-`customer`-Welt vs. `tenant`/`belege`-Reboot
 
-**Status:** Akzeptiert — umgesetzt (Reboot vollzogen; Routen-Cleanup F1 offen, siehe Ist-Stand)  
-**Datum:** 2026-05-27 (Ist-Stand-Update + nach main nachgezogen: 2026-06-06)  
+**Status:** Akzeptiert — vollständig umgesetzt (Reboot + Legacy-Abbau abgeschlossen, Pilot-Pfad F1–F5)  
+**Datum:** 2026-05-27 (Ist-Stand-Update 2026-06-06; Reboot abgeschlossen 2026-06-13)  
 **Entscheider:** Steve (Geschäftsführer); Gegencheck Andreas zur n8n-Verdrahtung ausstehend (siehe Konsequenzen)  
 **Bezug:** Task T028 · Audit `Modulkonzept/Konzeptentwicklung/_audit/REPORT-2026-05-26.md` F09/F10
 
-> **🟢 Ist-Stand (2026-06-06): Entscheidung gilt und ist weitgehend umgesetzt.** Reale DB = 14 Tabellen auf `tenants`/`belege`-Basis (kein `CREATE TABLE customers|receipts|customer_profiles` irgendwo im Repo). **Seit dieser ADR umgesetzt:** T028/Option Z (#105) entfernte isolierte tote Module; **T041** (#103/#104) vereinheitlichte den RLS-Tenant-Context-GUC repo-weit auf **`app.current_tenant`** — die unten erwähnte Funktion `current_tenant_id()` ist insofern überholt. **Noch offen (Schritt F1):** die toten `/receipts`- und `/customers`-Routen hängen weiter im `apiApp`-Block von `backend/src/app.ts` (≈ Z. 263–313); alle n8n-Workflows rufen genau diese → HTTP 500. Vollständiger verifizierter Stand: `.claude/CLAUDE.md` §3. Diese ADR wurde am 2026-06-06 aus Commit `871dccb` (lag auf einem Branch, **nie nach main gemergt**) in main nachgezogen, damit die Datenmodell-Entscheidung versioniert im Baum steht.
+> **✅ Abgeschlossen (2026-06-13, T051/F5): Reboot vollständig vollzogen.** Reale DB = 14 Tabellen auf `tenants`/`belege`-Basis. Der Pilot-Pfad ist durchgängig live (P0 + F1–F5): **F1** entfernte den toten `apiApp`-Block samt `/receipts`-/`/customers`-Routen aus `app.ts` (T047); **F2** machte `POST /api/v1/belege/:id/categorize` live (T048); **F3** fror die n8n-Workflows ein (T049, Pilot Webapp-getrieben); **F5** löschte den letzten isoliert-toten Geister-Code (Alt-`m03`-receipts-Pfad, `_shared/receipts`, `core/hooks`, Lexware-`auth.ts`/`customer_credentials`) — `git grep` der Geister-Tabellen im aktiven Code = **0**. **T041** (#103/#104) vereinheitlichte den RLS-GUC auf **`app.current_tenant`** (die unten erwähnte `current_tenant_id()` ist insofern überholt). Vollständiger verifizierter Stand: `.claude/CLAUDE.md` §3.
+>
+> **🟢 Historischer Ist-Stand (2026-06-06):** Diese ADR wurde am 2026-06-06 aus Commit `871dccb` (lag auf einem Branch, nie nach main gemergt) in main nachgezogen. Damals war der `apiApp`-Block noch offen (Schritt F1) — inzwischen durch T047 erledigt.
 
 ## Kontext
 

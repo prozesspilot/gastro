@@ -17,7 +17,6 @@ import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
 import { logger } from '../../../logger';
-import { LexofficeNotConfiguredError, loadApiKey } from './auth';
 import type {
   LexofficeCategory,
   LexofficeCreateResponse,
@@ -246,32 +245,6 @@ export class LexofficeClient {
     return h;
   }
 }
-
-// ── Factory ────────────────────────────────────────────────────────────────
-
-export interface CreateLexofficeClientOpts {
-  pool: Pool;
-  redis?: Redis | null;
-  pgcryptoKey: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-}
-
-export async function createLexofficeClientForCustomer(
-  customerId: string,
-  opts: CreateLexofficeClientOpts,
-): Promise<LexofficeClient> {
-  const apiKey = await loadApiKey(opts.pool, customerId, opts.pgcryptoKey);
-  return new LexofficeClient({
-    apiKey,
-    customerId,
-    redis: opts.redis,
-    baseUrl: opts.baseUrl,
-    fetchImpl: opts.fetchImpl,
-  });
-}
-
-export { LexofficeNotConfiguredError } from './auth';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

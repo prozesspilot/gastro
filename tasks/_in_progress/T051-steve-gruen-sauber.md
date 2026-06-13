@@ -19,12 +19,26 @@ Den Pilot-Stand „versiegeln": `npm run build` + `npm test` grün, **kein aktiv
 
 ## Akzeptanz-Kriterien
 
-- [ ] `npm run build` + `npm test` grün (keine still-skippenden DB-Tests, die toten Code verbergen)
-- [ ] `git grep -nE "(FROM|INTO|UPDATE|JOIN)\s+(receipts|customers|customer_profiles)" backend/src` = 0 im **aktiven** Code (eingefrorene/gelöschte Module ausgenommen)
-- [ ] `.claude/CLAUDE.md` §3.2 aktualisiert: M03/Categorize von „Bau-Lücke" → ✅ LIVE; §3.3 entsprechend entschärft
-- [ ] `.claude/CLAUDE.md` §3 Stand-Datum + ggf. STRUCTURE/README-Pointer aktualisiert
-- [ ] Pilot-Pfad-Diagramm in §3.6 stimmt mit dem realen Code überein
+- [x] `npm run build` + `npm test` grün (Build exit 0, **562 passed / 0 failed**; 22 skipped = legitime DB-E2E, kein toter Code mehr dahinter)
+- [x] `git grep` der Geister-Tabellen = 0 im **aktiven** Code — geprüft für `receipts|customers|customer_profiles|suppliers_global|categorization_cache|customer_categories|customer_hooks|customer_credentials|refresh_tokens|auth_events|monthly_reports|communications` (SQL **und** Kommentare), `backend/src` ohne Tests
+- [x] `.claude/CLAUDE.md` §3.2 aktualisiert: M03/Categorize ✅ LIVE; §3.3 von „Bau-Lücke" → „geschlossen"
+- [x] `.claude/CLAUDE.md` §3 Stand-Datum (2026-06-13) + §3.1/§3.4 (entfernt vs. eingefroren) aktualisiert; `infra/decisions/004` auf „Reboot abgeschlossen"
+- [x] Pilot-Pfad-Diagramm in §3.6 stimmt mit dem realen Code überein (Webapp-getrieben, F3-n8n-Zeile korrigiert)
 - [ ] code-reviewer-Agent gibt OK
+
+## Umsetzung (2026-06-13)
+
+Scope „Sauber" (per Rückfrage bestätigt): isoliert-toten Geister-Code gelöscht, LIVE-Pfad sauber getrennt.
+
+**Gelöscht (git rm, reversibel):**
+- Alt-`m03-categorization`-receipts-Cluster: `routes.ts`, `handlers/categorize.handler.ts`, `schemas/`, `services/{claude-categorizer,master-data-resolver,skr-mapper,override-resolver,confidence-scorer,audit.service,event-emitter,types}.ts`, `prompts/categorize.system.md` + 4 Alt-Tests.
+- `_shared/receipts/receipt.repository.ts`, `__tests__/receipts.test.ts`, `__tests__/integration/receipt-pipeline.test.ts`, `tests/golden/categorization/`.
+- **hook-runner-Subsystem** (Folge-Entscheidung, da nach Cluster-Abbau toter Code ohne Aufrufer): `core/hooks/hook-runner.ts` + `hook.repository.ts` + `hook.types.ts` + Test; `setHookRunnerDeps`-Setup aus `app.ts` entfernt. (`request-logging.ts` + `tenant-context.ts` bleiben — lebend.)
+- **Lexware-Alt-Auth** (gleicher Muster-Fall, in Discovery gefunden): `core/adapters/booking/lexoffice/auth.ts` (`loadApiKey` gegen `customer_credentials`) + tote `createLexofficeClientForCustomer`-Factory aus `lexoffice.client.ts`. LIVE-Export nutzt `booking_credentials` (T009) — unberührt.
+
+**Behalten/aktualisiert:** `bewirtungs-detector.ts` (LIVE via M01-`ocr.service`), `system-categories.ts`, `belege-*` (T048). READMEs (m03/m05/m01) + 3 Doc-Kommentare (crypto.ts/tenant.ts/config.ts) auf den belege-Stand gebracht.
+
+**Bekannter Rest (harmlos, Post-Pilot):** `backend/src/modules/tenants/` ist nicht in `app.ts` registriert (Spalten-Drift, nicht erreichbar) — in §3.4 dokumentiert.
 
 ---
 

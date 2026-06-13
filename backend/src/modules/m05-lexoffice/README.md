@@ -1,41 +1,40 @@
-# M05 — Lexoffice-Integration
+# M05 — Lexware-Office-Export (belege-Pfad)
 
-Vollständige Implementierung von M05 nach `Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md`.
+Pusht einen kategorisierten Beleg als Voucher nach Lexware Office. Konzept-Anker: `Modulkonzept/Konzeptentwicklung/modules/M05_Lexoffice_Integration.md`.
 
-## Endpoint
+> **Stand T051 (2026-06-13):** Der alte `receipts`-Pfad (`routes.ts`, `handlers/push.handler.ts`, `contact-resolver`, `attachment-picker`, `schemas/push.input.ts` + `core/adapters/booking/lexoffice/auth.ts` gegen `customer_credentials`) wurde in T047/T051 entfernt. **Live ist ausschließlich der belege-Pfad** mit Token aus `booking_credentials` (T009).
+
+## Endpoints (LIVE)
 
 ```
-POST /api/v1/receipts/:receipt_id/exports/lexoffice
+POST /api/v1/belege/:id/exports/lexware   — Single-Push (mitarbeiter+)
+POST /api/v1/exports/lexware/batch         — Tenant-Batch (geschaeftsfuehrer only)
 ```
 
-Body:
-```json
-{ "customer_profile": { "...vollständiges Profil..." }, "trace_id": "trc_..." }
-```
+- Auth: M14-JWT-Cookie (`pp_auth`) + `X-PP-Tenant-ID`-Header.
+- Export-Kandidaten (`findBelegIdsPendingExport`): Belege mit `status ∈ {extracted, categorized, archived, exported}`.
+- Idempotent: bereits gepushte Belege → `status='skipped'` + bestehende `external_id` (via `export_log`).
+- Batch-Body (optional): `{ "limit": <1–500, default 50> }` → Response `{ pushed, skipped, failed, results }`.
 
-Akzeptierte Status: `archived`, `categorized`. Idempotent — wenn bereits gepusht, wird `already_pushed: true` zurückgegeben, kein neuer Voucher.
+Registrierung: `app.ts` → `belegeLexwareRoutes` mit Prefix `/api/v1`.
 
-## Architektur
+## Architektur (aktiv)
 
 ```
 backend/src/modules/m05-lexoffice/
-├── routes.ts
-├── handlers/push.handler.ts            ← Workflow nach §7.1
-├── services/
-│   ├── contact-resolver.ts             ← findByVatId / createContact / Sammel-Kreditor
-│   ├── attachment-picker.ts            ← MinIO-Original (Drive-Adapter folgt)
-│   ├── audit.service.ts
-│   └── event-emitter.ts
-├── schemas/push.input.ts
-└── tests/push.handler.test.ts
+├── belege-routes.ts                       ← die zwei LIVE-Routen + M14-Hooks
+├── handlers/belege-push.handler.ts        ← Single-Push
+├── handlers/belege-batch.handler.ts       ← Tenant-Batch (gf-only)
+├── services/belege-lexware-exporter.ts    ← Orchestrierung; baut Client aus booking_credentials-Token
+├── services/booking-credentials.repository.ts ← Token-Storage (T009, pgcrypto-verschlüsselt)
+├── services/category-skr-map.ts           ← Kategorie → SKR-Konto (siehe T052)
+└── services/export-log.repository.ts      ← Idempotenz + Pending-Kandidaten
 
 backend/src/core/adapters/booking/lexoffice/
-├── lexoffice.client.ts                 ← Bearer-Auth, Retry (5xx + 429), Token-Bucket
+├── lexoffice.client.ts                    ← Bearer-Auth, Retry (5xx + 429), Token-Bucket
 ├── lexoffice.types.ts
-├── voucher.builder.ts                  ← Receipt → Voucher exakt nach §8
-├── category.mapper.ts                  ← SKR → categoryId mit DB + API-Heuristik
-├── auth.ts                             ← API-Key aus customer_credentials (pgcrypto)
-└── rate-limiter.ts                     ← 2 Req/s Token-Bucket (Redis Lua)
+├── category.mapper.ts                     ← SKR ↔ categoryId (DB + API-Heuristik)
+└── rate-limiter.ts                        ← 2 Req/s Token-Bucket (Redis Lua)
 ```
 
 ## ENV-Variablen
@@ -44,12 +43,13 @@ backend/src/core/adapters/booking/lexoffice/
 |----------|---------|
 | `LEXOFFICE_API_BASE` | `https://api.lexoffice.io` |
 | `LEXOFFICE_DEFAULT_TIMEOUT_MS` | `15000` |
-| `PP_PGCRYPTO_KEY` | erforderlich (Decrypt customer_credentials) |
+| `PP_PGCRYPTO_KEY` | erforderlich (Decrypt des `booking_credentials`-Tokens) |
 
-## Hooks
+Der Lexware-Office-Token wird manuell pro Tenant hinterlegt → `tasks/MANUELLE_AUFGABEN.md` (T009, `bootstrap-lexware-token.js`).
 
-- `before_export.lexoffice` — kann Voucher-Memo via `receipt.meta.lexoffice_voucher_memo` setzen
-- `after_export.lexoffice` — Side-Effects nach erfolgreichem Push
+## Offene Qualitäts-Punkte
+
+- **T052:** Der von `category-skr-map.ts` real gebuchte SKR weicht vom in M03 (`system-categories.ts`) angezeigten ab — eine Single-Source nötig.
 
 ## Tests
 

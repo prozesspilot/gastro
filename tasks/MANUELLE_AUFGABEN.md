@@ -83,6 +83,16 @@
   4. Bei Bedarf einen realistischen (aber PII-freien) Beleg via `PP_SMOKE_FILE` statt der Default-Fixture verwenden.
 - **Output:** Bestätigter End-to-End-Durchlauf = F4 abgehakt. Ergebnis kurz im Pilot-Channel dokumentieren.
 
+### ⏳ Kontenrahmen der Pilot-Steuerberaterin klären: SKR03 oder SKR04? (T052)
+- **Priorität:** P1 (vor dem ersten echten Lexware-Export — bestimmt, welche Konten gebucht werden)
+- **Was:** Bei der Lexware-Office-Steuerberaterin erfragen, welchen **Kontenrahmen** sie für den Pilot-Wirt (Almaz) führt: **SKR03** oder **SKR04**. T052 hat angezeigtes == gebuchtes SKR-Konto strukturell sichergestellt; der Kontenrahmen ist jetzt *ein* zentraler Schalter (`PILOT_SKR_CHART` in `backend/src/modules/m03-categorization/system-categories.ts`), aktuell auf **SKR03** (Status quo).
+- **Schritte:**
+  1. Steuerberaterin fragen: SKR03 oder SKR04? (Gleicher Kontakt wie beim Lexware-Token, T009.)
+  2. Falls **SKR04**: kurze Folge-Task — `PILOT_SKR_CHART` auf `'SKR04'` setzen.
+  3. Dabei mit ihr die 2 fachlichen SKR04-Werte bestätigen: Bewirtung (70%-abziehbar `6640` vs. `6644`) und `wareneinkauf_food` (`5100` vs. `5400`) in `system-categories.ts`.
+- **Output:** Bestätigter Kontenrahmen → Folge-Task (Code-seitig 1 Zeile + ggf. 2 Werte). Bis dahin läuft der Pilot konsistent auf SKR03.
+- **Dependencies:** Lexware-Office-Token von Steuerberaterin (T009)
+
 ### ⏳ ProzessPilot-AGB / Datenschutzerklärung schreiben (Pilot-Strategie)
 - **Priorität:** P1 (vor erstem zahlenden Kunden)
 - **Was:** AGB + DSGVO-Texte für Außenkommunikation

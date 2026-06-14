@@ -1,8 +1,14 @@
 name: Deploy to Staging
 
+# Auto-Deploy bei Push ist bewusst deaktiviert, solange der IONOS-Server noch
+# nicht pilot-bereit ist (Postgres-Container/Secrets/Migrations = offene
+# Operator-Schritte, siehe tasks/MANUELLE_AUFGABEN.md). Bis dahin scheiterte der
+# SSH-Deploy bei jedem Merge am Pre-Deploy-Backup ("service postgres is not
+# running") und erzeugte Fehl-Alerts. Deploy laeuft daher nur manuell:
+#   GitHub → Actions → "Deploy to Staging" → Run workflow.
+# Sobald Prod steht: hier wieder "push: branches: [main]" ergaenzen.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   # ── Build-Job: Images bauen + in Registry pushen ───────────────────────────

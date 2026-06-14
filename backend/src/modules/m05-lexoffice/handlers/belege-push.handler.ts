@@ -47,6 +47,16 @@ export async function belegePushHandler(
     s3,
   });
 
+  // Vorbedingung verletzt (Beleg noch nicht kategorisiert) → 422, NICHT 502:
+  // das ist kein externer Lexoffice-Fehler, sondern ein Status-Gate (Review #2).
+  if (result.status === 'failed' && result.error === 'not_categorized') {
+    return reply.code(422).send({
+      error: 'not_categorized',
+      beleg_id: id,
+      message: 'Beleg ist noch nicht kategorisiert — erst /categorize, dann exportieren.',
+    });
+  }
+
   // Bei 'failed' geben wir 502 zurueck (kommunizierter externer Fehler),
   // sonst 200/202.
   if (result.status === 'failed') {

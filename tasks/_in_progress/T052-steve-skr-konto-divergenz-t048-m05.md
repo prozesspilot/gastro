@@ -1,9 +1,9 @@
 # T052 — SKR-Konto-Divergenz T048 (categorize) ↔ M05 (Lexware-Export) vereinheitlichen
 
 **ID:** T052
-**Verantwortlich:** Andreas
+**Verantwortlich:** Steve
 **Priorität:** P1 (vor M05-Pilot-Export — angezeigter SKR ≠ gebuchter SKR ist falsch/verwirrend)
-**Branch:** `andreas/T052-skr-divergenz`
+**Branch:** `steve/T052-skr-divergenz`
 **Geschätzt:** 0,5 Tag
 **Dependencies:** T048 (categorize) gemerged
 **Ziel-Meilenstein:** Pilot — Qualität vor F-Export
@@ -22,7 +22,7 @@ T048 zeigt dem Mitarbeiter/Wirt ein `skr_account` aus `system-categories.ts` (z.
 
 ## Akzeptanz-Kriterien
 
-- [x] T048-angezeigter `skr_account` == von M05 real gebuchter SKR (für alle 14 Kategorien, SKR03 + SKR04) — **strukturell garantiert**: M05 konsumiert den persistierten Wert; 28 Tests (14 Kat. × 2 Kontenrahmen) in `resolve-export-skr.test.ts`
+- [x] T048-angezeigter `skr_account` == von M05 gebuchter SKR **auf SKR-Konto-Ebene** (für alle 14 Kategorien, SKR03 + SKR04) — strukturell garantiert: M05 konsumiert den persistierten Wert; Tests in `resolve-export-skr.test.ts` (SSoT-Pin gegen hartkodierte Werte + 14×2-Konsistenz). **Einschränkung (→ T054):** die anschließende Übersetzung SKR-Konto → Lexoffice-`categoryId`-UUID (`category.mapper.ts`) ist noch divergent (Heuristik/Seed) — der echte Buchungs-Endpunkt wird in T054 angeglichen.
 - [x] Bewirtung: 70%-abziehbar-Konto konsistent (kein „6640" vs „6644"-Konflikt) — Konflikt aufgelöst: die abweichende `6644`-Map (`category-skr-map.ts`) ist entfernt, es gibt nur noch *einen* Bewirtungs-Wert (`SYSTEM_CATEGORIES`). Ob `6644` (70%) der *fachlich* korrekte SKR04-Wert ist, hängt an der Kontenrahmen-Frage unten.
 - [x] Single-Source dokumentiert; Test, der die Pfade gegeneinander prüft — `resolve-export-skr.ts` + Test
 - [x] CI grün — Build + 587 Tests grün, Biome sauber (lokal; CI via PR)
@@ -57,6 +57,22 @@ persistierten Wert konsumiert, ist die Konsistenz **kontenrahmen-neutral** — d
 *ein* Schalter (`PILOT_SKR_CHART`). Mit der Antwort: ggf. auf `'SKR04'` umstellen UND die SKR04-Werte
 für Bewirtung (70%-abziehbar: `6640` vs. `6644`) und `wareneinkauf_food` (`5100` vs. `5400`) in
 `system-categories.ts` mit der Steuerberaterin bestätigen. → Folge-Task, sobald beantwortet.
+
+---
+
+## Review-Nachschärfung (PR #122, code-reviewer)
+
+- **Status-Gate (Finding #2):** Ein noch nicht kategorisierter Beleg wird nicht mehr exportiert —
+  `findBelegIdsPendingExport` selektiert `'extracted'` nicht mehr; `exportBelegToLexware` lehnt einen
+  Beleg ohne `payload.categorization` mit `not_categorized` ab (`hasPersistedCategorization`); der
+  Push-Handler mappt das auf **422** statt 502. Sonst würde ein un-kategorisierter Beleg still auf
+  „Sonstige" gebucht.
+- **Test-Härtung (Finding #3/#4):** Der 14×2-Konsistenztest prüft jetzt gegen eine **unabhängig
+  hartkodierte** SKR-Tabelle (kein tautologisches `skrAccountFor` auf beiden Seiten) + SSoT-Pin +
+  Robustheits- und Gate-Tests.
+- **Finding #1 (Buchungs-UUID-Divergenz) → ausgelagert nach T054** (eigene Baustelle, mit der
+  Geister-Tabelle `lexoffice_category_map` verzahnt). Garantie hier ehrlich auf SKR-Konto-Ebene
+  eingeschränkt (s. Akzeptanz-Kriterium #1).
 
 ---
 

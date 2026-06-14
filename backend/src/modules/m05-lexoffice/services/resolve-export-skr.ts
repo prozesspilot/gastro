@@ -17,6 +17,13 @@
  *   1) `payload.categorization.skr_account` (der angezeigte Wert) — Normalfall
  *   2) `skrAccountFor(beleg.category, PILOT_SKR_CHART)` aus SYSTEM_CATEGORIES
  *   3) `skrAccountFor(FALLBACK_CATEGORY_ID, PILOT_SKR_CHART)` — sonstige_aufwand
+ *
+ * GRENZE DER GARANTIE (T054): „angezeigt == gebucht" gilt hier auf der Ebene des
+ * SKR-Konto-Strings. Die anschließende Übersetzung SKR-Konto → Lexoffice-
+ * `categoryId`-UUID (`core/adapters/booking/lexoffice/category.mapper.ts`) ist ein
+ * separater Schritt; dessen Heuristik ist aktuell mit einem abweichenden SKR-Satz
+ * verschlüsselt, sodass am echten Buchungspunkt noch eine Divergenz entstehen kann.
+ * Das schließt T054 (Seed der `lexoffice_category_map` / Heuristik-Angleichung).
  */
 
 import {
@@ -61,4 +68,17 @@ export function resolveExportSkrAccount(beleg: BelegForSkr): string {
   // skrAccountFor hier nie null (?? '' nur, um den string|null-Typ zu schließen;
   // ein leerer String degradiert im CategoryMapper ohnehin sauber zu 'sonstige').
   return skrAccountFor(FALLBACK_CATEGORY_ID, PILOT_SKR_CHART) ?? '';
+}
+
+/**
+ * Wurde der Beleg bereits kategorisiert (M03/T048)? Signal ist der vom
+ * categorize-Handler persistierte `payload.categorization`-Block.
+ *
+ * Genutzt als Export-Status-Gate (Review #2): ein noch NICHT kategorisierter
+ * Beleg darf nicht exportiert werden — sonst greift oben die Sonstige-Fallback-
+ * Kette und der Beleg würde still ohne KI-Konto auf „Sonstige" gebucht.
+ */
+export function hasPersistedCategorization(payload: Record<string, unknown>): boolean {
+  const categorization = payload?.categorization;
+  return typeof categorization === 'object' && categorization !== null;
 }

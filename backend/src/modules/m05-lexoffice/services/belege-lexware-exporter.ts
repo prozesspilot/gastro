@@ -40,7 +40,7 @@ import {
   getBookingTokenDecrypted,
 } from './booking-credentials.repository';
 import { countAttempts, findExistingPushedExport, recordExport } from './export-log.repository';
-import { resolveExportSkrAccount } from './resolve-export-skr';
+import { hasPersistedCategorization, resolveExportSkrAccount } from './resolve-export-skr';
 
 const MAX_ATTEMPTS = 3;
 
@@ -234,6 +234,15 @@ export async function exportBelegToLexware(
   const beleg = await loadBeleg(deps.pool, tenantId, belegId);
   if (!beleg) {
     return { beleg_id: belegId, status: 'failed', error: 'beleg_not_found', attempts: 0 };
+  }
+
+  // 2a. Status-Gate (Review #2): ein noch nicht kategorisierter Beleg darf NICHT
+  //     exportiert werden. Sonst würde er über die Sonstige-Fallback-Kette still
+  //     ohne KI-Konto gebucht. Der Batch selektiert 'extracted' gar nicht erst
+  //     (findBelegIdsPendingExport); dies ist die Absicherung für den direkten
+  //     Einzel-Export-Endpoint. → 'not_categorized' mappt im Handler auf 422.
+  if (!hasPersistedCategorization(beleg.payload)) {
+    return { beleg_id: belegId, status: 'failed', error: 'not_categorized', attempts: 0 };
   }
 
   const previousAttempts = await countAttempts(deps.pool, tenantId, belegId, 'lexware_office');

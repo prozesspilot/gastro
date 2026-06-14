@@ -27,7 +27,7 @@ backend/src/modules/m05-lexoffice/
 ├── handlers/belege-batch.handler.ts       ← Tenant-Batch (gf-only)
 ├── services/belege-lexware-exporter.ts    ← Orchestrierung; baut Client aus booking_credentials-Token
 ├── services/booking-credentials.repository.ts ← Token-Storage (T009, pgcrypto-verschlüsselt)
-├── services/category-skr-map.ts           ← Kategorie → SKR-Konto (siehe T052)
+├── services/resolve-export-skr.ts          ← SKR-Konto aus persistierter Kategorisierung (T052, SSoT)
 └── services/export-log.repository.ts      ← Idempotenz + Pending-Kandidaten
 
 backend/src/core/adapters/booking/lexoffice/
@@ -47,9 +47,20 @@ backend/src/core/adapters/booking/lexoffice/
 
 Der Lexware-Office-Token wird manuell pro Tenant hinterlegt → `tasks/MANUELLE_AUFGABEN.md` (T009, `bootstrap-lexware-token.js`).
 
+## SKR-Konto-Auflösung (T052)
+
+Das SKR-Konto wird EINMAL bei der Kategorisierung (M03/T048) aus `system-categories.ts`
+berechnet und in `payload.categorization.skr_account` persistiert. Der Export konsumiert
+diesen Wert über `resolve-export-skr.ts` (statt neu zu rechnen) → angezeigt == gebucht auf
+SKR-Konto-Ebene. Ein noch nicht kategorisierter Beleg wird nicht exportiert (Status-Gate,
+`hasPersistedCategorization`).
+
 ## Offene Qualitäts-Punkte
 
-- **T052:** Der von `category-skr-map.ts` real gebuchte SKR weicht vom in M03 (`system-categories.ts`) angezeigten ab — eine Single-Source nötig.
+- **T054:** Die Übersetzung SKR-Konto → Lexoffice-`categoryId`-UUID (`category.mapper.ts`)
+  ist mit einem abweichenden SKR-Satz verschlüsselt; ~8/14 Kategorien fallen auf die
+  Sonstige-UUID. Zudem fehlt die `lexoffice_category_map`-Migration. → Seed/Heuristik-Fix vor
+  dem ersten echten Lexware-Export.
 
 ## Tests
 

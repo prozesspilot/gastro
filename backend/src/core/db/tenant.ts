@@ -16,7 +16,7 @@
  *   import { withTenant } from './core/db/tenant';
  *
  *   const result = await withTenant(app.db, tenantId, async (client) => {
- *     return client.query('SELECT * FROM customers');
+ *     return client.query('SELECT * FROM belege');
  *   });
  */
 

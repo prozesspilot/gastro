@@ -77,10 +77,10 @@ const envSchema = z.object({
   // separate Variable folgt der M10-Spec §14 für mögliche zukünftige Trennung).
   STORAGE_RAW_BUCKET: z.string().default('prozesspilot-raw'),
 
-  // ── M07: Google Sheets / Google Drive OAuth ─────────────────────────────
+  // ── M07: Google Sheets / Google Drive OAuth (eingefroren, Post-Pilot) ────
   // Shared OAuth2-Client für Google Drive (M02) und Google Sheets (M07).
-  // Pro Customer wird nur Refresh-Token + ggf. Access-Token in
-  // customer_credentials hinterlegt; Client-ID/Secret sind global.
+  // Beide Module sind eingefroren (kein aktiver Code); die Vars bleiben als
+  // inaktive Defaults stehen. Client-ID/Secret wären global, Token pro Tenant.
   GOOGLE_OAUTH_CLIENT_ID: z.string().default(''),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().default(''),
 

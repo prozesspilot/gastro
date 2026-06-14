@@ -9,7 +9,7 @@
  * der Klartext verlässt die DB nie unverschlüsselt.
  *
  * Verwendung im Repository:
- *   const sql = `INSERT INTO customers (name_enc) VALUES (${encryptExpr(1)})`;
+ *   const sql = `INSERT INTO booking_credentials (api_token_enc) VALUES (${encryptExpr(1)})`;
  *   await client.query(sql, [key, plaintext]);
  */
 

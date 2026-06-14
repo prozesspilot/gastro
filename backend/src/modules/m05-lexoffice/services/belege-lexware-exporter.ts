@@ -5,7 +5,9 @@
  *   1. Token aus booking_credentials laden (entschluesseln).
  *   2. Beleg + File-Bytes aus MinIO ziehen.
  *   3. Voucher-Payload bauen (belege-voucher-builder).
- *   4. Category-ID aufloesen (category.mapper) — fallback '4980'.
+ *   4. SKR-Konto aus der persistierten Kategorisierung lesen (T052,
+ *      resolve-export-skr) und via category.mapper auf die Lexoffice-Category-UUID
+ *      aufloesen — fallback 'sonstige'.
  *   5. Voucher bei Lexoffice anlegen (createVoucher).
  *   6. Datei als Anhang hochladen (uploadVoucherFile).
  *   7. export_log Erfolg/Fehler protokollieren.
@@ -37,8 +39,8 @@ import {
   BookingCredentialNotConfiguredError,
   getBookingTokenDecrypted,
 } from './booking-credentials.repository';
-import { categoryToSkr04 } from './category-skr-map';
 import { countAttempts, findExistingPushedExport, recordExport } from './export-log.repository';
+import { hasPersistedCategorization, resolveExportSkrAccount } from './resolve-export-skr';
 
 const MAX_ATTEMPTS = 3;
 
@@ -234,6 +236,15 @@ export async function exportBelegToLexware(
     return { beleg_id: belegId, status: 'failed', error: 'beleg_not_found', attempts: 0 };
   }
 
+  // 2a. Status-Gate (Review #2): ein noch nicht kategorisierter Beleg darf NICHT
+  //     exportiert werden. Sonst würde er über die Sonstige-Fallback-Kette still
+  //     ohne KI-Konto gebucht. Der Batch selektiert 'extracted' gar nicht erst
+  //     (findBelegIdsPendingExport); dies ist die Absicherung für den direkten
+  //     Einzel-Export-Endpoint. → 'not_categorized' mappt im Handler auf 422.
+  if (!hasPersistedCategorization(beleg.payload)) {
+    return { beleg_id: belegId, status: 'failed', error: 'not_categorized', attempts: 0 };
+  }
+
   const previousAttempts = await countAttempts(deps.pool, tenantId, belegId, 'lexware_office');
   let attemptNo = previousAttempts + 1;
   let lastError: string | null = null;
@@ -251,8 +262,9 @@ export async function exportBelegToLexware(
       // 3. Client + Token aufloesen (nur beim ersten Attempt — danach reuse)
       const client = deps.lexofficeClient ?? (await buildClient(deps.pool, tenantId));
 
-      // 4. Voucher bauen — Category-Mapping via SKR04 → Lexoffice-UUID
-      const skrAccount = categoryToSkr04(beleg.category);
+      // 4. Voucher bauen — SKR-Konto aus der persistierten Kategorisierung (T052:
+      //    Single Source of Truth, „angezeigt == gebucht"), dann SKR → Lexoffice-UUID.
+      const skrAccount = resolveExportSkrAccount(beleg);
       const mapper = new CategoryMapper({ pool: deps.pool, client });
       const categoryId = await mapper.mapSkrToLexoffice(skrAccount, tenantId);
       const voucher = buildBelegVoucher({

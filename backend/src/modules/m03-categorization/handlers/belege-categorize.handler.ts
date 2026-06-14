@@ -18,6 +18,7 @@ import {
   updateBelegCategorization,
 } from '../../m01-receipt-intake/services/beleg.repository';
 import { type BelegCategorizerInput, categorizeBeleg } from '../services/belege-categorizer';
+import { PILOT_SKR_CHART } from '../system-categories';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONFIDENCE_THRESHOLD = 0.75;
@@ -94,7 +95,7 @@ export function buildBelegeCategorizeHandler(deps: BelegeCategorizeDeps = {}) {
     }
 
     const input = extractOcrFields(beleg.payload);
-    const result = await categorize(input, { skrChart: 'SKR03' });
+    const result = await categorize(input, { skrChart: PILOT_SKR_CHART });
 
     const newStatus: 'categorized' | 'requires_review' =
       result.engine === 'claude' && result.confidence >= CONFIDENCE_THRESHOLD

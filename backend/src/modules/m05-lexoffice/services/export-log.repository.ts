@@ -184,7 +184,9 @@ export async function findBelegIdsPendingExport(
     const result = await client.query<{ id: string }>(
       `SELECT b.id FROM belege b
         WHERE b.tenant_id = $1
-          AND b.status IN ('extracted', 'categorized', 'archived', 'exported')
+          -- T052/Review #2: 'extracted' (noch nicht kategorisiert) bewusst NICHT —
+          -- sonst würde ein Beleg ohne KI-Konto still auf 'Sonstige' gebucht.
+          AND b.status IN ('categorized', 'archived', 'exported')
           AND NOT EXISTS (
             SELECT 1 FROM export_log e
              WHERE e.beleg_id = b.id AND e.target = $2 AND e.status = 'pushed'

@@ -155,6 +155,25 @@ describe('POST /api/v1/belege/:id/exports/lexware', () => {
     expect(r.statusCode).toBe(502);
     expect(JSON.parse(r.body).error).toBe('export_failed');
   });
+
+  it('422 wenn Beleg noch nicht kategorisiert (Status-Gate, Review #2)', async () => {
+    // 'not_categorized' ist KEIN externer Lexoffice-Fehler → 422, nicht 502.
+    (exportBelegToLexware as ReturnType<typeof vi.fn>).mockResolvedValue({
+      beleg_id: BELEG_UUID,
+      status: 'failed',
+      error: 'not_categorized',
+      attempts: 0,
+    });
+    currentApp = await buildTestApp();
+    const r = await currentApp.inject({
+      method: 'POST',
+      url: `/api/v1/belege/${BELEG_UUID}/exports/lexware`,
+      cookies: { pp_auth: makeToken() },
+      headers: { 'x-pp-tenant-id': TENANT_UUID },
+    });
+    expect(r.statusCode).toBe(422);
+    expect(JSON.parse(r.body).error).toBe('not_categorized');
+  });
 });
 
 // ── Batch ────────────────────────────────────────────────────────────────

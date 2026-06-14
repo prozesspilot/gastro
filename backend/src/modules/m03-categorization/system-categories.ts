@@ -13,6 +13,21 @@
 
 export type SkrChart = 'SKR03' | 'SKR04';
 
+/**
+ * T052 — Kontenrahmen für den Pilot: der EINE Konfig-Punkt.
+ *
+ * Genutzt vom categorize-Handler (M03, Anzeige + Persistenz des `skr_account`)
+ * UND vom Export-Fallback (M05, `resolve-export-skr.ts`), damit beide Pfade
+ * denselben Kontenrahmen verwenden. Der Export selbst konsumiert im Normalfall
+ * den bei der Kategorisierung persistierten Wert (siehe `resolve-export-skr.ts`),
+ * sodass „angezeigt == gebucht" strukturell gilt — unabhängig vom Kontenrahmen.
+ *
+ * OFFENE FRAGE (T052): SKR03 vs. SKR04 für den Pilot ist final von der
+ * Lexware-Office-Steuerberaterin zu bestätigen. Bis dahin SKR03 (Status quo des
+ * categorize-Handlers). Eine Änderung hier wirkt zentral auf Anzeige + Export.
+ */
+export const PILOT_SKR_CHART: SkrChart = 'SKR03';
+
 export interface SystemCategory {
   id: string;
   name: string;

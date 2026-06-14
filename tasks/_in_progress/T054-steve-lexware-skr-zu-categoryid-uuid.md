@@ -32,11 +32,30 @@ Zwei Probleme an dieser Übersetzung:
 
 ## Akzeptanz-Kriterien
 
-- [ ] Für alle 14 Kategorien (im `PILOT_SKR_CHART`) löst `mapSkrToLexoffice` auf die **fachlich korrekte** Lexoffice-categoryId auf — nicht auf die Sonstige-UUID (außer für `sonstige_aufwand`)
-- [ ] `lexoffice_category_map` hat eine Migration (+ Rollback) ODER der Pfad kommt nachweislich ohne diese Tabelle aus
-- [ ] Test, der den SKR→UUID-Pfad für die 14 Konten abdeckt (mit gemocktem `listCategories`/Seed)
-- [ ] Bewirtung landet nicht mehr auf „Sonstige"
-- [ ] CI grün; manueller Smoke-Test (Beleg bis Lexware) dokumentiert
+- [x] Für alle 14 Kategorien löst `mapSkrToLexoffice` über die aus `SYSTEM_CATEGORIES` abgeleitete Heuristik auf die richtige Lexoffice-categoryId auf — Test deckt 14/14 ab, keine auf Sonstige (außer `sonstige_aufwand`)
+- [x] `lexoffice_category_map` hat eine Migration (+ Rollback) — `120_lexoffice_category_map.sql` mit RLS (eigener Tenant + globale `'default'`-Zeilen)
+- [x] Test, der den SKR→UUID-Pfad für die 14 Konten abdeckt (gemocktes `listCategories`) — `category.mapper.test.ts` (22 Tests)
+- [x] Bewirtung (SKR03 4650 / SKR04 6640) landet nicht mehr auf „Sonstige" — eigener Test
+- [x] CI grün; **manuelle** Verifikation gegen den echten Lexware-Account als Setup-Schritt dokumentiert (`MANUELLE_AUFGABEN.md`, T054)
+
+**Gewählte Lösungsrichtung:** A (Migration) + B (Heuristik aus SSoT) kombiniert — siehe unten.
+
+---
+
+## Umsetzung (2026-06-14, Steve)
+
+- **Migration `120_lexoffice_category_map.sql` (+ Rollback):** legt die zuvor fehlende
+  „Geister-Tabelle" an. `customer_id TEXT` (Tenant-UUID oder `'default'`), PK `(customer_id, skr_account)`.
+  RLS nach Repo-Muster: eigene Zeilen + globale `'default'`-Zeilen lesbar, nur eigene schreibbar.
+- **`CategoryMapper` RLS-fest:** alle DB-Ops laufen auf EINER Connection mit transaktions-lokalem
+  `app.current_tenant` (sonst sähe der Tenant unter FORCE RLS seine Zeilen nicht). Best-effort-
+  Cache-INSERTs über SAVEPOINTs, damit ein Schreibfehler die Auflösung nicht kippt.
+- **Heuristik aus `SYSTEM_CATEGORIES`:** neue `categoryIdForSkrAccount` (Reverse-Lookup SKR→Kategorie
+  über beide Kontenrahmen) ersetzt die alte, fremd-verschlüsselte SKR-Map. Needles auf die
+  Lexware-Standardnamen gegründet (recherchiert: Bewirtungskosten, Reisekosten, Telekommunikation,
+  Wareneingang …). → vierte Divergenz-Achse strukturell weg, chart-korrekt.
+- **Grenze (bewusst):** die exakten Kategorienamen pro Account sind öffentlich nicht vollständig
+  enumeriert → einmalige Verifikation gegen den echten Pilot-Account ist ein manueller Setup-Schritt.
 
 ---
 

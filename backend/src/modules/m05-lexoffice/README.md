@@ -55,12 +55,16 @@ diesen Wert über `resolve-export-skr.ts` (statt neu zu rechnen) → angezeigt =
 SKR-Konto-Ebene. Ein noch nicht kategorisierter Beleg wird nicht exportiert (Status-Gate,
 `hasPersistedCategorization`).
 
-## Offene Qualitäts-Punkte
+## SKR-Konto → Lexoffice-categoryId (T054)
 
-- **T054:** Die Übersetzung SKR-Konto → Lexoffice-`categoryId`-UUID (`category.mapper.ts`)
-  ist mit einem abweichenden SKR-Satz verschlüsselt; ~8/14 Kategorien fallen auf die
-  Sonstige-UUID. Zudem fehlt die `lexoffice_category_map`-Migration. → Seed/Heuristik-Fix vor
-  dem ersten echten Lexware-Export.
+`category.mapper.ts` übersetzt das SKR-Konto in die Lexoffice-`categoryId`-UUID:
+DB-Lookup (`lexoffice_category_map`, Migration 120) → `'default'`-Fallback → `listCategories()`
++ Heuristik (Default-Mapping im Code, aus `SYSTEM_CATEGORIES` abgeleitet) → Cache-INSERT.
+Alle DB-Zugriffe laufen mit gesetztem RLS-Kontext (`app.current_tenant`).
+
+**Verbleibend (manuell):** Die Heuristik-Zuordnung der 14 Kategorien muss einmal gegen den
+echten Lexware-Account verifiziert werden (öffentliche Doku enumeriert die Namen nicht
+vollständig) → `tasks/MANUELLE_AUFGABEN.md` (T054).
 
 ## Tests
 

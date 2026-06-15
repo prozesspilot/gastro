@@ -154,11 +154,11 @@ describe('mail.service', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('Dry-Run loggt KEINEN Body-Inhalt — nur Länge (kein Token-Leak)', async () => {
-    const r = await sendMail({ to: 'a@b.de', subject: 's', text: 'GEHEIM_TOKEN_xyz' });
+  it('Dry-Run loggt KEINEN Body-Inhalt (kein Token-Leak)', async () => {
+    const r = await sendMail({ to: 'a@b.de', subject: 'Betreff', text: 'GEHEIM_TOKEN_xyz' });
     const logged = JSON.stringify(vi.mocked(logger.info).mock.calls);
-    expect(logged).not.toContain('GEHEIM_TOKEN_xyz');
-    expect(logged).toContain('body_len');
+    expect(logged).not.toContain('GEHEIM_TOKEN_xyz'); // Body niemals
+    expect(logged).toContain('Betreff'); // subject ist ok
     expect(r).toEqual({ ok: true, dryRun: true });
   });
 });

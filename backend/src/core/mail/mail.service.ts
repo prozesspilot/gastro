@@ -40,10 +40,10 @@ export async function sendMail(
   const toHash = hashEmailForLog(msg.to);
 
   if (isDryRun()) {
-    // KEIN Body-Auszug loggen: der Text kann Tokens/Magic-Links/ZIP-Passwörter
-    // enthalten (DSGVO §6.6). Nur Länge als harmloses Signal.
+    // NICHTS aus dem Body loggen: der Text kann Tokens/Magic-Links/ZIP-Passwörter
+    // enthalten (DSGVO §6.6, CodeQL js/clear-text-logging). Nur to_hash + subject.
     logger.info(
-      { to_hash: toHash, subject: msg.subject, body_len: msg.text.length },
+      { to_hash: toHash, subject: msg.subject },
       '[mail] DRY-RUN — SMTP nicht konfiguriert, Mail nur geloggt',
     );
     return { ok: true, dryRun: true };

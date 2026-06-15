@@ -30,6 +30,8 @@ const baseOptions: pino.LoggerOptions = {
   redact: {
     paths: [
       '*.password',
+      '*.pass',
+      '*.SMTP_PASS',
       '*.api_key',
       '*.ciphertext',
       '*.authorization',

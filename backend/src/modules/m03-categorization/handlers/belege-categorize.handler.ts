@@ -17,8 +17,12 @@ import {
   getBelegById,
   updateBelegCategorization,
 } from '../../m01-receipt-intake/services/beleg.repository';
-import { type BelegCategorizerInput, categorizeBeleg } from '../services/belege-categorizer';
-import { PILOT_SKR_CHART } from '../system-categories';
+import {
+  type BelegCategorizationResult,
+  type BelegCategorizerInput,
+  categorizeBeleg,
+} from '../services/belege-categorizer';
+import { PILOT_SKR_CHART, findCategory, skrAccountFor } from '../system-categories';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONFIDENCE_THRESHOLD = 0.75;
@@ -97,22 +101,44 @@ export function buildBelegeCategorizeHandler(deps: BelegeCategorizeDeps = {}) {
     const input = extractOcrFields(beleg.payload);
     const result = await categorize(input, { skrChart: PILOT_SKR_CHART });
 
-    const newStatus: 'categorized' | 'requires_review' =
-      result.engine === 'claude' && result.confidence >= CONFIDENCE_THRESHOLD
-        ? 'categorized'
-        : 'requires_review';
+    const kiConfident = result.engine === 'claude' && result.confidence >= CONFIDENCE_THRESHOLD;
+
+    // T053: Bewirtungs-Schutz. Hat der OCR-Bewirtungs-Detektor (T008) bereits
+    // category='bewirtung' gesetzt und ist die KI UNSICHER (kein sicheres
+    // 'categorized'), behalten wir 'bewirtung' — sonst gingen die Bewirtungs-
+    // Pflichtfelder (anlass/teilnehmer) + die M05-Memo/70%-Logik gegen eine
+    // Nicht-Bewirtungs-Kategorie verloren. Bei SICHERER KI gewinnt die KI.
+    // Der Categorization-Block wird konsistent auf 'bewirtung' gezogen.
+    const preserveBewirtung =
+      beleg.category === 'bewirtung' && !kiConfident && result.categoryId !== 'bewirtung';
+    const effective: BelegCategorizationResult = preserveBewirtung
+      ? {
+          categoryId: 'bewirtung',
+          categoryLabel: findCategory('bewirtung')?.name ?? 'Bewirtungskosten',
+          skrAccount: skrAccountFor('bewirtung', PILOT_SKR_CHART),
+          skrChart: PILOT_SKR_CHART,
+          confidence: result.confidence,
+          rationale: `OCR-Bewirtungs-Detektor beibehalten (KI unsicher → '${result.categoryId}': ${result.rationale})`,
+          engine: result.engine,
+        }
+      : result;
+
+    // Sichere KI → 'categorized'; sonst (inkl. Bewirtungs-Schutz) 'requires_review'.
+    const newStatus: 'categorized' | 'requires_review' = kiConfident
+      ? 'categorized'
+      : 'requires_review';
 
     const saved = await updateBelegCategorization(db, tenantId, id, {
       newStatus,
-      category: result.categoryId,
+      category: effective.categoryId,
       categorization: {
-        engine: result.engine,
-        category: result.categoryId,
-        category_label: result.categoryLabel,
-        skr_account: result.skrAccount,
-        skr_chart: result.skrChart,
-        confidence: result.confidence,
-        rationale: result.rationale,
+        engine: effective.engine,
+        category: effective.categoryId,
+        category_label: effective.categoryLabel,
+        skr_account: effective.skrAccount,
+        skr_chart: effective.skrChart,
+        confidence: effective.confidence,
+        rationale: effective.rationale,
         categorized_at: new Date().toISOString(),
       },
       audit: { actorType: 'staff', actorId: staff.userId },
@@ -129,12 +155,13 @@ export function buildBelegeCategorizeHandler(deps: BelegeCategorizeDeps = {}) {
         beleg_id: id,
         status: saved.status,
         categorization: {
-          category: result.categoryId,
-          category_label: result.categoryLabel,
-          skr_account: result.skrAccount,
-          confidence: result.confidence,
-          engine: result.engine,
+          category: effective.categoryId,
+          category_label: effective.categoryLabel,
+          skr_account: effective.skrAccount,
+          confidence: effective.confidence,
+          engine: effective.engine,
           requires_review: newStatus === 'requires_review',
+          bewirtung_preserved: preserveBewirtung,
         },
       }),
     );

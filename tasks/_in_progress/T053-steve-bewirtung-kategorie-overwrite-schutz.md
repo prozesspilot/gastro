@@ -1,9 +1,9 @@
 # T053 — Bewirtungs-Kategorie vor Overwrite durch categorize schützen
 
 **ID:** T053
-**Verantwortlich:** Andreas
+**Verantwortlich:** Steve
 **Priorität:** P2 (Datenqualität — Bewirtungs-Sonderfall)
-**Branch:** `andreas/T053-bewirtung-overwrite`
+**Branch:** `steve/T053-bewirtung-overwrite`
 **Geschätzt:** 0,5 Tag
 **Dependencies:** T048 (categorize) gemerged
 **Ziel-Meilenstein:** Pilot — Qualität
@@ -22,10 +22,22 @@ Der OCR-Worker (T008) setzt bei Bewirtungs-Detektor-Match bereits `category='bew
 
 ## Akzeptanz-Kriterien
 
-- [ ] Detektor-gesetzte `bewirtung`-Kategorie geht durch categorize nicht verloren, wenn die KI unsicher ist
-- [ ] `payload.bewirtung.{anlass,teilnehmer}` bleiben konsistent zur finalen Kategorie
-- [ ] Test für den Bewirtung-Konflikt-Fall
-- [ ] CI grün
+- [x] Detektor-gesetzte `bewirtung`-Kategorie geht durch categorize nicht verloren, wenn die KI unsicher ist — `belege-categorize.handler` behält `bewirtung`, wenn `!kiConfident`
+- [x] `payload.bewirtung.{anlass,teilnehmer}` bleiben konsistent zur finalen Kategorie — `category` UND `payload.categorization` werden konsistent auf `bewirtung` gezogen; `beleg.category` bleibt `bewirtung` → M05-Memo/Voucher-Logik greift weiter
+- [x] Test für den Bewirtung-Konflikt-Fall — 4 Tests (Schutz greift · sichere KI gewinnt · kein Detektor · KI sagt selbst bewirtung)
+- [x] CI grün — lokal Build + 655 Tests grün, Biome sauber
+
+---
+
+## Umsetzung (2026-06-15, Steve)
+
+Regel im `belege-categorize.handler` (zwischen KI-Resultat und Persistenz):
+`preserveBewirtung = beleg.category === 'bewirtung' && !kiConfident && result.categoryId !== 'bewirtung'`.
+Trifft das zu, wird ein „effektives" Bewirtungs-Resultat gebaut (`skrAccountFor('bewirtung', PILOT_SKR_CHART)`,
+Label, KI-Confidence/Rationale als Kontext) und persistiert → `category` + Categorization-Block bleiben
+konsistent auf `bewirtung`, Status `requires_review` (menschliche Prüfung). **Bei SICHERER KI** (`categorized`)
+gewinnt bewusst die KI (Task-Scope: Schutz nur „wenn die KI unsicher ist"). Keine Änderung an M05 nötig —
+der Voucher-Builder liest `beleg.category`, das jetzt erhalten bleibt.
 
 ---
 

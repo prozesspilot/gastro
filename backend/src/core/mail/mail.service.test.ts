@@ -138,4 +138,27 @@ describe('mail.service', () => {
       }),
     );
   });
+
+  it('sendTemplate: werfender Renderer → { ok:false }, wirft nicht (Best-Effort)', async () => {
+    configureSmtp();
+    const send = vi.fn(async () => ({ messageId: 'm' }));
+    const tpl: MailTemplate<{ x: string }> = {
+      name: 'boom',
+      subject: () => {
+        throw new Error('render kaputt');
+      },
+      text: () => 'irrelevant',
+    };
+    const r = await sendTemplate(tpl, { x: 'y' }, 'a@b.de', { transport: { send } });
+    expect(r).toEqual({ ok: false, error: 'render kaputt' });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('Dry-Run loggt KEINEN Body-Inhalt — nur Länge (kein Token-Leak)', async () => {
+    const r = await sendMail({ to: 'a@b.de', subject: 's', text: 'GEHEIM_TOKEN_xyz' });
+    const logged = JSON.stringify(vi.mocked(logger.info).mock.calls);
+    expect(logged).not.toContain('GEHEIM_TOKEN_xyz');
+    expect(logged).toContain('body_len');
+    expect(r).toEqual({ ok: true, dryRun: true });
+  });
 });

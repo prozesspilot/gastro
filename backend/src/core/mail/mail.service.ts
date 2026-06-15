@@ -40,8 +40,10 @@ export async function sendMail(
   const toHash = hashEmailForLog(msg.to);
 
   if (isDryRun()) {
+    // KEIN Body-Auszug loggen: der Text kann Tokens/Magic-Links/ZIP-Passwörter
+    // enthalten (DSGVO §6.6). Nur Länge als harmloses Signal.
     logger.info(
-      { to_hash: toHash, subject: msg.subject, body_preview: msg.text.slice(0, 200) },
+      { to_hash: toHash, subject: msg.subject, body_len: msg.text.length },
       '[mail] DRY-RUN — SMTP nicht konfiguriert, Mail nur geloggt',
     );
     return { ok: true, dryRun: true };
@@ -84,13 +86,22 @@ export async function sendTemplate<Vars>(
     replyTo?: string;
   } = {},
 ): Promise<MailResult> {
-  const msg: MailMessage = {
-    to,
-    subject: template.subject(vars),
-    text: template.text(vars),
-    html: template.html?.(vars),
-    replyTo: opts.replyTo,
-    attachments: opts.attachments,
-  };
+  let msg: MailMessage;
+  try {
+    // Render im try: ein werfender Template-Renderer darf den Caller NICHT
+    // abbrechen (Best-Effort-Garantie wie sendMail).
+    msg = {
+      to,
+      subject: template.subject(vars),
+      text: template.text(vars),
+      html: template.html?.(vars),
+      replyTo: opts.replyTo,
+      attachments: opts.attachments,
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    logger.error({ err: error, template: template.name }, '[mail] Template-Render fehlgeschlagen');
+    return { ok: false, error };
+  }
   return sendMail(msg, { transport: opts.transport });
 }

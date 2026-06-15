@@ -157,6 +157,18 @@ describe('T054 — lexoffice_category_map RLS unter gastro_app (NOBYPASSRLS)', (
     expect(rowCount).toBe(0);
   });
 
+  it('Tenant A kann Tenant B NICHT ändern (0 rows — fremde Zeile unsichtbar für Write-USING)', async () => {
+    if (!dbAvailable) return;
+    const rowCount = await asTenant(TENANT_A, async (c) => {
+      const res = await c.query(
+        'UPDATE lexoffice_category_map SET category_name = $1 WHERE customer_id = $2',
+        ['hijacked', TENANT_B],
+      );
+      return res.rowCount;
+    });
+    expect(rowCount).toBe(0);
+  });
+
   it('Tenant A kann KEINE Zeile mit fremder customer_id schreiben (WITH CHECK)', async () => {
     if (!dbAvailable) return;
     await expect(

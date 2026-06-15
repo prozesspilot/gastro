@@ -62,6 +62,8 @@ Beide haben **kaum Coding-Erfahrung**. Wir entwickeln **vollständig mit Claude 
 > Wenn eine Modul-Spec und dieser Abschnitt sich widersprechen, gilt für „was geht" **dieser Abschnitt**. Specs beschreiben das Ziel, nicht den Ist-Zustand.
 >
 > **Pilot-Pfad-Stand (2026-06-13):** P0 (Vision-EU) ✅ · F1 (Legacy aus app.ts) ✅ · F2 (categorize auf belege LIVE) ✅ · F3 (n8n eingefroren, Pilot Webapp-getrieben) ✅ · F4 (Operator-Smoke-Skript) ✅ · F5 (grün + kein Geister-Tabellen-Bezug, dieser Abschnitt) ✅. Der saubere Pilot-Pfad ist durchgängig.
+>
+> **⚠️ Strategiewechsel (2026-06-15, GF Steve):** Der Testkunde **zahlt nie** — er ist ein Test-Objekt. Das frühere Tor „bauen erst wenn der Pilot zahlt" **entfällt**. Neues Ziel: **Build-out** — das System so weit fertig bauen, dass der Testkunde **alles** selbst durchspielt (Onboarding → Eingangskanal → OCR → Kategorisierung → Export → Support-Chat). Eingangskanal = **Web-Chat-Widget** (Kanal **und** Support in einem). Realistisch ~11–15 Wo bis Test-Ziel, ~16–24 Wo bis alle Module testbar (Gap-Analyse 2026-06-15, siehe `Modulkonzept/Konzeptentwicklung/00_Buildout_Roadmap.md`). **Die Anti-Drift-Disziplin (§3.7) bleibt voll gültig — nur das Zahlungs-Tor fällt.** Folge-Tasks T052/T053/T054 erledigt (SKR-Divergenz + Bewirtungs-Schutz geschlossen).
 
 ### 3.1 Zwei-Welten-Realität (Wurzel des Drifts — jetzt aufgelöst)
 
@@ -90,13 +92,13 @@ Die **alte Welt** (`receipts`, `customers`, `customer_profiles`, `categories`, `
 
 **Kategorisieren auf belege ist LIVE (T048).** Der frühere Pilot-Blocker — „M03-Logik existiert nur auf der toten `/receipts`-Welt" — ist behoben: `POST /api/v1/belege/:id/categorize` läuft im LIVE-Block (siehe §3.2). Der alte receipts-Kategorisierungs-Pfad (gegen `customer_categories`/`suppliers_global`/`categorization_cache`) wurde in **T051** ersatzlos gelöscht. Damit hat der saubere Pilot-Pfad **keine funktionale Bruchstelle** mehr.
 
-Offene Folge-Punkte (Qualität, kein Blocker): **T052** SKR-Konto-Divergenz T048↔M05 · **T053** Bewirtungs-Kategorie-Overwrite-Schutz (beide im Backlog).
+Folge-Punkte erledigt (2026-06-15): **T052** SKR-Konto-Divergenz (SSoT + Status-Gate) ✅ · **T054** SKR-Konto→Lexware-categoryId-UUID (Migration 120, RLS, Heuristik) ✅ · **T053** Bewirtungs-Kategorie-Overwrite-Schutz ✅. Damit ist die SKR-Divergenz End-to-End geschlossen und der Bewirtungs-Sonderfall geschützt. Offen im Backlog: **T055** (Bewirtungs-Memo-Felder-category-Gate, P3).
 
 ### 3.4 Eingefroren vs. entfernt (Stand 2026-06-13)
 
 Der frühere „tote Hülle"-Code wurde im Pilot-Pfad (T047/T051) **größtenteils gelöscht**, statt nur eingefroren. Der aktuelle Stand:
 
-- **Eingefroren — existiert nur als Spec/Tasks, NICHT als Code:** M02 (Archiv) · M04 (DATEV) · M06 (sevDesk) · M07 (Excel/Sheets) · M08 (Reporting) · M09 (Lieferanten-Komm.) · M10 (WhatsApp) · M11 (IMAP) · M13 (Steuerberater-Portal). Diese Module haben **keinen** Ordner unter `backend/src/modules/` mehr — sie leben in `Modulkonzept/Konzeptentwicklung/modules/`, `tasks/_eingefroren/` und `n8n/workflows/_eingefroren/`. Post-Pilot werden sie auf der belege-Welt neu gebaut.
+- **Noch nicht gebaut — existiert nur als Spec/Tasks (Stand 2026-06-15: im Build-out, nicht mehr „eingefroren bis Zahlung"):** M02 (Archiv) · M04 (DATEV) · M06 (sevDesk) · M07 (Excel/Sheets) · M08 (Reporting) · M09 (Lieferanten-Komm.) · M10 (WhatsApp) · M11 (E-Mail/IMAP) · M13 (Steuerberater-Portal). Diese Module haben **keinen** Ordner unter `backend/src/modules/` mehr — sie leben in `Modulkonzept/Konzeptentwicklung/modules/`, `tasks/_eingefroren/` und `n8n/workflows/_eingefroren/`. Sie werden auf der **belege-Welt neu gebaut** (NICHT die alten Specs 1:1, die zielen auf die toten Geister-Tabellen). Reihenfolge: siehe `00_Buildout_Roadmap.md`. Web-Chat (Eingang+Support) und Onboarding-Wizard sind der priorisierte kritische Pfad; M02/M04/M06/M07/M13 = Phase E (später).
 - **Code entfernt (T047/T051):** `customers` · `profiles` · `receipts` · `_shared/receipts` · `_shared/customers` · `plugin-system` · `routing` · `core/hooks/hook-runner` (+ `hook.repository`/`hook.types`) · das **`users`-Modul** (Email+Passwort) · der Alt-`m03-categorization`-receipts-Pfad · `core/adapters/booking/lexoffice/auth.ts` (`customer_credentials`) · der tote `apiApp`-Block in `app.ts`. Reversibel über die Git-Historie (Branches/Tags der jeweiligen PRs).
 - **Letzter isoliert-toter Rest (nicht registriert, harmlos):** `backend/src/modules/tenants/` (`tenant.routes.ts`/`tenant.repository.ts`) — **nicht in `app.ts` registriert**, Spalten-Drift `name`/`active` gegen die echte `tenants`-Tabelle (vgl. Memory `legacy-welt-schema-drift`). Nicht erreichbar → kein Laufzeit-Risiko. Abbau optional, Post-Pilot.
 - **Module mit lebendem Kern (Alt-Routen bereits entfernt):** M01 (kein `/extract` mehr) · M05 (nur belege-Export) · M12 (nur DSGVO v2).
@@ -107,40 +109,51 @@ Der frühere „tote Hülle"-Code wurde im Pilot-Pfad (T047/T051) **größtentei
 |---|---|
 | **Konzept** | Ziel-Zustand, dokumentiert in `Modulkonzept/Konzeptentwicklung/` |
 | **Code-Repo / Firma** | Repo `gastro`; Firma ProzessPilot (Einzelunternehmen Steve Bernhardt, Schneverdingen) |
-| **Webapp** | Existiert, Umbau zu rein-internem Mitarbeiter-Tool |
-| **Onboarding-Wizard / Web-Chat-Widget / Discord-Integration** | Noch nicht gebaut (eingefroren bis der Pilot zahlt) |
+| **Webapp** | Legacy-Kunden-App mit toten Routes (`/receipts`, `/customers`, `/plugins`, `/communications` gegen Geister-Tabellen). **Reboot zur internen Staff-Admin-App nötig** (Fundament-Posten A3 der Roadmap) |
+| **Onboarding-Wizard / Web-Chat-Widget** | Noch nicht gebaut — **im Build-out** (kritischer Pfad). Web-Chat = gewählter Eingangskanal **+** Support |
+| **Discord-Integration** | Nur Auth-OAuth (M14) gebaut; Bot/Bridge im Build-out (Phase E) |
+| **Fundament-Lücken (Querschnitt)** | Kein generischer **Mail-Service**, kein **PDF-Generator**, kein **Task-System** — Phase A der Roadmap |
 | **CI/CD** | Aktiv (`.github/workflows/ci-backend.yml`). ⚠️ DB-Tests **skippen still** ohne `PP_E2E=1` → „grün" verbirgt toten Code |
 | **Pilot-Wirt** | Lexware-Office-Steuerberaterin, SumUp Lite Kasse |
 
-### 3.6 Pilot-Scope — das EINZIGE bis zum ersten zahlenden Kunden
+### 3.6 Build-out-Scope — vollständiger Test-Durchlauf (Testkunde zahlt nicht)
 
-Ein Pilotkunde. Der Pilot wird **durch Streichen** fertig, nicht durch Bauen.
+**Strategie ab 2026-06-15:** Der Testkunde zahlt nie (Test-Objekt). Ziel ist **nicht** mehr „minimaler Pilot durch Streichen", sondern ein **Build-out**, bis der Testkunde den **kompletten Flow selbst** durchspielen kann. Gebaut wird — aber **sequenziell + reviewed** (§3.7), nie als paralleler Blind-Schreib.
 
-Der Pilot ist **Webapp-getrieben** (Mitarbeiter lädt in der internen Webapp hoch; alle belege-Endpoints sind JWT-geschützt). **Kein** n8n im Pilot-Kern — n8n authentifiziert per HMAC und kann die JWT-Endpoints nicht aufrufen (siehe `n8n/README.md`; Workflows eingefroren in T049). Der Pilot-Pfad (alle Stufen ✅ LIVE):
+**Die LIVE-Mitte (✅, beweisgestützt §3.2) — darauf wird gebaut:**
 
 ```
-Beleg rein (1 Kanal: Foto/Upload über die Webapp, JWT)
-  → OCR            (M01, belege — async via OCR-Worker, KEIN /extract-Endpoint)   ✅
-  → Kategorisieren (M03, POST /api/v1/belege/:id/categorize — T048)               ✅
-  → Lexware-Export (M05, POST /api/v1/exports/lexware/batch → Lexware Office)      ✅
-  → Smoke-Test     (scripts/qa-smoke.sh, manueller Operator-Lauf — T050)          ✅
+  → OCR            (M01, belege — async via OCR-Worker, KEIN /extract-Endpoint)   ✅ LIVE
+  → Kategorisieren (M03, POST /api/v1/belege/:id/categorize — T048)               ✅ LIVE
+  → Lexware-Export (M05, POST /api/v1/exports/lexware/batch → Lexware Office)      ✅ LIVE
 ```
 
-- Eingangsbelege (Ausgaben) **und** täglicher Z-Bon/Tagesabschluss (Einnahmen) gehen denselben Upload-Weg; der Wirt lädt den Z-Bon manuell hoch.
-- **M15/SumUp-Auto-Connector ist NICHT im Pilot-Kern** (Z-Bon manuell). Code läuft, bleibt liegen — kein kritischer Pfad.
-- Multi-Tenancy/RLS läuft mit — nicht ausbauen, nur nicht anfassen.
-- **Keine** Pilot-Hardcodes (`if tenant == pilot`); alles Kundenabhängige in Tenant-Config/Profil → Kunde 2 = neue Tenant-Zeile, kein Rewrite.
+**Der Ziel-Flow „Testkunde spielt alles selbst durch" — was fehlt (kritischer Pfad):**
 
-**Pilot-Schritte — alle erledigt (2026-06-13):** **F1** ✅ Legacy-Routen/-Module aus `app.ts` entfernt (T047) · **F2** ✅ `POST /belege/:id/categorize` LIVE (T048) · **F3** ✅ n8n-Workflows eingefroren, Pilot bleibt Webapp-getrieben (T049) · **F4** ✅ Operator-Smoke-Skript `scripts/qa-smoke.sh` (T050; der echte Prod-Durchlauf ist ein manueller Schritt, siehe `MANUELLE_AUFGABEN.md`) · **F5** ✅ grün + kein Geister-Tabellen-Bezug im aktiven Code + dieser Anker final (T051). **Ab hier gilt §3.7: neue Funktion/neues Modul erst, wenn der Pilot zahlt.**
+```
+Onboarding (Wizard, setup.prozesspilot.net)   → NOCH ZU BAUEN   (Phase B)
+  → Eingangskanal: Web-Chat-Widget            → NOCH ZU BAUEN   (Kanal + Support, Phase C)
+  → [ LIVE-Mitte: OCR → Kategorisieren → Export ]                ✅
+  → Support-Chat (dasselbe Web-Chat-Widget)   → NOCH ZU BAUEN   (Phase C)
+  → Staff-Betreuung (Mitarbeiter-Webapp + Task-System)          → NOCH ZU BAUEN (Phase A3/C)
+```
+
+- **Eingangskanal-Entscheidung:** Web-Chat-Widget ist Eingang **und** Support in einem (Wirt schickt Belege übers Widget, bekommt dort auch Hilfe). E-Mail/WhatsApp = spätere Kanal-Breite (Phase D).
+- **Fundament zuerst (Phase A):** generischer Mail-Service · PDF-Engine · Webapp-Reboot (Legacy-Kunden-App → internes Staff-Tool). Diese drei entriegeln Wizard/Web-Chat/Reporting.
+- Multi-Tenancy/RLS, GoBD-Basics laufen mit — nicht anfassen, nur drauf bauen.
+- **Keine** Hardcodes (`if tenant == pilot`); alles Kundenabhängige in Tenant-Config/Profil.
+- **Phasen + Größen + Reihenfolge:** `Modulkonzept/Konzeptentwicklung/00_Buildout_Roadmap.md` (Gap-Analyse 2026-06-15). Grob: Phase 0 (manuelle Bootstraps) → A (Fundament) → B (Wizard + Kanal) → C (Support-Chat + Task-System) = Test-Ziel (~11–15 Wo) → D/E (Breite, restliche Module).
+
+Der frühere Pilot-Pfad F1–F5 (T046–T051) ist abgeschlossen und bildet die saubere LIVE-Basis. **Ab hier gilt §3.7: Module werden gebaut — sequenziell, reviewed, ein Terminal.**
 
 ### 3.7 Arbeitsregeln (verbindlich, gelten für jeden Auftrag)
 
-- **Eine Aufgabe zur Zeit. Ein Terminal. Keine autonomen Parallel-Schreib-Läufe**, bis der Pilot zahlt — Parallelität war der Drift-Motor.
-- **Tor pro Bau-Schritt:** `npm run build` + `npm test` grün **und** Pilot-Smoke-Test grün, **bevor** der nächste Schritt startet.
+- **Eine Aufgabe zur Zeit. Ein Terminal. Keine autonomen Parallel-Schreib-Läufe — IMMER** (gilt auch im Build-out). Parallelität war der Drift-Motor; diese Regel fällt **nicht** mit dem Zahlungs-Tor.
+- **Tor pro Bau-Schritt:** `npm run build` + `npm test` grün **und** (sofern relevant) Smoke-Test grün, **bevor** der nächste Schritt startet. ⚠️ DB-Tests mit `PP_E2E=1` laufen lassen, sonst „grün" verbirgt toten Code.
 - **Jede Task nennt ihren Anker:** den betroffenen Konzept-§ (z. B. „nach `M05_Lexoffice_Integration.md` §4") oder das Code-Modul. Bei Spec-Lücke Frage dokumentieren, **nicht raten**.
-- **Der Weg ist `/start-task`** (Backlog → Branch → PR → Review → Merge). Kein direkter Push auf `main`.
-- **Read-only-Workflows** (dynamic) sind für Breite/Discovery/Review erlaubt; **Schreiben nur sequenziell** durch den Orchestrator — nie durch parallele Schreib-Agenten.
-- **Neue Funktion / neues Modul = „nach dem Pilot". Immer.**
+- **Der Weg ist `/start-task`** (Backlog → Branch → PR → `/review-pr` (code-reviewer) → Merge). Kein direkter Push auf `main`. Task-Datei nach Merge manuell nach `_done` (Mini-PR).
+- **Read-only-Workflows / Ultracode** sind für Breite/Discovery/Design/Review erlaubt und erwünscht; **Schreiben nur sequenziell** durch den Orchestrator — nie durch parallele Schreib-Agenten.
+- **Build-out (ab 2026-06-15):** Neue Module **werden gebaut** — auf der **belege-Welt** (nie die alten Specs 1:1, die zielen auf Geister-Tabellen), in der Reihenfolge der `00_Buildout_Roadmap.md`. Jede `none`-Task beginnt mit „Spec auf belege-Welt portieren".
 
 ---
 
@@ -150,6 +163,7 @@ Lies diese Dokumente bei Bedarf:
 
 | Datei | Wann lesen |
 |---|---|
+| `Modulkonzept/Konzeptentwicklung/00_Buildout_Roadmap.md` | **Build-out: Reihenfolge + Phasen, was als Nächstes gebaut wird (2026-06-15)** |
 | `Modulkonzept/Konzeptentwicklung/00_Architektur_Hauptdokument.md` | Bei jeder neuen Session zuerst überfliegen |
 | `Modulkonzept/Konzeptentwicklung/00_Strategie_Gastro.md` | Wenn Strategie/Markt-Bezug wichtig |
 | `Modulkonzept/Konzeptentwicklung/00_Pilot_Strategie.md` | Bei Pilot-spezifischen Tasks |

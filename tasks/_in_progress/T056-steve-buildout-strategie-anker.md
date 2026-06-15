@@ -33,12 +33,12 @@ Plus: den **Bau-Fahrplan** (Gap-Analyse 2026-06-15) als Konzept-Doku im Repo per
 
 ## Akzeptanz-Kriterien
 
-- [ ] §3.6 auf Build-out-Strategie umgeschrieben (Pipeline um Onboarding + Web-Chat erweitert)
-- [ ] §3.7 „nach dem Pilot" ersetzt durch Build-out-Regel; Tor + Sequenzialität + Anti-Parallel-Schreib behalten
-- [ ] §3.4/§3.5 eingefroren → Build-out-Phasen; Web-Chat als Kanal+Support vermerkt
-- [ ] §3-Header + §3.3 aktuell (Strategiewechsel; T052–T054 erledigt)
-- [ ] Bau-Fahrplan als `Modulkonzept/Konzeptentwicklung/00_Buildout_Roadmap.md` persistiert
-- [ ] Keine Code-Änderung (reine Doku) — Build/Tests unberührt
+- [x] §3.6 auf Build-out-Strategie umgeschrieben (Pipeline um Onboarding + Web-Chat erweitert)
+- [x] §3.7 „nach dem Pilot" ersetzt durch Build-out-Regel; Tor + Sequenzialität + Anti-Parallel-Schreib behalten
+- [x] §3.4/§3.5 eingefroren → Build-out-Phasen; Web-Chat als Kanal+Support vermerkt
+- [x] §3-Header + §3.3 aktuell (Strategiewechsel; T052–T054 erledigt) + §4-Verweis auf Roadmap
+- [x] Bau-Fahrplan als `Modulkonzept/Konzeptentwicklung/00_Buildout_Roadmap.md` persistiert
+- [x] Keine Code-Änderung (reine Doku) — Build/Tests unberührt
 
 ---
 

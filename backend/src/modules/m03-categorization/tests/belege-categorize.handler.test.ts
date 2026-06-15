@@ -222,7 +222,26 @@ describe('T053 — Bewirtungs-Schutz vor Overwrite', () => {
 
     const args = updateBelegCategorization.mock.calls[0][3];
     expect(args.category).toBe('wareneinkauf_food');
+    expect(args.categorization.skr_account).toBe('3100'); // KI-Konto, nicht bewirtung
     expect(args.newStatus).toBe('categorized');
+  });
+
+  it('Fallback-Engine (Pilot-Default ohne API-Key) + Detektor-bewirtung → bleibt bewirtung', async () => {
+    // Häufigster Pilot-Pfad: kein CLAUDE_API_KEY → engine='fallback', conf 0 →
+    // nie kiConfident → Schutz MUSS greifen.
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () =>
+        result({ engine: 'fallback', categoryId: 'sonstige_aufwand', confidence: 0 }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    const args = updateBelegCategorization.mock.calls[0][3];
+    expect(args.category).toBe('bewirtung');
+    expect(args.categorization.skr_account).toBe('4650');
+    expect(args.newStatus).toBe('requires_review');
   });
 
   it('ohne Detektor-Bewirtung greift der Schutz nicht (unsichere KI → ihr Resultat)', async () => {

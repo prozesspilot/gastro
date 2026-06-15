@@ -39,6 +39,11 @@ konsistent auf `bewirtung`, Status `requires_review` (menschliche Prüfung). **B
 gewinnt bewusst die KI (Task-Scope: Schutz nur „wenn die KI unsicher ist"). Keine Änderung an M05 nötig —
 der Voucher-Builder liest `beleg.category`, das jetzt erhalten bleibt.
 
+**Review (PR #127, code-reviewer): ✅ APPROVE.** Zusätzlich ergänzt: Fallback-Engine-Preserve-Test
+(Pilot-Default ohne API-Key) + `skr_account`-Assertion. MINOR-Folge-Finding (stale Bewirtungs-Memo-
+Felder, wenn eine sichere KI eine Detektor-Bewirtung überschreibt — vorbestehend im Voucher-Builder)
+→ als **T055** im Backlog abgelegt.
+
 ---
 
 ## Spec-Referenzen

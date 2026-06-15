@@ -183,7 +183,15 @@ function pickByHeuristic(
   const needles = NEEDLES_BY_CATEGORY[categoryId];
   if (!needles) return null;
 
-  // Kein type-Filter — Lexoffice gibt Typen auf Deutsch zurück.
-  const candidates = cats.filter((c) => needles.some((n) => c.name.toLowerCase().includes(n)));
-  return candidates[0] ?? null;
+  // Needle-für-Needle, spezifischste zuerst (Reihenfolge in NEEDLES_BY_CATEGORY):
+  // Wir nehmen den ersten Treffer der spezifischsten *matchenden* Needle —
+  // NICHT den ersten Kandidaten über alle Needles. Sonst könnte eine generische
+  // Needle (z. B. 'wareneingang' für food) je nach — nicht garantierter —
+  // Reihenfolge der Lexware-`listCategories()` food auf die non-food-Kategorie
+  // kippen lassen ("Wareneingang Handelswaren" vor "Wareneingang Lebensmittel").
+  for (const needle of needles) {
+    const match = cats.find((c) => c.name.toLowerCase().includes(needle));
+    if (match) return match;
+  }
+  return null;
 }

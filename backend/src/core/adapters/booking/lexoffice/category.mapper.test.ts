@@ -124,14 +124,16 @@ describe('CategoryMapper.mapSkrToLexoffice', () => {
     expect(listCategoriesMock).not.toHaveBeenCalled();
   });
 
-  it('ROLLBACK + rethrow, wenn ein Query unerwartet wirft', async () => {
-    const { mapper, queryMock } = makeMapper({ customerRow: null, defaultRow: null });
+  it('ROLLBACK + rethrow + Connection-Release, wenn ein Query unerwartet wirft', async () => {
+    const { mapper, queryMock, releaseMock } = makeMapper({ customerRow: null, defaultRow: null });
     queryMock.mockImplementationOnce(async () => ({ rows: [] })); // BEGIN ok
     queryMock.mockImplementationOnce(async () => {
       throw new Error('guc fail'); // set_config wirft
     });
     await expect(mapper.mapSkrToLexoffice('4650', TENANT)).rejects.toThrow('guc fail');
     expect(queryMock.mock.calls.some((c) => c[0] === 'ROLLBACK')).toBe(true);
+    // Wichtigste Leak-Sicherung: Release läuft auch im Throw-Pfad (finally).
+    expect(releaseMock).toHaveBeenCalled();
   });
 
   describe('Heuristik: alle 14 System-Kategorien lösen korrekt auf (nicht Sonstige)', () => {
@@ -152,6 +154,16 @@ describe('CategoryMapper.mapSkrToLexoffice', () => {
   it('Bewirtung (SKR03 4650) landet NICHT auf Sonstige (Kern des Findings)', async () => {
     const { mapper } = makeMapper({ categories: LEXOFFICE_CATEGORIES });
     expect(await mapper.mapSkrToLexoffice('4650', TENANT)).toBe('cat-bewirtung');
+  });
+
+  it('unabhängig von der Lexware-API-Reihenfolge (food/non-food kippt nicht)', async () => {
+    // Review #1: listCategories()-Reihenfolge ist NICHT garantiert. Mit
+    // umgedrehter Reihenfolge (non-food zuerst) muss food trotzdem auf food
+    // auflösen — sonst bucht ein Lebensmittel-Beleg auf das Non-Food-Konto.
+    const reversed = [...LEXOFFICE_CATEGORIES].reverse();
+    const { mapper } = makeMapper({ categories: reversed });
+    expect(await mapper.mapSkrToLexoffice('3100', TENANT)).toBe('cat-food');
+    expect(await mapper.mapSkrToLexoffice('3200', TENANT)).toBe('cat-nonfood');
   });
 
   it('kein Heuristik-Match → Fallback Sonstige-UUID', async () => {

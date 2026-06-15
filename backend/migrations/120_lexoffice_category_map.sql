@@ -52,6 +52,10 @@ CREATE POLICY lexoffice_category_map_tenant_read ON lexoffice_category_map
 
 -- Schreiben (INSERT/UPDATE/DELETE): nur eigene Zeilen. 'default'/'manual'-Seeds
 -- laufen ausschliesslich via RLS-Bypass (Migration/Admin), nie aus der App-Rolle.
+-- Hinweis: FOR ALL deckt in Postgres auch SELECT ab; beide Policies sind
+-- permissiv und werden per OR kombiniert → SELECT sieht (eigene) OR (eigene +
+-- 'default') = eigene + 'default'; UPDATE/DELETE nur eigene (die Read-Policy
+-- gilt nicht fuer Schreib-Kommandos). Gewollt.
 CREATE POLICY lexoffice_category_map_tenant_write ON lexoffice_category_map
   FOR ALL
   USING (is_rls_bypassed() OR customer_id = current_tenant_id()::text)

@@ -1,9 +1,9 @@
 # T054 — Lexware-Export: SKR-Konto → Lexoffice-categoryId-UUID angleichen (Buchungs-Endpunkt)
 
 **ID:** T054
-**Verantwortlich:** Andreas
+**Verantwortlich:** Steve
 **Priorität:** P1 (Blocker vor dem ersten echten Lexware-Export — sonst wird falsch gebucht)
-**Branch:** `andreas/T054-skr-categoryid-mapping`
+**Branch:** `steve/T054-categoryid-mapping`
 **Geschätzt:** 1 Tag
 **Dependencies:** T052 (SKR-Konto-SSoT) gemerged
 **Ziel-Meilenstein:** Pilot — Qualität vor F-Export
@@ -56,6 +56,19 @@ Zwei Probleme an dieser Übersetzung:
   Wareneingang …). → vierte Divergenz-Achse strukturell weg, chart-korrekt.
 - **Grenze (bewusst):** die exakten Kategorienamen pro Account sind öffentlich nicht vollständig
   enumeriert → einmalige Verifikation gegen den echten Pilot-Account ist ein manueller Setup-Schritt.
+
+---
+
+## Review-Nachschärfung (PR #124, code-reviewer)
+
+- **MAJOR #1 (Bug) gefixt:** `pickByHeuristic` war API-Reihenfolge-abhängig (food konnte auf die
+  non-food-`categoryId` kippen). Jetzt Needle-für-Needle, spezifischste zuerst → reihenfolge-
+  unabhängig. Test mit umgedrehter Lexware-Reihenfolge ergänzt.
+- **MAJOR #2 (Test) gefixt:** echter RLS-Integration-Test `lexoffice-category-map-rls.test.ts`
+  (Muster wie T041, `SET LOCAL ROLE gastro_app`, läuft in CI gegen Postgres): Cross-Tenant-Read
+  blockt, `'default'` nicht schreib-/löschbar, fremde customer_id nicht schreibbar.
+- **MINORs:** Mapper-Auflösung aus dem Retry-Loop memoisiert (kein 3×-Connect pro Beleg);
+  Policy-Kommentar in der Migration; Release-im-Throw-Assertion; Branch/Verantwortlich korrigiert.
 
 ---
 

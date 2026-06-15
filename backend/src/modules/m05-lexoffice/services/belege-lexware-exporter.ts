@@ -257,6 +257,13 @@ export async function exportBelegToLexware(
     .update(`${tenantId}:${belegId}:lexware_office`)
     .digest('hex');
 
+  // SKR-Konto ist rein in-memory (T052) und zwischen Retries identisch → einmal.
+  const skrAccount = resolveExportSkrAccount(beleg);
+  // categoryId-Auflösung (DB-Lookup/Heuristik) ist zwischen Retries ebenfalls
+  // identisch und öffnet je Aufruf eine eigene Connection — daher über die
+  // Versuche memoisieren statt pro Attempt neu aufzulösen (Review #MINOR T054).
+  let resolvedCategoryId: string | null = null;
+
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     try {
       // 3. Client + Token aufloesen (nur beim ersten Attempt — danach reuse)
@@ -264,12 +271,13 @@ export async function exportBelegToLexware(
 
       // 4. Voucher bauen — SKR-Konto aus der persistierten Kategorisierung (T052:
       //    Single Source of Truth, „angezeigt == gebucht"), dann SKR → Lexoffice-UUID.
-      const skrAccount = resolveExportSkrAccount(beleg);
-      const mapper = new CategoryMapper({ pool: deps.pool, client });
-      const categoryId = await mapper.mapSkrToLexoffice(skrAccount, tenantId);
+      if (resolvedCategoryId === null) {
+        const mapper = new CategoryMapper({ pool: deps.pool, client });
+        resolvedCategoryId = await mapper.mapSkrToLexoffice(skrAccount, tenantId);
+      }
       const voucher = buildBelegVoucher({
         beleg,
-        lexofficeCategoryId: categoryId,
+        lexofficeCategoryId: resolvedCategoryId,
       });
 
       // 5. Voucher anlegen (mit Idempotency-Key gegen Duplikate)

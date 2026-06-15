@@ -65,8 +65,8 @@ Beide haben **kaum Coding-Erfahrung**. Wir entwickeln **vollständig mit Claude 
 
 ### 3.1 Zwei-Welten-Realität (Wurzel des Drifts — jetzt aufgelöst)
 
-Es gab einen Schema-Reboot auf die **`tenants`/`belege`-Welt**. Real existieren genau **14 Tabellen** (`CREATE TABLE` in `backend/migrations/`, angewendet von `backend/src/core/db/migrate.ts`):
-`tenants` · `tenant_settings` · `users` · `auth_sessions` · `auth_audit_log` · `belege` · `kasse_integrations` · `kasse_transactions` · `pos_credentials` · `export_log` · `audit_log` · `ocr_cost_log` · `dsgvo_requests` · `booking_credentials`.
+Es gab einen Schema-Reboot auf die **`tenants`/`belege`-Welt**. Real existieren **15 Tabellen** (`CREATE TABLE` in `backend/migrations/`, angewendet von `backend/src/core/db/migrate.ts`):
+`tenants` · `tenant_settings` · `users` · `auth_sessions` · `auth_audit_log` · `belege` · `kasse_integrations` · `kasse_transactions` · `pos_credentials` · `export_log` · `audit_log` · `ocr_cost_log` · `dsgvo_requests` · `booking_credentials` · `lexoffice_category_map` (Letztere via Migration 120/T054 — vorher referenzierte `category.mapper.ts` sie als „Geister-Tabelle").
 
 Die **alte Welt** (`receipts`, `customers`, `customer_profiles`, `categories`, `suppliers_global`, `monthly_reports`, `communications`, `customer_credentials`, `customer_hooks`, … 20+ „Geister-Tabellen") existiert **nirgends** — kein `CREATE TABLE` im ganzen Repo (die `CREATE TABLE IF NOT EXISTS` in `Modulkonzept/.../prompts/terminal-tasks/*.txt` sind Prompt-Text, werden nie ausgeführt).
 

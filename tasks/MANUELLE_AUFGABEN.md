@@ -308,6 +308,32 @@
 - **Output:** `booking_credentials`-Row mit `provider='lexware_office'`, `active=true`
 - **Dependencies:** Migration 100 muss vorher gelaufen sein.
 
+### ⏳ Lexware-Kategorie-Mapping gegen echten Pilot-Account verifizieren (T054)
+- **Priorität:** P1 (vor dem ersten echten Export — falsches categoryId = falsche Buchung)
+- **Was:** T054 löst SKR-Konto → Lexware-`categoryId` über eine Namens-Heuristik gegen die
+  echten Kategorien des Tenants auf (Default-Mapping im Code, Needles auf die Lexware-Standard-
+  namen gegründet). Die öffentliche API-Doku enumeriert die Kategorienamen nicht vollständig →
+  die Zuordnung der 14 Kategorien muss einmal gegen den **echten** Lexware-Account von Almaz'
+  Steuerberaterin geprüft werden.
+- **Schritte:**
+  1. Nach dem ersten Export-Lauf die Tabelle prüfen: `SELECT skr_account, category_name, source
+     FROM lexoffice_category_map WHERE customer_id = '<almaz-tenant-uuid>' ORDER BY skr_account;`
+  2. Kontrollieren, dass keine der 14 Kategorien fälschlich auf „Sonstige" (UUID endet auf
+     `...4980`) gemappt ist — besonders **Bewirtung** (SKR03 4650 / SKR04 6640/6644).
+  3. Falsche/fehlende Zuordnungen korrigieren: `INSERT … ON CONFLICT … DO UPDATE` mit der
+     richtigen Lexware-`categoryId` (aus `GET /v1/posting-categories` des Accounts), `source='manual'`.
+- **Output:** Bestätigte `lexoffice_category_map`-Zeilen für alle 14 Kategorien; Bewirtung korrekt.
+- **Dependencies:** Lexware-Token (T009), Migration 120, Kontenrahmen-Entscheidung (T052, `PILOT_SKR_CHART`).
+
+### ⏳ Migration 120 in Production laufen lassen (T054)
+- **Priorität:** P1 (Tabelle `lexoffice_category_map` existierte als „Geist" — Export warf sonst)
+- **Was:** Migration `120_lexoffice_category_map.sql` auf Prod anwenden (legt die fehlende
+  Mapping-Tabelle + RLS an). Läuft via `migrate.ts` automatisch beim Deploy; hier nur als
+  Erinnerung für den manuellen Prod-Migrate-Schritt.
+- **Schritte:** `docker compose -f docker-compose.prod.yml exec backend node dist/core/db/migrate.js`
+  (oder der etablierte Deploy-Migrate-Pfad) und prüfen, dass `120_*` als applied verbucht ist.
+- **Output:** Tabelle `lexoffice_category_map` existiert in Prod.
+
 ### ⏳ Migration 100 in Production laufen lassen (T009)
 - **Priorität:** P0 (Token-Storage existiert sonst nicht)
 - **Was:** `belege` bekommt nichts; neue Tabelle `booking_credentials` (Lexware-Token-Storage)

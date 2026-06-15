@@ -3,15 +3,28 @@
  *
  * Strategie:
  *   1) Lookup in lexoffice_category_map (customer_id, skr_account)
- *   2) Falls leer: customer_id='default' Fallback
+ *   2) Falls leer: customer_id='default' Fallback (in customer-Zeile kopieren)
  *   3) Falls auch leer: Lexoffice client.listCategories() → Heuristik (Name-Match)
  *      → INSERT in Map. Schlägt der Lookup fehl, fallback auf 'sonstige' UUID.
  *
+ * T054:
+ *   - Alle DB-Zugriffe laufen auf EINER Connection mit gesetztem RLS-Kontext
+ *     (`app.current_tenant`), sonst sieht der Tenant unter FORCE RLS seine
+ *     eigenen `lexoffice_category_map`-Zeilen weder lesen noch schreiben.
+ *   - Die Namens-Heuristik wird aus SYSTEM_CATEGORIES abgeleitet (Reverse-Lookup
+ *     SKR-Konto → Kategorie via `categoryIdForSkrAccount`), NICHT mehr aus einer
+ *     eigenen, abweichend verschlüsselten SKR-Map. Damit ist die Konto-Quelle
+ *     einheitlich (vgl. T052) und chart-korrekt.
+ *
  * Hinweis: Die Heuristik im listCategories-Path ist absichtlich konservativ —
- * sie matcht nur, wenn ein eindeutig zuordbarer Lexoffice-Eintrag existiert.
+ * sie matcht nur, wenn ein eindeutig zuordbarer Lexoffice-Eintrag existiert. Die
+ * Needles sind auf die Lexware-Standard-Kategorienamen gegründet; die finale
+ * Zuordnung pro Tenant gehört gegen den echten Account verifiziert (manueller
+ * Setup-Schritt, siehe tasks/MANUELLE_AUFGABEN.md).
  */
 
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { categoryIdForSkrAccount } from '../../../../modules/m03-categorization/system-categories';
 import { logger } from '../../../logger';
 import type { LexofficeClient } from './lexoffice.client';
 import type { LexofficeUuid } from './lexoffice.types';
@@ -37,24 +50,51 @@ export class CategoryMapper {
   }
 
   async mapSkrToLexoffice(skrAccount: string, customerId: string): Promise<LexofficeUuid> {
+    const conn = await this.pool.connect();
+    try {
+      await conn.query('BEGIN');
+      // RLS-Kontext setzen (transaktions-lokal → wird bei COMMIT/ROLLBACK sauber
+      // zurückgesetzt, kein Leak auf die nächste Pool-Entleihung). Ohne das liefert
+      // current_tenant_id() NULL und der Tenant sieht/schreibt keine eigenen Zeilen.
+      await conn.query("SELECT set_config('app.current_tenant', $1, true)", [customerId]);
+
+      const result = await this.resolve(conn, skrAccount, customerId);
+      await conn.query('COMMIT');
+      return result;
+    } catch (err) {
+      await conn.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  private async resolve(
+    conn: PoolClient,
+    skrAccount: string,
+    customerId: string,
+  ): Promise<LexofficeUuid> {
     // 1) Customer-spezifische Map
-    const cust = await this.lookup(customerId, skrAccount);
+    const cust = await this.lookup(conn, customerId, skrAccount);
     if (cust) return cust;
 
     // 2) Default-Map
-    const def = await this.lookup('default', skrAccount);
+    const def = await this.lookup(conn, 'default', skrAccount);
     if (def) {
-      // Optional: in customer-Map kopieren, damit Reads schneller werden
-      await this.pool
-        .query(
+      // Best-effort: in customer-Map kopieren, damit Reads schneller werden.
+      // SAVEPOINT, damit ein Insert-Fehler die Tenant-Transaktion nicht abbricht.
+      await conn.query('SAVEPOINT copy_default');
+      try {
+        await conn.query(
           `INSERT INTO lexoffice_category_map (customer_id, skr_account, lexoffice_category_id, source)
            VALUES ($1, $2, $3, 'default')
            ON CONFLICT (customer_id, skr_account) DO NOTHING`,
           [customerId, skrAccount, def],
-        )
-        .catch(() => {
-          /* best-effort */
-        });
+        );
+        await conn.query('RELEASE SAVEPOINT copy_default');
+      } catch {
+        await conn.query('ROLLBACK TO SAVEPOINT copy_default').catch(() => undefined);
+      }
       return def;
     }
 
@@ -63,13 +103,25 @@ export class CategoryMapper {
       const cats = await this.client.listCategories();
       const heuristicMatch = pickByHeuristic(cats, skrAccount);
       if (heuristicMatch) {
-        await this.pool.query(
-          `INSERT INTO lexoffice_category_map (customer_id, skr_account, lexoffice_category_id, category_name, source)
-           VALUES ($1, $2, $3, $4, 'api_lookup')
-           ON CONFLICT (customer_id, skr_account) DO UPDATE
-             SET lexoffice_category_id = EXCLUDED.lexoffice_category_id, category_name = EXCLUDED.category_name`,
-          [customerId, skrAccount, heuristicMatch.id, heuristicMatch.name],
-        );
+        // SAVEPOINT: schlägt der Cache-Insert fehl, nutzen wir das aufgelöste
+        // Mapping trotzdem (besser als Fallback 'sonstige').
+        await conn.query('SAVEPOINT api_lookup');
+        try {
+          await conn.query(
+            `INSERT INTO lexoffice_category_map (customer_id, skr_account, lexoffice_category_id, category_name, source)
+             VALUES ($1, $2, $3, $4, 'api_lookup')
+             ON CONFLICT (customer_id, skr_account) DO UPDATE
+               SET lexoffice_category_id = EXCLUDED.lexoffice_category_id, category_name = EXCLUDED.category_name`,
+            [customerId, skrAccount, heuristicMatch.id, heuristicMatch.name],
+          );
+          await conn.query('RELEASE SAVEPOINT api_lookup');
+        } catch (insErr) {
+          await conn.query('ROLLBACK TO SAVEPOINT api_lookup').catch(() => undefined);
+          logger.warn(
+            { err: insErr, skrAccount },
+            'lexoffice_category_map INSERT (api_lookup) fehlgeschlagen — Mapping trotzdem genutzt',
+          );
+        }
         return heuristicMatch.id;
       }
     } catch (err) {
@@ -80,8 +132,12 @@ export class CategoryMapper {
     return FALLBACK_SONSTIGE;
   }
 
-  private async lookup(customerId: string, skrAccount: string): Promise<LexofficeUuid | null> {
-    const { rows } = await this.pool.query<MapRow>(
+  private async lookup(
+    conn: PoolClient,
+    customerId: string,
+    skrAccount: string,
+  ): Promise<LexofficeUuid | null> {
+    const { rows } = await conn.query<MapRow>(
       `SELECT lexoffice_category_id
          FROM lexoffice_category_map
         WHERE customer_id = $1 AND skr_account = $2
@@ -92,32 +148,50 @@ export class CategoryMapper {
   }
 }
 
+/**
+ * Default-Mapping im Code (Spec M05 §8.2): SKR-Konto → Lexoffice-Kategorie über
+ * Namens-Substrings. Die Needles sind pro System-Kategorie definiert und auf die
+ * Lexware-Standard-Kategorienamen (Deutsch) gegründet — der SKR-Bezug kommt aus
+ * SYSTEM_CATEGORIES (eine Quelle, T052/T054), nicht aus einer parallelen Map.
+ */
+const NEEDLES_BY_CATEGORY: Record<string, string[]> = {
+  wareneinkauf_food: ['lebensmittel', 'wareneingang', 'wareneinkauf'],
+  // bewusst OHNE 'wareneingang' — sonst kollidiert non-food mit der food-Kategorie;
+  // ein generisches "Wareneingang" wird (Gastronomie-Default) food zugeordnet.
+  wareneinkauf_nonfood: ['handelswaren', 'non-food', 'nonfood'],
+  betriebskosten_energie: ['energie', 'strom', 'gas', 'heizung'],
+  miete: ['miete', 'pacht', 'raumkosten'],
+  personal: ['personal', 'lohn', 'gehalt', 'löhne', 'loehne'],
+  versicherung: ['versicherung', 'beitrag'],
+  marketing: ['werbe', 'werbung', 'marketing', 'reklame'],
+  reise: ['reisekosten', 'reise'],
+  bewirtung: ['bewirtung'],
+  buerokosten: ['bürobedarf', 'buerobedarf', 'büro', 'buero'],
+  reparatur: ['reparatur', 'instandhaltung', 'wartung'],
+  steuer: ['steuern'],
+  kommunikation: ['telekommunikation', 'telefon', 'internet'],
+  sonstige_aufwand: ['sonstige'],
+};
+
 function pickByHeuristic(
   cats: Array<{ id: string; name: string; type: string }>,
   skrAccount: string,
 ): { id: string; name: string } | null {
-  // SKR03-Bereiche → Heuristische Substring-Suche im Lexoffice-Namen
-  // (Lexoffice-Kategorien sind in DE benannt).
-  // Lexoffice-Kategorienamen (Deutsch) — aus /v1/posting-categories abgeleitet
-  const map: Record<string, string[]> = {
-    '3100': ['wareneinkauf', 'lebensmittel', 'waren'],
-    '3200': ['wareneinkauf', 'handelswaren'],
-    '4200': ['raumkosten', 'miete', 'pacht'],
-    '4210': ['miete', 'pacht'],
-    '4240': ['energie', 'strom', 'gas', 'heizung'],
-    '4985': ['reinigung', 'wartung', 'instandhaltung'],
-    '4360': ['versicherung', 'haftpflicht'],
-    '4530': ['kfz', 'fahrzeug', 'kraftfahrzeug'],
-    '4600': ['werbung', 'marketing', 'reklame'],
-    '4970': ['beratung', 'buchhaltung', 'steuerberatung'],
-    '4980': ['sonstige ausgaben', 'sonstige betrieb'],
-    '4900': ['fortbildung', 'schulung', 'weiterbildung'],
-    '4100': ['lohn', 'gehalt', 'personal'],
-  };
-  const needles = map[skrAccount];
+  // Reverse-Lookup über die SSoT: SKR-Konto → System-Kategorie → Needles.
+  const categoryId = categoryIdForSkrAccount(skrAccount);
+  if (!categoryId) return null;
+  const needles = NEEDLES_BY_CATEGORY[categoryId];
   if (!needles) return null;
 
-  // Kein type-Filter — Lexoffice gibt Typen auf Deutsch zurück
-  const candidates = cats.filter((c) => needles.some((n) => c.name.toLowerCase().includes(n)));
-  return candidates[0] ?? null;
+  // Needle-für-Needle, spezifischste zuerst (Reihenfolge in NEEDLES_BY_CATEGORY):
+  // Wir nehmen den ersten Treffer der spezifischsten *matchenden* Needle —
+  // NICHT den ersten Kandidaten über alle Needles. Sonst könnte eine generische
+  // Needle (z. B. 'wareneingang' für food) je nach — nicht garantierter —
+  // Reihenfolge der Lexware-`listCategories()` food auf die non-food-Kategorie
+  // kippen lassen ("Wareneingang Handelswaren" vor "Wareneingang Lebensmittel").
+  for (const needle of needles) {
+    const match = cats.find((c) => c.name.toLowerCase().includes(needle));
+    if (match) return match;
+  }
+  return null;
 }

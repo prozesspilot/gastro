@@ -139,3 +139,21 @@ export function skrAccountFor(id: string, chart: SkrChart): string | null {
 export function isKnownCategory(id: string): boolean {
   return BY_ID.has(id);
 }
+
+/**
+ * T054 — Reverse-Lookup: zu welcher System-Kategorie gehört ein SKR-Konto?
+ *
+ * Scannt beide Kontenrahmen (SKR03 + SKR04), damit der Lexware-CategoryMapper
+ * ein persistiertes Konto unabhängig vom aktiven `PILOT_SKR_CHART` auf die
+ * Kategorie (und damit ihre Lexoffice-Namens-Heuristik) zurückführen kann.
+ * Die 14 Konten sind je Kontenrahmen eindeutig; bei (theoretischer) Kollision
+ * gewinnt die erste Definition. Liefert null, wenn kein Konto passt.
+ */
+export function categoryIdForSkrAccount(skrAccount: string): string | null {
+  const acc = skrAccount.trim();
+  if (!acc) return null;
+  for (const c of SYSTEM_CATEGORIES) {
+    if (c.skr03_konto === acc || c.skr04_konto === acc) return c.id;
+  }
+  return null;
+}

@@ -186,3 +186,91 @@ describe('belege-categorize.handler (T048/F2)', () => {
     expect(input?.lineItems).toEqual([{ description: 'Brot', total: 2 }]);
   });
 });
+
+describe('T053 — Bewirtungs-Schutz vor Overwrite', () => {
+  it('unsichere KI verwirft die Detektor-Bewirtung NICHT (bleibt bewirtung, konsistent)', async () => {
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () =>
+        result({
+          categoryId: 'sonstige_aufwand',
+          categoryLabel: 'Sonstige Aufwendungen',
+          skrAccount: '4900',
+          confidence: 0.4,
+          engine: 'claude',
+        }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    const args = updateBelegCategorization.mock.calls[0][3];
+    expect(args.category).toBe('bewirtung');
+    expect(args.categorization.category).toBe('bewirtung');
+    expect(args.categorization.skr_account).toBe('4650'); // bewirtung SKR03
+    expect(args.newStatus).toBe('requires_review');
+  });
+
+  it('sichere KI gewinnt — überschreibt die Detektor-Bewirtung (Task-Scope)', async () => {
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'categorized' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () => result({ categoryId: 'wareneinkauf_food', confidence: 0.95 }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    const args = updateBelegCategorization.mock.calls[0][3];
+    expect(args.category).toBe('wareneinkauf_food');
+    expect(args.categorization.skr_account).toBe('3100'); // KI-Konto, nicht bewirtung
+    expect(args.newStatus).toBe('categorized');
+  });
+
+  it('Fallback-Engine (Pilot-Default ohne API-Key) + Detektor-bewirtung → bleibt bewirtung', async () => {
+    // Häufigster Pilot-Pfad: kein CLAUDE_API_KEY → engine='fallback', conf 0 →
+    // nie kiConfident → Schutz MUSS greifen.
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () =>
+        result({ engine: 'fallback', categoryId: 'sonstige_aufwand', confidence: 0 }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    const args = updateBelegCategorization.mock.calls[0][3];
+    expect(args.category).toBe('bewirtung');
+    expect(args.categorization.skr_account).toBe('4650');
+    expect(args.newStatus).toBe('requires_review');
+  });
+
+  it('ohne Detektor-Bewirtung greift der Schutz nicht (unsichere KI → ihr Resultat)', async () => {
+    getBelegById.mockResolvedValue({ status: 'extracted', category: null, payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () => result({ categoryId: 'sonstige_aufwand', confidence: 0.4 }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    expect(updateBelegCategorization.mock.calls[0][3].category).toBe('sonstige_aufwand');
+  });
+
+  it('unsichere KI, die selbst bewirtung sagt → bleibt bewirtung (kein Konflikt)', async () => {
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+    const handler = buildBelegeCategorizeHandler({
+      categorize: async () =>
+        result({
+          categoryId: 'bewirtung',
+          categoryLabel: 'Bewirtungskosten',
+          skrAccount: '4650',
+          confidence: 0.4,
+        }),
+    });
+
+    await handler(mockReq(), mockReply());
+
+    expect(updateBelegCategorization.mock.calls[0][3].category).toBe('bewirtung');
+  });
+});

@@ -3,13 +3,13 @@
  *
  * Spec: T014 Mitarbeiter-Webapp Beleg-Upload + Listen-View
  * Backend: GET /api/v1/belege?page=1&page_size=50&status=received
- *
- * Unterscheidet sich von ReceiptsPage.tsx (alte receipts-API) — NICHT löschen.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getActiveTenantId } from '../api';
 import { listBelege, type Beleg, type BelegStatus } from '../api/belege';
+import NoTenantHint from '../components/NoTenantHint';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/ToastProvider';
 
@@ -93,6 +93,7 @@ export default function BelegeListPage() {
   const [belege, setBelege] = useState<Beleg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [noTenant, setNoTenant] = useState(false);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -103,6 +104,13 @@ export default function BelegeListPage() {
   // ── Daten laden ───────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
+    // Ohne aktiven Mandanten kein /belege-Call (sonst 400) — sauberer Hinweis.
+    if (!getActiveTenantId()) {
+      setNoTenant(true);
+      setLoading(false);
+      return;
+    }
+    setNoTenant(false);
     setLoading(true);
     setError(null);
     try {
@@ -216,7 +224,9 @@ export default function BelegeListPage() {
       </div>
 
       {/* Inhalt */}
-      {loading ? (
+      {noTenant ? (
+        <NoTenantHint />
+      ) : loading ? (
         <SkeletonTable rows={10} cols={5} />
       ) : error ? (
         <div

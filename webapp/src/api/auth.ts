@@ -139,26 +139,3 @@ export async function checkM14Session(): Promise<M14SessionUser | null> {
     return null;
   }
 }
-
-export async function changePassword(
-  accessToken: string,
-  currentPassword: string,
-  newPassword: string,
-): Promise<void> {
-  const res = await fetch(`${BASE}/change-password`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-  });
-  if (!res.ok) {
-    let parsed: unknown;
-    try { parsed = await res.json(); } catch { /* ignore */ }
-    const err = parsed as { error?: { code?: string; message?: string } } | undefined;
-    throw new ApiError(res.status, err?.error?.message ?? res.statusText, err?.error?.code);
-  }
-}

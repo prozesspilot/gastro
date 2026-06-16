@@ -1,7 +1,6 @@
 /**
- * API-Client für M01 Beleg-Upload (neue /belege-Endpoints).
+ * API-Client für M01 Beleg-Upload (belege-Welt).
  *
- * Unterscheidet sich von receipts.ts (alte API) — NICHT vermischen.
  * Backend-Spec: POST /api/v1/belege/upload, GET /api/v1/belege, GET /api/v1/belege/:id
  */
 

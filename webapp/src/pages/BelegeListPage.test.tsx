@@ -3,7 +3,7 @@
  * Spec: T014 — Empty-State, Tabelle, Pagination, Status-Filter, Row-Navigation
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -11,6 +11,11 @@ import { server } from '../tests/msw/server';
 import BelegeListPage from './BelegeListPage';
 import { ToastProvider } from '../components/ToastProvider';
 import type { Beleg } from '../api/belege';
+
+// Default: aktiver Mandant vorhanden (sonst greift der NoTenantHint-Guard).
+// Einzelne Tests können den noTenant-Pfad per mockReturnValueOnce(null) prüfen.
+const mockGetActiveTenantId = vi.fn<() => string | null>(() => 'tenant-001');
+vi.mock('../api', () => ({ getActiveTenantId: () => mockGetActiveTenantId() }));
 
 const BASE = '/api/v1';
 
@@ -271,6 +276,14 @@ describe('BelegeListPage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('upload-page')).toBeInTheDocument();
+    });
+  });
+
+  it('zeigt den Mandanten-Hinweis ohne aktiven Mandanten (kein 400)', async () => {
+    mockGetActiveTenantId.mockReturnValueOnce(null);
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/Mandanten wählen/i)).toBeInTheDocument();
     });
   });
 });

@@ -18,7 +18,6 @@ function renderTenantsPage() {
       <MemoryRouter initialEntries={['/tenants']}>
         <Routes>
           <Route path="/tenants" element={<TenantsPage />} />
-          <Route path="/tenants/:tenantId/customers" element={<div>Kunden</div>} />
         </Routes>
       </MemoryRouter>
     </ToastProvider>,
@@ -52,9 +51,14 @@ describe('TenantsPage', () => {
         HttpResponse.json({
           ok: true,
           data: [
-            { id: 'tenant-xyz', name: 'Test-Mandant XYZ', slug: 'xyz', created_at: '2024-01-01T00:00:00Z' },
+            {
+              id: 'tenant-xyz',
+              slug: 'xyz',
+              display_name: 'Test-Mandant XYZ',
+              package: 'pro',
+              deletion_status: 'active',
+            },
           ],
-          pagination: { total: 1 },
         }),
       ),
     );

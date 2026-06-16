@@ -59,12 +59,20 @@ function toAuthUser(dto: AuthUserDto): AuthUser {
 /**
  * Mappt einen M14-Session-User (Cookie-basiert) auf AuthUser.
  * permissions aus Rolle ableiten: geschaeftsfuehrer → ['*'], andere → Standard-Set.
+ * Exportiert für den Unit-Test der Rollen-Permission-Map (T059).
  */
-function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
+export function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
+  // T059/A3-Bug-Fix: Permissions auf die belege-Welt (vorher receipts/tasks-Scopes =
+  // Geister-Welt → mitarbeiter/support sahen nichts). Diese Map steuert nur die
+  // UI-Sichtbarkeit. ACHTUNG: serverseitig prüft m14StaffAuthHook derzeit nur, OB
+  // ein gültiges Staff-Cookie vorliegt — KEIN rollenbasiertes Schreib-Gate
+  // (support kann am Backend vorbei schreiben). Server-Rollen-Gate offen: siehe T062.
   const permissions: string[] =
     sessionUser.role === 'geschaeftsfuehrer'
       ? ['*']
-      : ['receipts.read', 'receipts.write', 'tasks.read', 'tasks.write'];
+      : sessionUser.role === 'support'
+        ? ['belege.read', 'tenants.read']
+        : ['belege.read', 'belege.write', 'tenants.read']; // mitarbeiter
 
   // DECISION: M14-Cookie-User hat tenant_id null (systemweite Mitarbeiter-Session).
   // B1: M14-Sessions haben keine Email im Frontend — display_name war fälschlich als email gesetzt.

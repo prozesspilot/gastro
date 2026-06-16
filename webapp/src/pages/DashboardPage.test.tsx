@@ -1,79 +1,73 @@
 /**
- * Tests für DashboardPage
+ * Tests für DashboardPage (A3-Reboot T059): schlanke Belege-Übersicht.
+ *
+ * `../api` + `../api/belege` werden gemockt — env-robust (kein localStorage)
+ * und beide Pfade (kein Mandant / aktiver Mandant) sind testbar.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { http, HttpResponse } from 'msw';
-import { server } from '../tests/msw/server';
-import DashboardPage from './DashboardPage';
-import { ToastProvider } from '../components/ToastProvider';
 
-const BASE = '/api/v1';
+const mockGetActiveTenantId = vi.fn<() => string | null>(() => null);
+const mockListBelege = vi.fn();
+
+vi.mock('../api', () => ({ getActiveTenantId: () => mockGetActiveTenantId() }));
+vi.mock('../api/belege', () => ({ listBelege: (opts: unknown) => mockListBelege(opts) }));
+
+import DashboardPage from './DashboardPage';
 
 function renderDashboard() {
   return render(
-    <ToastProvider>
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
-    </ToastProvider>,
+    <MemoryRouter>
+      <DashboardPage />
+    </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetActiveTenantId.mockReturnValue(null);
+});
 
 describe('DashboardPage', () => {
   it('rendert ohne Crash', () => {
     renderDashboard();
-    expect(document.body).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
-  it('zeigt Content nach Laden', async () => {
+  it('zeigt einen Link zur Belegliste', () => {
+    renderDashboard();
+    expect(screen.getByRole('link', { name: /zur belegliste/i })).toBeInTheDocument();
+  });
+
+  it('ohne aktiven Mandanten erscheint der Mandanten-Hinweis (kein /belege-Call)', async () => {
     renderDashboard();
     await waitFor(() => {
-      const body = document.body.textContent;
-      expect(body?.length).toBeGreaterThan(10);
-    }, { timeout: 5000 });
+      expect(screen.getByText(/Mandanten wählen/i)).toBeInTheDocument();
+    });
+    expect(mockListBelege).not.toHaveBeenCalled();
   });
 
-  it('zeigt KPI-Bereich', async () => {
-    server.use(
-      http.get(`${BASE}/receipts/stats`, () =>
-        HttpResponse.json({
-          ok: true,
-          data: {
-            total: 42,
-            by_status: { pending: 5, processing: 3, done: 30, error: 4 },
-            by_source: { manual: 20, whatsapp: 15, email: 7 },
-            today_count: 8,
-            this_week_count: 25,
-          },
-        }),
-      ),
+  it('mit aktivem Mandanten zeigt es die KPI-Zahlen aus /belege', async () => {
+    mockGetActiveTenantId.mockReturnValue('tenant-001');
+    mockListBelege.mockImplementation((opts: { status?: string }) =>
+      Promise.resolve({
+        belege: [],
+        pagination: {
+          page: 1,
+          page_size: 1,
+          total: opts?.status === 'requires_review' ? 7 : 42,
+          total_pages: 1,
+        },
+      }),
     );
     renderDashboard();
     await waitFor(() => {
-      // Irgendein nummerisches KPI sollte sichtbar sein
-      const body = document.body.textContent;
-      expect(body).toBeTruthy();
-    }, { timeout: 5000 });
-  });
-
-  it('zeigt Tasks/Aufgaben-Bereich', async () => {
-    renderDashboard();
-    await waitFor(() => {
-      // Tasks-Bereich mit offenen Aufgaben
-      const body = document.body.textContent;
-      expect(body?.length).toBeGreaterThan(50);
+      expect(screen.getByText('42')).toBeInTheDocument();
     });
-  });
-
-  it('zeigt Quicklinks oder Navigation', async () => {
-    renderDashboard();
-    await waitFor(() => {
-      const links = screen.queryAllByRole('link');
-      // Mindestens ein Link vorhanden
-      expect(links.length).toBeGreaterThan(0);
-    });
+    expect(screen.getByText('7')).toBeInTheDocument();
+    // ein Call für "gesamt", einer für "requires_review"
+    expect(mockListBelege).toHaveBeenCalledTimes(2);
   });
 });

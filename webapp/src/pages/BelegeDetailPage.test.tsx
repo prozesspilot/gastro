@@ -3,7 +3,7 @@
  * Spec: T014 — Beleg laden, Status-Badge, Image/PDF-Preview, Back-Button
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -11,6 +11,9 @@ import { server } from '../tests/msw/server';
 import BelegeDetailPage from './BelegeDetailPage';
 import { ToastProvider } from '../components/ToastProvider';
 import type { Beleg } from '../api/belege';
+
+// Aktiver Mandant vorausgesetzt (sonst greift der NoTenantHint-Guard).
+vi.mock('../api', () => ({ getActiveTenantId: () => 'tenant-001' }));
 
 const BASE = '/api/v1';
 

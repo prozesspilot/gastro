@@ -1,28 +1,18 @@
-import type { Tenant } from '../types';
+/**
+ * T058/T059 — Mandanten-Liste für den internen Tenant-Selector.
+ * Backend: GET /api/v1/tenants (Staff-Cross-Tenant, SECURITY DEFINER).
+ */
 import { apiRequest, unwrap } from './_client';
 
-interface RawTenant {
+export interface TenantListItem {
   id: string;
-  name: string;
   slug: string;
-  created_at: string;
+  display_name: string;
+  package: string;
+  deletion_status: string;
 }
 
-export async function getTenants(): Promise<Tenant[]> {
-  const raw = await apiRequest<unknown>('/tenants?page=1&limit=50');
-  const list = unwrap<RawTenant[]>(raw);
-  return list.map((t) => ({
-    id:         t.id,
-    name:       t.name,
-    slug:       t.slug,
-    created_at: t.created_at,
-  }));
-}
-
-export async function createTenant(input: { slug: string; name: string }): Promise<Tenant> {
-  const raw = await apiRequest<unknown>('/tenants', {
-    method: 'POST',
-    body: input,
-  });
-  return unwrap<Tenant>(raw);
+export async function getTenants(): Promise<TenantListItem[]> {
+  const raw = await apiRequest<unknown>('/tenants');
+  return unwrap<TenantListItem[]>(raw);
 }

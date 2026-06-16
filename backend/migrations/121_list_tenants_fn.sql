@@ -36,7 +36,7 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   -- Aktiviert is_rls_bypassed() nur in dieser DEFINER-Funktion (Owner-Rolle +
-  -- app.bypass_rls=on). LOCAL → reset am Statement-/Transaktionsende.
+  -- app.bypass_rls=on). LOCAL → automatischer Reset am TRANSAKTIONSende.
   PERFORM set_config('app.bypass_rls', 'on', true);
 
   RETURN QUERY
@@ -48,6 +48,12 @@ BEGIN
       FROM tenants t
      WHERE t.deleted_at IS NULL
      ORDER BY t.display_name;
+
+  -- Defense-in-Depth: Bypass am Funktionsende explizit zurücknehmen, damit er
+  -- die Funktion garantiert NICHT überlebt — selbst falls ein künftiger Caller
+  -- sie innerhalb eines expliziten BEGIN…COMMIT vor weiteren Statements aufruft.
+  PERFORM set_config('app.bypass_rls', 'off', true);
+  RETURN;
 END;
 $$;
 

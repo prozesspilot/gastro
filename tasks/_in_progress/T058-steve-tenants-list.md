@@ -49,6 +49,11 @@ läuft und die RLS-Policy umgeht — eng gefasst, damit kein genereller Bypass e
 - [x] Migration 121 + Rollback; Build + 672 Tests grün; Biome sauber
 - [ ] CodeQL ohne neuen High-Alert (via PR-CI)
 
+## Review-Nachschärfung (PR #133, code-reviewer)
+- **MAJOR Role-Gating (Entscheidung):** `GET /tenants` lässt BEWUSST alle Staff-Rollen zu (auch `support`). `support` hat im A3-Rollenmodell `tenants.read` und braucht die Liste für den Tenant-Selector (read-only Belege-Sicht je Mandant). Exponiert sind nur nicht-sensible Business-Metadaten, keine PII. Im Route-Kommentar dokumentiert.
+- **MAJOR Test-Tiefe gefixt:** Integration-Test übt jetzt den echten Prod-Pfad (Funktion-Owner `gastro_owner` NOSUPERUSER via `ALTER FUNCTION … OWNER`), nicht nur den CI-Superuser-Kurzschluss.
+- **MINOR gefixt:** Funktions-Kommentar präzisiert (Reset am Transaktionsende); `set_config('app.bypass_rls','off')` am Funktionsende als Defense-in-Depth; Tests für leere Liste, `deleted_at`-Ausschluss und Bypass-Leak-Sequenz (Funktion + danach direktes SELECT in derselben Transaktion → 0).
+
 ## Nicht in dieser Task
 - Tenant-Detail/Settings (`GET /tenants/:id`) → T060/T061
 - Tenant-Erstellung („Kunde eintragen") → Onboarding-Wizard / Tenant-Admin (Phase B/C)

@@ -70,6 +70,18 @@ describe('GET /api/v1/tenants', () => {
     expect(body.data[0].display_name).toBe('Almaz Gastro');
   });
 
+  it('200 + leere Liste, wenn keine Mandanten existieren', async () => {
+    current = await buildApp([]);
+    const r = await current.inject({
+      method: 'GET',
+      url: '/api/v1/tenants',
+      cookies: { pp_auth: makeToken() },
+    });
+    expect(r.statusCode).toBe(200);
+    const body = JSON.parse(r.body);
+    expect(body).toEqual({ ok: true, data: [] });
+  });
+
   it('liest über die SECURITY-DEFINER-Funktion, nicht direkt aus tenants', async () => {
     current = await buildApp(SAMPLE);
     const pool = current.db as unknown as { query: ReturnType<typeof vi.fn> };

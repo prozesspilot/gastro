@@ -42,12 +42,12 @@ läuft und die RLS-Policy umgeht — eng gefasst, damit kein genereller Bypass e
    NUR für die Funktion, nicht generell) + Handler (401 ohne Auth).
 
 ## Akzeptanz-Kriterien
-- [ ] `GET /api/v1/tenants` LIVE in `app.ts`, m14StaffAuthHook, 200 → Liste (id/slug/display_name/package/deletion_status), nur `deleted_at IS NULL`
-- [ ] 401 ohne gültige Session
-- [ ] SECURITY-DEFINER-Funktion: Owner `gastro_owner`, fixe Spalten, keine Params, `SET search_path`, `REVOKE PUBLIC` + `GRANT gastro_app`
-- [ ] Integration-Test (CI-DB): Funktion liefert cross-tenant alle aktiven; direktes `SELECT FROM tenants` unter gastro_app ohne Context = 0 (kein genereller Bypass)
-- [ ] Migration + Rollback; `npm run build` + `npm test` grün; biome sauber
-- [ ] CodeQL ohne neuen High-Alert
+- [x] `GET /api/v1/tenants` LIVE in `app.ts`, m14StaffAuthHook (kein TenantContext), 200 → Liste (id/slug/display_name/package/deletion_status), nur `deleted_at IS NULL`
+- [x] 401 ohne gültige Session — Handler-Test
+- [x] SECURITY-DEFINER-Funktion `list_tenants_for_staff()`: fixe Spalten, keine Params, `SET search_path=pg_catalog,public`, `set_config('app.bypass_rls',true)` lokal, `REVOKE PUBLIC` + `GRANT gastro_app`
+- [x] Integration-Test (CI-DB): Funktion liefert cross-tenant alle aktiven; direktes `SELECT FROM tenants` unter gastro_app ohne Context = 0
+- [x] Migration 121 + Rollback; Build + 672 Tests grün; Biome sauber
+- [ ] CodeQL ohne neuen High-Alert (via PR-CI)
 
 ## Nicht in dieser Task
 - Tenant-Detail/Settings (`GET /tenants/:id`) → T060/T061

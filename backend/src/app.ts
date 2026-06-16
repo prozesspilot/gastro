@@ -26,8 +26,8 @@ import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
-import { tenantsRoutes } from './routes/tenants.routes';
 import { sseRoutes } from './routes/sse';
+import { tenantsRoutes } from './routes/tenants.routes';
 import { webhookRoutes } from './routes/webhooks';
 
 declare module 'fastify' {

@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getActiveTenantId } from '../api';
 import {
   type Beleg,
   type BelegUpdatePatch,
@@ -26,6 +27,7 @@ import {
   reprocessBeleg,
   updateBeleg,
 } from '../api/belege';
+import NoTenantHint from '../components/NoTenantHint';
 import { useToast } from '../components/ToastProvider';
 
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
@@ -208,9 +210,16 @@ export default function BelegeDetailPage() {
   const [reprocessing, setReprocessing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showZoomModal, setShowZoomModal] = useState(false);
+  const [noTenant, setNoTenant] = useState(false);
 
   useEffect(() => {
     if (!id) return;
+    // Ohne aktiven Mandanten kein /belege/:id-Call (sonst 400) — sauberer Hinweis.
+    if (!getActiveTenantId()) {
+      setNoTenant(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     getBeleg(id)
       .then((res) => {
@@ -314,6 +323,24 @@ export default function BelegeDetailPage() {
       setShowDeleteConfirm(false);
     }
   };
+
+  // ── Kein Mandant gewählt ────────────────────────────────────────────────────
+
+  if (noTenant) {
+    return (
+      <div style={{ padding: '32px 24px', maxWidth: 900, margin: '0 auto' }}>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => navigate('/belege')}
+          style={{ marginBottom: 24, fontSize: 13 }}
+        >
+          &larr; Zurück
+        </button>
+        <NoTenantHint />
+      </div>
+    );
+  }
 
   // ── Loading ───────────────────────────────────────────────────────────────
 

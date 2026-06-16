@@ -7,6 +7,8 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getActiveTenantId } from '../api';
+import NoTenantHint from '../components/NoTenantHint';
 import { useToast } from '../components/ToastProvider';
 import { uploadBeleg, type UploadResponse } from '../api/belege';
 
@@ -304,6 +306,11 @@ export default function BelegeUploadPage() {
         </p>
       </div>
 
+      {/* Ohne aktiven Mandanten kein Upload (sonst 400) — sauberer Hinweis. */}
+      {!getActiveTenantId() ? (
+        <NoTenantHint what="Belege hochzuladen und" />
+      ) : (
+      <>
       {/* Drop-Zone */}
       <div
         role="button"
@@ -428,6 +435,8 @@ export default function BelegeUploadPage() {
             </button>
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   );

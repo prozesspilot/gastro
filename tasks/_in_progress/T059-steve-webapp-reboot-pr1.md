@@ -42,6 +42,12 @@ advisor, users, dsgvo. Hooks: `useReceiptEvents`. E2E: `receipt-flow.e2e`.
 ## Nicht in dieser Task (Folge)
 Belege-Detail/Korrektur + Upload-Aktionen → T060 · Mandanten-Admin → T061 · Task-System/Chat/DSGVO-UI → Phase C.
 
+## Bewusst behaltene Bausteine / dokumentierte Reboot-Schulden
+Im Code-Review (PR #136) aufgefallen, bewusst entschieden statt gelöscht:
+- **Wiederverwendbare Bausteine für T060 behalten:** `components/StatusBadge`, `CategoryBadge`, `ConfidenceBadge`, `ConfirmModal`, `EmptyState` (generisch) sowie `hooks/useDebounce`, `useKeyboardShortcut`. Aktuell nur durch ihre eigenen Tests referenziert; sie sind die natürlichen Bausteine der Belege-Detail-/Korrektur-UI (T060) — Löschen + Neubau wäre reine Churn samt Testverlust. Falls T060 sie nicht nutzt: dann löschen.
+- **`ProtectedRoute` `password_must_change` → `/change-password` (latent tot):** Die Route gibt es nach dem Reboot nicht mehr; der Redirect feuert für M14-Cookie-User nie (`m14UserToAuthUser` setzt `password_must_change: false`, und das Email+Passwort-`users`-Modul ist backendseitig entfernt). Bewusst nicht angefasst (Datei nicht im PR; Test läuft nur unter CI-Node-20). Aufräumen, sobald der Passwort-Flow final geklärt ist.
+- **Server-Rollen-Schreib-Gate fehlt** (UI-Permission-Map ist nur kosmetisch) → ausgelagert als **T062** (Backlog).
+
 ## Spec-Referenzen
 - Memory `a3-webapp-reboot-plan` (vollständige DROP/KEEP/REWIRE-Listen)
 - `webapp/src/auth/AuthContext.tsx`, `components/Layout.tsx`, `App.tsx`, `api/_client.ts` (getActiveTenantId)

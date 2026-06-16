@@ -18,7 +18,7 @@ function initials(name: string): string {
 }
 
 export default function UserMenu() {
-  const { user, logout, hasPermission } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -88,31 +88,15 @@ export default function UserMenu() {
             {/* B1: M14-Sessions haben keine Email — Fallback auf displayName */}
             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{user.email || user.displayName}</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-              {user.tenantId ? `Tenant: ${user.tenantId.slice(0, 8)}…` : 'super_admin'}
-              {user.preset && ` · ${user.preset}`}
+              {user.role ?? 'Mitarbeiter'}
+              {user.tenantId && ` · Tenant: ${user.tenantId.slice(0, 8)}…`}
             </div>
           </div>
 
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); navigate('/change-password'); }}
-            style={menuItemStyle}
-          >
-            Passwort ändern
-          </button>
-
-          {hasPermission('users.read') && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { setOpen(false); navigate('/users'); }}
-              style={menuItemStyle}
-            >
-              Benutzer
-            </button>
-          )}
-
+          {/* A3-Reboot (T059): "Passwort ändern" (/change-password) und "Benutzer"
+              (/users) entfernt — beide Routen gibt es nicht mehr. M14-Cookie-User
+              (Discord/Notfall-TOTP) haben kein Passwort-Konto; User-Verwaltung
+              kommt ggf. später als eigene Seite. */}
           <button
             type="button"
             role="menuitem"

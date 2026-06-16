@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
 import { listBelege } from '../api/belege';
+import NoTenantHint from '../components/NoTenantHint';
 
 /**
  * A3-Reboot (T059): schlanke Belege-Übersicht des aktiven Mandanten.
@@ -59,9 +60,7 @@ export default function DashboardPage() {
       </div>
 
       {noTenant ? (
-        <div className="card empty">
-          <p>Bitte oben rechts einen Mandanten wählen, um die Belege zu sehen.</p>
-        </div>
+        <NoTenantHint />
       ) : error ? (
         <div className="error-box">{error}</div>
       ) : (

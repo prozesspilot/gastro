@@ -62,9 +62,11 @@ function toAuthUser(dto: AuthUserDto): AuthUser {
  * Exportiert für den Unit-Test der Rollen-Permission-Map (T059).
  */
 export function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
-  // T059/A3-Bug-Fix: Permissions auf die belege-Welt (vorher receipts.*/tasks.* =
-  // Geister-Welt → mitarbeiter/support sahen nichts). Echte Durchsetzung ist
-  // server-seitig; das hier steuert nur die UI-Sichtbarkeit.
+  // T059/A3-Bug-Fix: Permissions auf die belege-Welt (vorher receipts/tasks-Scopes =
+  // Geister-Welt → mitarbeiter/support sahen nichts). Diese Map steuert nur die
+  // UI-Sichtbarkeit. ACHTUNG: serverseitig prüft m14StaffAuthHook derzeit nur, OB
+  // ein gültiges Staff-Cookie vorliegt — KEIN rollenbasiertes Schreib-Gate
+  // (support kann am Backend vorbei schreiben). Server-Rollen-Gate offen: siehe T062.
   const permissions: string[] =
     sessionUser.role === 'geschaeftsfuehrer'
       ? ['*']

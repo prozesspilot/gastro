@@ -3,8 +3,6 @@
  *
  * Spec: T014 Mitarbeiter-Webapp Beleg-Upload + Listen-View
  * Backend: GET /api/v1/belege?page=1&page_size=50&status=received
- *
- * Unterscheidet sich von ReceiptsPage.tsx (alte receipts-API) — NICHT löschen.
  */
 
 import { useCallback, useEffect, useState } from 'react';

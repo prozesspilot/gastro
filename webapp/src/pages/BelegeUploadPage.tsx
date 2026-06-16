@@ -3,8 +3,6 @@
  *
  * Spec: T014 Mitarbeiter-Webapp Beleg-Upload + Listen-View
  * Backend: POST /api/v1/belege/upload (multipart, field: "file")
- *
- * Unterscheidet sich von UploadPage.tsx (alte receipts-API) — NICHT löschen.
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';

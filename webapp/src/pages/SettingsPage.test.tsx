@@ -1,9 +1,9 @@
 /**
- * Tests für SettingsPage
+ * Tests für SettingsPage (A3-Reboot T059): Verbindungs-Checks + Info.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SettingsPage from './SettingsPage';
 import { ToastProvider } from '../components/ToastProvider';
@@ -19,45 +19,34 @@ function renderSettingsPage() {
 }
 
 describe('SettingsPage', () => {
-  beforeEach(() => {
-    sessionStorage.clear();
-    localStorage.clear();
-  });
-
   it('rendert ohne Crash', () => {
     renderSettingsPage();
     expect(document.body).toBeTruthy();
   });
 
-  it('zeigt Einstellungen-Inhalt', async () => {
+  it('zeigt die Einstellungen-Überschrift', () => {
     renderSettingsPage();
-    await waitFor(() => {
-      const body = document.body.textContent;
-      // Seite hat Content
-      expect(body?.length).toBeGreaterThan(10);
-    });
+    expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument();
   });
 
-  it('zeigt System-Status oder Verbindungs-Checks', async () => {
+  it('zeigt die Verbindungen-Sektion', () => {
     renderSettingsPage();
-    await waitFor(() => {
-      // Settings-Seite zeigt Backend-/System-Checks
-      const body = document.body.textContent;
-      expect(body).toBeTruthy();
-    });
+    expect(screen.getByText('Verbindungen')).toBeInTheDocument();
   });
 
-  it('zeigt API-Verbindungs-Sektion', async () => {
+  it('listet die System-Verbindungen Backend/PostgreSQL/Redis', () => {
     renderSettingsPage();
-    // Seite rendert irgendwelche Verbindungs-Informationen
-    expect(document.body).toBeTruthy();
+    expect(screen.getByText('Backend API')).toBeInTheDocument();
+    expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
+    expect(screen.getByText('Redis Streams')).toBeInTheDocument();
   });
 
-  it('zeigt Tenant-Verwaltung oder System-Info', async () => {
+  it('zeigt nach dem Check den Backend-Status', async () => {
     renderSettingsPage();
+    // healthHandlers liefert ok:true → mindestens ein "ok"-Detail erscheint
     await waitFor(() => {
-      const body = document.body.textContent;
-      expect(body?.length).toBeGreaterThan(20);
+      const body = document.body.textContent ?? '';
+      expect(body).toContain('Status: ok');
     });
   });
 });

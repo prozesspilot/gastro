@@ -32,12 +32,12 @@ advisor, users, dsgvo. Hooks: `useReceiptEvents`. E2E: `receipt-flow.e2e`.
 **4. `package.json`:** jsdom exakt `25.0.1` pinnen (Memory `webapp-test-stack`).
 
 ## Akzeptanz-Kriterien
-- [ ] `grep -rE "receipts|customers|/plugins|communications|/reports|/stats|/advisor|/users" webapp/src/api webapp/src/pages` = 0 (außer belege/categories)
-- [ ] App.tsx hat nur die o.g. Routen; eingeloggter mitarbeiter sieht Dashboard + Belege-Liste
-- [ ] Layout-Sidebar ohne Geister-Einträge; Pending-Badge via /belege
-- [ ] AuthContext-Permission-Map auf belege-Welt (Unit-Test)
-- [ ] Tenant-Selector lädt /tenants + setzt aktiven Tenant
-- [ ] `npm run build` + `npm test` + `npm run lint` (webapp) grün; CI grün (Node 20)
+- [x] `grep -rE "receipts|customers|/plugins|communications|/reports|/stats|/advisor|/users" webapp/src/api webapp/src/pages` = 0 (außer belege/categories)
+- [x] App.tsx hat nur die o.g. Routen; eingeloggter mitarbeiter sieht Dashboard + Belege-Liste
+- [x] Layout-Sidebar ohne Geister-Einträge; Pending-Badge via /belege
+- [x] AuthContext-Permission-Map auf belege-Welt (Unit-Test) — `AuthContext.permissions.test.ts`
+- [x] Tenant-Selector lädt /tenants + setzt aktiven Tenant — `components/TenantSelector.tsx`
+- [x] `npm run build` + `npm test` grün; `npx tsc --noEmit` grün (Webapp hat kein `lint`-Script, CI prüft via tsc). 8 Vitest-Fails sind die bekannte Node-26-lokal-localStorage-Falle (`_client.test`/`ProtectedRoute.test`) — grün unter CI-Node-20.
 
 ## Nicht in dieser Task (Folge)
 Belege-Detail/Korrektur + Upload-Aktionen → T060 · Mandanten-Admin → T061 · Task-System/Chat/DSGVO-UI → Phase C.

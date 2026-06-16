@@ -91,15 +91,9 @@ async function stubAuth(page: import('@playwright/test').Page, opts: {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { logged_out: true } }) });
   });
 
-  // Belegt /receipts/stats (vom Layout angefragt) damit Dashboard-Render nicht crasht
-  await page.route('**/api/v1/customers/*/stats', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { customer_id: 'c1', receipts_by_month: [], by_category: [], top_suppliers: [], export_rate: {}, processing_times: {} } }) }),
-  );
+  // Layout (A3-Reboot) fragt nur GET /tenants für den Mandanten-Selector an.
   await page.route('**/api/v1/tenants', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: [] }) }),
-  );
-  await page.route('**/api/v1/receipts/stats', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { total: 0, by_status: {}, by_source: {}, today_count: 0, this_week_count: 0 } }) }),
   );
 }
 

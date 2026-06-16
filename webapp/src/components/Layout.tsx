@@ -1,10 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { fetchReceiptStats, fetchTenants, getActiveTenantId } from '../api';
-import { useAuth } from '../auth/AuthContext';
-import { useKeyboardShortcut } from '../hooks/useKeyboardShortcut';
-import GlobalSearch from './GlobalSearch';
+import { getActiveTenantId } from '../api';
+import { listBelege } from '../api/belege';
+import TenantSelector from './TenantSelector';
 import UserMenu from './UserMenu';
+
+/**
+ * Interne Staff-Webapp-Shell (A3-Reboot T059).
+ * Schlanke Navigation auf der belege-Welt; Geister-Einträge (receipts/stats/
+ * advisor/communications/plugins/users) entfernt.
+ */
 
 interface NavSpec {
   to: string;
@@ -12,81 +17,32 @@ interface NavSpec {
   label: string;
 }
 
-interface NavGroup {
-  label: string;
-  items: NavSpec[];
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: 'Belege',
-    items: [
-      { to: '/',         icon: '⊞',  label: 'Dashboard'        },
-      { to: '/upload',   icon: '📤', label: 'Belege hochladen' },
-      { to: '/receipts', icon: '📋', label: 'Belegliste'       },
-      { to: '/stats',    icon: '📊', label: 'Statistiken'      },
-    ],
-  },
-  {
-    label: 'Verwaltung',
-    items: [
-      { to: '/tenants',        icon: '🏢', label: 'Mandanten'              },
-      { to: '/advisor',        icon: '👤', label: 'Steuerberater-Portal'   },
-      { to: '/communications', icon: '✉',  label: 'Lieferanten-Komm.'     },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { to: '/plugins', icon: '🔌', label: 'Plugins'   },
-    ],
-  },
+const NAV: NavSpec[] = [
+  { to: '/', icon: '⊞', label: 'Dashboard' },
+  { to: '/belege', icon: '📋', label: 'Belege' },
+  { to: '/belege/upload', icon: '📤', label: 'Beleg hochladen' },
+  { to: '/tenants', icon: '🏢', label: 'Mandanten' },
 ];
 
-// Nav-Einträge die Permissions erfordern (werden dynamisch eingeblendet)
-const PERMISSIONED_NAV: Array<NavSpec & { permission: string; group: string }> = [
-  { to: '/users', icon: '👥', label: 'Benutzer', permission: 'users.read', group: 'Verwaltung' },
-];
-
-const NAV_BOTTOM: NavSpec[] = [
-  { to: '/settings', icon: '⚙️', label: 'Einstellungen' },
-];
+const NAV_BOTTOM: NavSpec[] = [{ to: '/settings', icon: '⚙️', label: 'Einstellungen' }];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const breadcrumb = buildBreadcrumb(location.pathname);
   const [pendingCount, setPendingCount] = useState(0);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const { hasPermission } = useAuth();
 
-  useKeyboardShortcut(['Mod+k'], () => setSearchOpen(true));
-
+  // Pending-Badge: Belege im Status requires_review für den aktiven Tenant.
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
+      if (!getActiveTenantId()) return; // ohne Tenant kein Call (sonst 400)
       try {
-        const tenantId = getActiveTenantId();
-        let id = tenantId;
-        if (!id) {
-          const list = await fetchTenants();
-          id = list[0]?.id ?? null;
-        }
-        if (!id) return;
-        const stats = await fetchReceiptStats(id);
-        if (!cancelled) {
-          const open = (stats.by_status['received'] ?? 0)
-            + (stats.by_status['extracting'] ?? 0)
-            + (stats.by_status['extracted'] ?? 0)
-            + (stats.by_status['categorizing'] ?? 0)
-            + (stats.by_status['requires_review'] ?? 0);
-          setPendingCount(open);
-        }
+        const res = await listBelege({ status: 'requires_review', pageSize: 1 });
+        if (!cancelled) setPendingCount(res.pagination.total);
       } catch {
-        // Silent — Sidebar-Badge ist optional
+        // Badge ist optional
       }
     }
-
     load();
     const interval = setInterval(load, 30_000);
     return () => {
@@ -97,43 +53,38 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
-      <a href="#main-content" className="skip-link">Zum Hauptinhalt springen</a>
+      <a href="#main-content" className="skip-link">
+        Zum Hauptinhalt springen
+      </a>
 
       {/* ── Sidebar ── */}
       <aside className="sidebar" aria-label="Hauptnavigation">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" aria-hidden="true">P</div>
+          <div className="sidebar-logo-icon" aria-hidden="true">
+            P
+          </div>
           <div>
             <div className="sidebar-logo-text">ProzessPilot</div>
-            <div className="sidebar-logo-sub">Steuerberater-Suite</div>
+            <div className="sidebar-logo-sub">Mitarbeiter-Tool</div>
           </div>
         </div>
 
         <nav className="sidebar-section" aria-label="Primäre Navigation">
-          {NAV_GROUPS.map((group) => {
-            // Füge Permissioned-Items zur entsprechenden Gruppe hinzu
-            const extraItems = PERMISSIONED_NAV
-              .filter((p) => p.group === group.label && hasPermission(p.permission))
-              .map(({ permission: _p, group: _g, ...item }) => item);
-            const items = [...group.items, ...extraItems];
-            return (
-              <div key={group.label}>
-                <div className="sidebar-section-label">{group.label}</div>
-                {items.map((item) => (
-                  <NavItem
-                    key={item.to}
-                    item={item}
-                    showPendingDot={item.to === '/receipts' && pendingCount > 0}
-                    pendingCount={item.to === '/receipts' ? pendingCount : 0}
-                  />
-                ))}
-              </div>
-            );
-          })}
+          {NAV.map((item) => (
+            <NavItem
+              key={item.to}
+              item={item}
+              showPendingDot={item.to === '/belege' && pendingCount > 0}
+              pendingCount={item.to === '/belege' ? pendingCount : 0}
+            />
+          ))}
         </nav>
 
-        <nav className="sidebar-section" style={{ marginTop: 'auto', paddingBottom: 0 }} aria-label="Konfiguration">
-          <div className="sidebar-section-label">Konfiguration</div>
+        <nav
+          className="sidebar-section"
+          style={{ marginTop: 'auto', paddingBottom: 0 }}
+          aria-label="Konfiguration"
+        >
           {NAV_BOTTOM.map((item) => (
             <NavItem key={item.to} item={item} showPendingDot={false} pendingCount={0} />
           ))}
@@ -142,7 +93,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="sidebar-footer">
           <div className="status-dot">
             <span className="status-dot-green" aria-hidden="true" />
-            <span>System läuft · v0.1.0 · dev</span>
+            <span>System läuft · v0.1.0</span>
           </div>
         </div>
       </aside>
@@ -153,24 +104,18 @@ export default function Layout({ children }: { children: ReactNode }) {
           <nav className="top-bar-breadcrumb" aria-label="Brotkrumen">
             {breadcrumb.map((crumb, i) => (
               <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {i > 0 && <span className="top-bar-sep" aria-hidden="true">›</span>}
+                {i > 0 && (
+                  <span className="top-bar-sep" aria-hidden="true">
+                    ›
+                  </span>
+                )}
                 {crumb}
               </span>
             ))}
           </nav>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              type="button"
-              className="global-search-trigger"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Globale Suche öffnen (Cmd+K)"
-              aria-haspopup="dialog"
-            >
-              <span aria-hidden="true">🔍</span>
-              <span>Suche…</span>
-              <kbd aria-hidden="true">⌘K</kbd>
-            </button>
+            <TenantSelector />
             <UserMenu />
           </div>
         </div>
@@ -179,21 +124,31 @@ export default function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-
-      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
 
-function NavItem({ item, showPendingDot, pendingCount }: { item: NavSpec; showPendingDot: boolean; pendingCount: number }) {
+function NavItem({
+  item,
+  showPendingDot,
+  pendingCount,
+}: {
+  item: NavSpec;
+  showPendingDot: boolean;
+  pendingCount: number;
+}) {
   return (
     <NavLink
       to={item.to}
-      end={item.to === '/'}
+      end={item.to === '/' || item.to === '/belege'}
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-      aria-label={showPendingDot && pendingCount > 0 ? `${item.label} (${pendingCount} ausstehend)` : item.label}
+      aria-label={
+        showPendingDot && pendingCount > 0 ? `${item.label} (${pendingCount} ausstehend)` : item.label
+      }
     >
-      <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+      <span className="nav-icon" aria-hidden="true">
+        {item.icon}
+      </span>
       <span>{item.label}</span>
       {showPendingDot && <span className="nav-pending-dot" aria-hidden="true" />}
     </NavLink>
@@ -203,39 +158,35 @@ function NavItem({ item, showPendingDot, pendingCount }: { item: NavSpec; showPe
 function buildBreadcrumb(path: string): ReactNode[] {
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return [<span key="home" style={{ color: 'var(--text)', fontWeight: 500 }}>Dashboard</span>];
+    return [
+      <span key="home" style={{ color: 'var(--text)', fontWeight: 500 }}>
+        Dashboard
+      </span>,
+    ];
   }
 
   const labelMap: Record<string, string> = {
-    upload:       'Belege hochladen',
-    receipts:     'Belege',
-    stats:        'Statistiken',
-    tenants:      'Mandanten',
-    customers:    'Kunden',
-    profile:      'Profil & Module',
-    reports:      'Monatsberichte',
-    settings:     'Einstellungen',
-    advisor:      'Steuerberater-Portal',
-    communications: 'Lieferanten-Kommunikation',
-    users:        'Benutzer',
+    belege: 'Belege',
+    upload: 'Beleg hochladen',
+    tenants: 'Mandanten',
+    settings: 'Einstellungen',
   };
 
   const crumbs: ReactNode[] = [];
   let currentPath = '';
-
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     currentPath += `/${seg}`;
     let label = labelMap[seg] ?? seg;
-    // Wenn wir auf /receipts/:id landen, hat das letzte Segment das Format einer ID
-    if (i === segments.length - 1 && segments[0] === 'receipts' && segments.length === 2) {
+    if (i === segments.length - 1 && segments[0] === 'belege' && segments.length === 2) {
       label = `Beleg ${seg.slice(0, 8)}…`;
     }
     const isLast = i === segments.length - 1;
-
     if (isLast) {
       crumbs.push(
-        <span key={currentPath} style={{ color: 'var(--text)', fontWeight: 500 }}>{label}</span>,
+        <span key={currentPath} style={{ color: 'var(--text)', fontWeight: 500 }}>
+          {label}
+        </span>,
       );
     } else {
       crumbs.push(
@@ -245,6 +196,5 @@ function buildBreadcrumb(path: string): ReactNode[] {
       );
     }
   }
-
   return crumbs;
 }

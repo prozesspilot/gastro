@@ -133,14 +133,14 @@ Nutze GitHub-MCP um PR zu eröffnen:
 
 ## Schritt 7: Discord-Notification
 
-Pingt @everyone — PR-Eröffnung soll alle Reviewer erreichen.
+Benachrichtigt #dev-coordination (ohne @everyone-Ping).
 
 ```bash
 curl -X POST $DISCORD_DEV_WEBHOOK_URL \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "@everyone 🔵 **<Owner>** hat **PR #<Nummer>** eröffnet: <Titel>\n<URL>\nBitte reviewen mit `/review-pr <Nummer>`",
-    "allowed_mentions": { "parse": ["everyone"] }
+    "content": "🔵 **<Owner>** hat **PR #<Nummer>** eröffnet: <Titel>\n<URL>\nBitte reviewen mit `/review-pr <Nummer>`",
+    "allowed_mentions": { "parse": [] }
   }'
 ```
 

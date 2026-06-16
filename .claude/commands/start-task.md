@@ -50,14 +50,14 @@ Aus der Task-Datei alle Dateien unter "Spec-Referenzen" lesen, damit der Kontext
 
 ## Schritt 7: Discord-Notification
 
-Pingt @everyone — damit niemand parallel an derselben Task arbeitet.
+Benachrichtigt #dev-coordination (ohne @everyone-Ping).
 
 ```bash
 curl -X POST $DISCORD_DEV_WEBHOOK_URL \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "@everyone 🟢 **<Owner>** hat **T<ID>** gestartet: <Titel>\nBranch: `<branch-name>`",
-    "allowed_mentions": { "parse": ["everyone"] }
+    "content": "🟢 **<Owner>** hat **T<ID>** gestartet: <Titel>\nBranch: `<branch-name>`",
+    "allowed_mentions": { "parse": [] }
   }'
 ```
 

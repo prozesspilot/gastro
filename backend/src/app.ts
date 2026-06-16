@@ -27,6 +27,7 @@ import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
 import { sseRoutes } from './routes/sse';
+import { tenantsRoutes } from './routes/tenants.routes';
 import { webhookRoutes } from './routes/webhooks';
 
 declare module 'fastify' {
@@ -199,6 +200,9 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   await app.register(belegeLexwareRoutes, { prefix: '/api/v1' });
   // T048/M03/F2: Kategorisieren auf belege — /api/v1/belege/:id/categorize (JWT)
   await app.register(belegeCategorizeRoutes, { prefix: '/api/v1' });
+  // T058/A3: Staff-Tenant-Listing — GET /api/v1/tenants (JWT, cross-tenant via
+  // SECURITY-DEFINER list_tenants_for_staff(); KEIN TenantContext)
+  await app.register(tenantsRoutes, { prefix: '/api/v1/tenants' });
   // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm

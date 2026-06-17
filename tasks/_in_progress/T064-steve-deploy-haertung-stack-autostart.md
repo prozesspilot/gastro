@@ -24,8 +24,52 @@ Beim Vorfall am 2026-06-17 war der gesamte Stack ~4 Tage unten. Dass `restart: a
 
 - [ ] Root-Cause des 2026-06-17-Ausfalls dokumentiert (Reboot / OOM / Disk / sonstiges).
 - [ ] Docker-Dienst on-boot enabled **und** verifiziert, dass der Stack nach Reboot von selbst hochkommt.
-- [ ] `pg_isready`-Guard im Deploy mit Retry gehärtet.
+- [x] `pg_isready`-Guard im Deploy mit Retry gehärtet (3× à 2 s) — `deploy-staging.yml`, `bash -n` grün.
 - [ ] Falls RAM die Ursache war: Maßnahme umgesetzt (Service entfernt / Swap / Limits).
+
+## Operator-Runbook (Steve am Server — SSH `root@87.106.8.111`)
+
+Claude hat keinen SSH-Zugang (Key nur in GitHub-Secrets). Diese Schritte führt Steve aus; die Ausgaben hier reinpasten, dann dokumentiert Claude den Root-Cause + entscheidet die Maßnahme. **Befehle einzeilig halten (Umbruch-Falle).**
+
+**A) Root-Cause-Diagnose (read-only):**
+```
+uptime
+```
+```
+who -b
+```
+```
+journalctl -k --since "2026-06-13" | grep -i -E "oom|killed process" | tail
+```
+```
+df -h /
+```
+```
+docker compose -f /opt/gastro/docker-compose.prod.yml ps
+```
+→ Reboot um den 14.06.? (uptime/who -b) · OOM-Killer? (journalctl) · Platte voll? (df) · welche Container laufen?
+
+**B) Docker-Autostart on boot sicherstellen:**
+```
+systemctl is-enabled docker
+```
+Falls **nicht** `enabled`:
+```
+systemctl enable docker
+```
+(Mit `restart: always` + on-boot-enabled Docker kommt der Stack nach einem Reboot von selbst hoch.)
+
+**C) Autostart verifizieren** (in einem ruhigen Fenster, Prod kurz weg):
+```
+reboot
+```
+→ ~2 Min warten, dann von außen: `curl -s -o /dev/null -w "%{http_code}\n" https://api.prozesspilot.net/api/v1/health` → erwartet `200` **ohne** manuellen Eingriff.
+
+**D) RAM/OOM-Härtung (falls journalctl OOM zeigte):**
+```
+free -m
+```
+n8n (`mem_limit: 800m`) ist im Pilot eingefroren — prüfen, ob es auf Prod laufen muss; ggf. `docker compose -f docker-compose.prod.yml stop n8n` (und aus dem Autostart nehmen) entlastet den 4-GB-Host deutlich. Entscheidung dokumentieren.
 
 ## Kontext
 

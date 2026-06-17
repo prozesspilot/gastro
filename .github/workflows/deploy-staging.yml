@@ -84,7 +84,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push'
+    # Push-Auto-Deploy ist deaktiviert (siehe oben), aber der manuelle
+    # "Run workflow" (workflow_dispatch) MUSS den Deploy-Job ausführen — sonst
+    # baut der manuelle Lauf nur Images und deployt nie (Recovery unmöglich).
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -127,13 +130,26 @@ jobs:
             # Falls migrate:prod fehlschlägt, kann manuell zurückgespielt werden:
             #   docker compose exec -T postgres pg_restore -U pp -d prozesspilot -c <backup-file>
             # Backup-Retention: 14 Tage (vor Migration, keine Stunden-Backups).
+            #
+            # RECOVERY-FIX: Wenn Postgres nicht läuft (z.B. nach einem Ausfall, den
+            # dieser Deploy gerade beheben soll), darf der Backup-Schritt den Deploy
+            # NICHT mit `set -e` abbrechen — sonst kann der Stack nie wieder
+            # hochgefahren werden (Henne-Ei). Backup nur, wenn Postgres erreichbar.
             mkdir -p /opt/gastro/backups
-            BACKUP_FILE="/opt/gastro/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
-            echo "Erstelle Pre-Deploy-Backup: $BACKUP_FILE"
-            docker compose -f docker-compose.prod.yml exec -T postgres \
-              pg_dump -U pp -Fc prozesspilot > "$BACKUP_FILE"
-            # Alte Backups (>14 Tage) aufräumen
-            find /opt/gastro/backups -name 'pre-deploy-*.dump' -mtime +14 -delete || true
+            if docker compose -f docker-compose.prod.yml exec -T postgres \
+                 pg_isready -U pp -d prozesspilot >/dev/null 2>&1; then
+              BACKUP_FILE="/opt/gastro/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
+              echo "Erstelle Pre-Deploy-Backup: $BACKUP_FILE"
+              if docker compose -f docker-compose.prod.yml exec -T postgres \
+                   pg_dump -U pp -Fc prozesspilot > "$BACKUP_FILE"; then
+                find /opt/gastro/backups -name 'pre-deploy-*.dump' -mtime +14 -delete || true
+              else
+                echo "WARN: Pre-Deploy-Backup fehlgeschlagen — fahre fort (Recovery-Modus)"
+                rm -f "$BACKUP_FILE"
+              fi
+            else
+              echo "WARN: Postgres nicht erreichbar — Pre-Deploy-Backup übersprungen (Recovery nach Ausfall)"
+            fi
 
             # Images pullen + Container hochfahren
             # --remove-orphans räumt Container weg, deren Service nicht mehr in

@@ -65,11 +65,11 @@ export default function DashboardPage() {
         <div className="error-box">{error}</div>
       ) : (
         <div className="kpi-grid">
-          <KpiCard label="Belege gesamt" value={counts?.total} color="#58a6ff" />
+          <KpiCard label="Belege gesamt" value={counts?.total} color="var(--blue)" />
           <KpiCard
             label="Zu prüfen"
             value={counts?.requiresReview}
-            color="#fb923c"
+            color="var(--orange)"
             hint="Status: requires_review"
           />
         </div>

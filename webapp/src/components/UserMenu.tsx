@@ -56,7 +56,7 @@ export default function UserMenu() {
           aria-hidden="true"
           style={{
             width: 28, height: 28, borderRadius: '50%',
-            background: 'var(--accent, #58a6ff)',
+            background: 'var(--color-brand)',
             color: '#fff',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12,
@@ -79,7 +79,7 @@ export default function UserMenu() {
             border: '1px solid var(--border)',
             borderRadius: 10,
             padding: 8,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+            boxShadow: 'var(--shadow-lg)',
             zIndex: 100,
           }}
         >

@@ -25,15 +25,15 @@ describe('CategoryBadge', () => {
   it('nutzt Fallback-Farbe für unbekannte Kategorie', () => {
     render(<CategoryBadge category="unbekannt" label="Unbekannt" />);
     const span = screen.getByText('Unbekannt');
-    // Fallback-Farbe: #a78bfa
-    expect(span.style.color).toBe('rgb(167, 139, 250)');
+    // Light-Theme-Fallback: #4E5A6B (Slate)
+    expect(span.style.color).toBe('rgb(78, 90, 107)');
   });
 
   it('nutzt spezifische Farbe für bekannte Kategorie', () => {
     render(<CategoryBadge category="miete" label="Miete" />);
     const span = screen.getByText('Miete');
-    // Miete: color: '#58a6ff'
-    expect(span.style.color).toBe('rgb(88, 166, 255)');
+    // Miete (Light-Theme): #0879C2
+    expect(span.style.color).toBe('rgb(8, 121, 194)');
   });
 
   it('zeigt nur label wenn beide angegeben', () => {
@@ -45,18 +45,18 @@ describe('CategoryBadge', () => {
 
 describe('categoryColorVar', () => {
   it('gibt Fallback zurück für undefined', () => {
-    expect(categoryColorVar(undefined)).toBe('#a78bfa');
+    expect(categoryColorVar(undefined)).toBe('#4E5A6B');
   });
 
   it('gibt Fallback zurück für null', () => {
-    expect(categoryColorVar(null)).toBe('#a78bfa');
+    expect(categoryColorVar(null)).toBe('#4E5A6B');
   });
 
   it('gibt spezifische Farbe für bekannte Kategorie', () => {
-    expect(categoryColorVar('miete')).toBe('#58a6ff');
+    expect(categoryColorVar('miete')).toBe('#0879C2');
   });
 
   it('gibt Fallback für unbekannte Kategorie', () => {
-    expect(categoryColorVar('x-unbekannt')).toBe('#a78bfa');
+    expect(categoryColorVar('x-unbekannt')).toBe('#4E5A6B');
   });
 });

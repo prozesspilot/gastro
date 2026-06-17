@@ -47,8 +47,8 @@ function statusColor(status: BelegStatus): string {
     case 'archived':
     case 'exported':
     case 'completed':                               return 'var(--green)';
-    case 'requires_review':                         return 'var(--pink)';
-    case 'error':                                   return '#f87171'; // red-400
+    case 'requires_review':                         return 'var(--status-attention-fg)';
+    case 'error':                                   return 'var(--status-error-fg)';
     default:                                        return 'var(--text-muted)';
   }
 }
@@ -169,7 +169,7 @@ export default function BelegeListPage() {
           onClick={() => navigate('/belege/upload')}
           style={{
             padding: '9px 18px',
-            background: 'var(--grad-green)',
+            background: 'var(--color-brand)',
             border: 'none',
             borderRadius: 'var(--radius)',
             color: '#fff',
@@ -302,7 +302,7 @@ function BelegeTable({
                 transition: 'background 0.1s',
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.03)';
+                (e.currentTarget as HTMLTableRowElement).style.background = 'var(--pp-gray-50)';
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLTableRowElement).style.background = '';
@@ -415,7 +415,7 @@ function EmptyState({ onUpload, statusFilter }: { onUpload: () => void; statusFi
         onClick={onUpload}
         style={{
           padding: '10px 24px',
-          background: 'var(--grad-green)',
+          background: 'var(--color-brand)',
           border: 'none',
           borderRadius: 'var(--radius)',
           color: '#fff',

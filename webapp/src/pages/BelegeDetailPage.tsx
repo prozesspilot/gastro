@@ -79,8 +79,8 @@ const LEVEL_COLOR: Record<StatusLevel, string> = {
   idle: 'var(--text-subtle)',
   progress: 'var(--orange)',
   done: 'var(--green)',
-  review: 'var(--pink)',
-  error: '#f87171',
+  review: 'var(--status-attention-fg)',
+  error: 'var(--status-error-fg)',
 };
 
 const STATUS_LABELS: Record<Beleg['status'], string> = {
@@ -112,7 +112,7 @@ function ConfidenceDot({ value, label }: { value: number | undefined; label: str
     } else if (value >= 0.4) {
       color = 'var(--orange)';
     } else {
-      color = '#f87171';
+      color = 'var(--status-error-fg)';
     }
     title = `${label}: Konfidenz ${(value * 100).toFixed(0)}%`;
   }
@@ -467,7 +467,7 @@ export default function BelegeDetailPage() {
         {/* Vorschau */}
         <div
           style={{
-            background: 'var(--surface)',
+            background: 'var(--surface-sunken)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             overflow: 'hidden',
@@ -670,7 +670,7 @@ export default function BelegeDetailPage() {
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
               data-testid="btn-delete"
-              style={{ color: '#f87171', borderColor: '#f87171' }}
+              style={{ color: 'var(--status-error-fg)', borderColor: 'var(--status-error-fg)' }}
               className="ghost"
             >
               Löschen
@@ -757,7 +757,7 @@ export default function BelegeDetailPage() {
                 type="button"
                 onClick={handleDelete}
                 data-testid="btn-delete-confirm"
-                style={{ background: '#f87171', borderColor: '#f87171' }}
+                style={{ background: 'var(--status-error-dot)', borderColor: 'var(--status-error-dot)', color: '#fff' }}
               >
                 Löschen bestätigen
               </button>

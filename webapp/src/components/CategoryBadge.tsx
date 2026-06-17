@@ -5,24 +5,25 @@ interface Props {
 
 interface Style { bg: string; border: string; color: string; }
 
+// Light-Theme (T065): blasser Tint-Hintergrund + dunkler, gesättigter Text (WCAG AA).
 const COLORS: Record<string, Style> = {
-  wareneinkauf_food:      { bg: 'rgba(52,211,153,0.10)',  border: 'rgba(52,211,153,0.30)',  color: '#34d399' },
-  wareneinkauf_nonfood:   { bg: 'rgba(45,212,191,0.10)',  border: 'rgba(45,212,191,0.30)',  color: '#2dd4bf' },
-  betriebskosten_energie: { bg: 'rgba(251,191,36,0.10)',  border: 'rgba(251,191,36,0.30)',  color: '#fbbf24' },
-  miete:                  { bg: 'rgba(88,166,255,0.10)',  border: 'rgba(88,166,255,0.30)',  color: '#58a6ff' },
-  personal:               { bg: 'rgba(167,139,250,0.10)', border: 'rgba(167,139,250,0.30)', color: '#a78bfa' },
-  versicherung:           { bg: 'rgba(244,114,182,0.10)', border: 'rgba(244,114,182,0.30)', color: '#f472b6' },
-  marketing:              { bg: 'rgba(251,146,60,0.10)',  border: 'rgba(251,146,60,0.30)',  color: '#fb923c' },
-  reise:                  { bg: 'rgba(251,191,36,0.10)',  border: 'rgba(251,191,36,0.30)',  color: '#fbbf24' },
-  bewirtung:              { bg: 'rgba(217,70,239,0.10)',  border: 'rgba(217,70,239,0.30)',  color: '#d946ef' },
-  buerokosten:            { bg: 'rgba(96,165,250,0.10)',  border: 'rgba(96,165,250,0.30)',  color: '#60a5fa' },
-  reparatur:              { bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.30)', color: '#f87171' },
-  steuer:                 { bg: 'rgba(168,85,247,0.10)',  border: 'rgba(168,85,247,0.30)',  color: '#a855f7' },
-  kommunikation:          { bg: 'rgba(45,212,191,0.10)',  border: 'rgba(45,212,191,0.30)',  color: '#2dd4bf' },
-  sonstige_aufwand:       { bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.30)', color: '#94a3b8' },
+  wareneinkauf_food:      { bg: '#E9F8EF', border: '#C6EDD5', color: '#128040' },
+  wareneinkauf_nonfood:   { bg: '#E3F6F3', border: '#BFE9E2', color: '#0F766E' },
+  betriebskosten_energie: { bg: '#FDF0E3', border: '#F6DEC0', color: '#B45309' },
+  miete:                  { bg: '#ECF8FE', border: '#CDEBFA', color: '#0879C2' },
+  personal:               { bg: '#F1ECFD', border: '#DED2FB', color: '#6D28D9' },
+  versicherung:           { bg: '#FCE9F2', border: '#F6CFE0', color: '#BE185D' },
+  marketing:              { bg: '#FDEFE6', border: '#F8D6C2', color: '#C2410C' },
+  reise:                  { bg: '#FDF7E3', border: '#F4E6B5', color: '#A16207' },
+  bewirtung:              { bg: '#FBEAFB', border: '#F3CFF3', color: '#A21CAF' },
+  buerokosten:            { bg: '#E6F4FE', border: '#C4E5FB', color: '#0369A1' },
+  reparatur:              { bg: '#FDECEC', border: '#F6CDCD', color: '#C13438' },
+  steuer:                 { bg: '#F3ECFD', border: '#E0D0FA', color: '#7E22CE' },
+  kommunikation:          { bg: '#E3F6F3', border: '#BFE9E2', color: '#0F766E' },
+  sonstige_aufwand:       { bg: '#EEF2F7', border: '#DDE4EC', color: '#4E5A6B' },
 };
 
-const FALLBACK: Style = { bg: 'rgba(167,139,250,0.10)', border: 'rgba(167,139,250,0.25)', color: '#a78bfa' };
+const FALLBACK: Style = { bg: '#EEF2F7', border: '#DDE4EC', color: '#4E5A6B' };
 
 export default function CategoryBadge({ category, label }: Props) {
   if (!category && !label) return null;

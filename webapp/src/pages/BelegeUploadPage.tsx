@@ -398,7 +398,7 @@ export default function BelegeUploadPage() {
             disabled={isUploading || queuedCount === 0}
             style={{
               padding: '10px 24px',
-              background: 'var(--grad-green)',
+              background: 'var(--color-brand)',
               border: 'none',
               borderRadius: 'var(--radius)',
               color: '#fff',

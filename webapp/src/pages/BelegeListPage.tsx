@@ -169,7 +169,7 @@ export default function BelegeListPage() {
           onClick={() => navigate('/belege/upload')}
           style={{
             padding: '9px 18px',
-            background: 'var(--grad-green)',
+            background: 'var(--color-brand)',
             border: 'none',
             borderRadius: 'var(--radius)',
             color: '#fff',
@@ -415,7 +415,7 @@ function EmptyState({ onUpload, statusFilter }: { onUpload: () => void; statusFi
         onClick={onUpload}
         style={{
           padding: '10px 24px',
-          background: 'var(--grad-green)',
+          background: 'var(--color-brand)',
           border: 'none',
           borderRadius: 'var(--radius)',
           color: '#fff',

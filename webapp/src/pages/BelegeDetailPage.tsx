@@ -467,7 +467,7 @@ export default function BelegeDetailPage() {
         {/* Vorschau */}
         <div
           style={{
-            background: 'var(--surface)',
+            background: 'var(--surface-sunken)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             overflow: 'hidden',

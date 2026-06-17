@@ -457,7 +457,7 @@ const FileRow = memo(function FileRow({
     queued:    'var(--text-subtle)',
     uploading: 'var(--orange)',
     done:      'var(--green)',
-    error:     'var(--pink)',
+    error:     'var(--status-error-fg)',
   };
 
   const statusLabel: Record<FileStatus, string> = {
@@ -523,7 +523,7 @@ const FileRow = memo(function FileRow({
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {formatFileSize(uf.file.size)}
           {uf.error && (
-            <span style={{ color: 'var(--pink)', marginLeft: 8 }}>— {uf.error}</span>
+            <span style={{ color: 'var(--status-error-fg)', marginLeft: 8 }}>— {uf.error}</span>
           )}
         </div>
       </div>

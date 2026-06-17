@@ -48,7 +48,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             </div>
             {isDev && this.state.error && (
               <div className="error-screen-stack">
-                <strong style={{ color: '#f87171' }}>{this.state.error.name}: {this.state.error.message}</strong>
+                <strong style={{ color: 'var(--status-error-fg)' }}>{this.state.error.name}: {this.state.error.message}</strong>
                 {this.state.error.stack && <>{'\n\n'}{this.state.error.stack}</>}
                 {this.state.errorInfo?.componentStack && <>{'\n\n'}--- Component Stack ---{this.state.errorInfo.componentStack}</>}
               </div>

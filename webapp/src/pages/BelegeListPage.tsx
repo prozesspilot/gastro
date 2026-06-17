@@ -47,8 +47,8 @@ function statusColor(status: BelegStatus): string {
     case 'archived':
     case 'exported':
     case 'completed':                               return 'var(--green)';
-    case 'requires_review':                         return 'var(--pink)';
-    case 'error':                                   return '#f87171'; // red-400
+    case 'requires_review':                         return 'var(--status-attention-fg)';
+    case 'error':                                   return 'var(--status-error-fg)';
     default:                                        return 'var(--text-muted)';
   }
 }

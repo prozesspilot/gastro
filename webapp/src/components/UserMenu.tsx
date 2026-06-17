@@ -56,7 +56,7 @@ export default function UserMenu() {
           aria-hidden="true"
           style={{
             width: 28, height: 28, borderRadius: '50%',
-            background: 'var(--accent, #58a6ff)',
+            background: 'var(--color-brand)',
             color: '#fff',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12,

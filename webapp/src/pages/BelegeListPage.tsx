@@ -302,7 +302,7 @@ function BelegeTable({
                 transition: 'background 0.1s',
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.03)';
+                (e.currentTarget as HTMLTableRowElement).style.background = 'var(--pp-gray-50)';
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLTableRowElement).style.background = '';

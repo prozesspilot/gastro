@@ -34,7 +34,7 @@ export default function EmptyState({
           width: 64,
           height: 64,
           borderRadius: '50%',
-          background: 'rgba(255,255,255,0.04)',
+          background: 'var(--surface-sunken)',
           border: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',

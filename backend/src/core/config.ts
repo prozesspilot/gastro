@@ -110,6 +110,12 @@ const envSchema = z.object({
   // OAuth-Redirects genutzt (z.B. SumUp-Callback → Webapp-Tenant-Seite).
   WEBAPP_URL: z.string().default('http://localhost:5173'),
 
+  // ── T016: Onboarding-Wizard-Basis-URL ────────────────────────────────────
+  // Basis-URL der Setup-Frontend-App (setup.prozesspilot.net). Der Magic-Link
+  // wird als `${SETUP_BASE_URL}/${token}` gebaut. Dev: Wizard-App läuft auf
+  // Port 5174 (5173 = Mitarbeiter-Webapp).
+  SETUP_BASE_URL: z.string().default('http://localhost:5174'),
+
   // ── T018: DSGVO-Cleanup fuer POS-Credentials ───────────────────────────
   // Inaktive pos_credentials werden nach dieser Frist (Tage) endgueltig
   // geloescht. Default 30 Tage. Token sind kein Geschaeftsdaten-Bestandteil,

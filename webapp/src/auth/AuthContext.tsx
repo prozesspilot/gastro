@@ -63,10 +63,13 @@ function toAuthUser(dto: AuthUserDto): AuthUser {
  */
 export function m14UserToAuthUser(sessionUser: M14SessionUser): AuthUser {
   // T059/A3-Bug-Fix: Permissions auf die belege-Welt (vorher receipts/tasks-Scopes =
-  // Geister-Welt → mitarbeiter/support sahen nichts). Diese Map steuert nur die
-  // UI-Sichtbarkeit. ACHTUNG: serverseitig prüft m14StaffAuthHook derzeit nur, OB
-  // ein gültiges Staff-Cookie vorliegt — KEIN rollenbasiertes Schreib-Gate
-  // (support kann am Backend vorbei schreiben). Server-Rollen-Gate offen: siehe T062.
+  // Geister-Welt → mitarbeiter/support sahen nichts). Diese Map steuert die
+  // UI-Sichtbarkeit. Das ist NICHT die einzige Durchsetzung: serverseitig gaten die
+  // schreibenden Belege-Handler die Rolle selbst (T062, verifiziert) — `support` →
+  // 403 bei PATCH/DELETE/categorize/Lexware-Export/Upload, DELETE + Batch-Export nur
+  // `geschaeftsfuehrer`. Ausnahme: `reprocess` ist für `support` bewusst erlaubt
+  // (read-only-Äquivalent für Operator, stößt nur OCR neu an). Ein API-Call am UI
+  // vorbei wird also serverseitig abgewiesen — diese Map muss damit konsistent bleiben.
   const permissions: string[] =
     sessionUser.role === 'geschaeftsfuehrer'
       ? ['*']

@@ -24,6 +24,7 @@ import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
 import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
 import { sumupOauthRoutes } from './modules/m15-pos-connector/oauth.routes';
+import { wizardPublicRoutes, wizardStaffRoutes } from './modules/m16-wizard/wizard.routes';
 import { docsRoutes } from './routes/docs';
 import { healthRoutes } from './routes/health';
 import { sseRoutes } from './routes/sse';
@@ -203,6 +204,12 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // T058/A3: Staff-Tenant-Listing — GET /api/v1/tenants (JWT, cross-tenant via
   // SECURITY-DEFINER list_tenants_for_staff(); KEIN TenantContext)
   await app.register(tenantsRoutes, { prefix: '/api/v1/tenants' });
+  // T016/Phase B: Onboarding-Wizard — VOR HMAC-Block.
+  //  - Staff-Plugin (Session-Erstellung): m14StaffAuthHook + m14TenantContextHook
+  //  - Public-Plugin (Wirt, Token = Credential): kein Staff-Cookie
+  // Beide unter /api/v1/wizard; keine Route-Kollision (POST /sessions vs. /:token/*).
+  await app.register(wizardStaffRoutes, { prefix: '/api/v1/wizard' });
+  await app.register(wizardPublicRoutes, { prefix: '/api/v1/wizard' });
   // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm

@@ -1,0 +1,79 @@
+/**
+ * T016 — Wizard-API-Client (öffentlich, Token = Credential).
+ *
+ * Anders als die Mitarbeiter-Webapp: KEIN Bearer-Token, KEIN x-pp-tenant-id —
+ * der Magic-Link-Token in der URL identifiziert die Session. Basis-URL /api/v1/wizard
+ * (Vite-Proxy → Backend). Backend antwortet mit { session: PublicSession }.
+ */
+const BASE = '/api/v1/wizard';
+
+export type WizardStatus = 'started' | 'completed' | 'abandoned' | 'premium_handoff';
+
+export interface PublicSession {
+  status: WizardStatus;
+  current_step: number;
+  step_data: Record<string, unknown>;
+  premium_setup_requested: boolean;
+  expires_at: string;
+}
+
+export class WizardApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'WizardApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function request<T>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  let body: string | undefined;
+  if (opts.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(`${BASE}${path}`, { method: opts.method ?? 'GET', headers, body });
+  if (!res.ok) {
+    let payload: { error?: string; message?: string } | undefined;
+    try {
+      payload = await res.json();
+    } catch {
+      /* kein JSON-Body */
+    }
+    throw new WizardApiError(
+      res.status,
+      payload?.message ?? res.statusText ?? `HTTP ${res.status}`,
+      payload?.error,
+    );
+  }
+  const json = (await res.json()) as { session: T };
+  return json.session;
+}
+
+/** Token in der URL ist roh; für den Pfad enkodieren (Base64URL ist pfad-safe, defensiv trotzdem). */
+function enc(token: string): string {
+  return encodeURIComponent(token);
+}
+
+export function getSession(token: string): Promise<PublicSession> {
+  return request<PublicSession>(`/${enc(token)}`);
+}
+
+export function saveStep(
+  token: string,
+  step: number,
+  data: Record<string, unknown>,
+): Promise<PublicSession> {
+  return request<PublicSession>(`/${enc(token)}/step/${step}`, { method: 'POST', body: data });
+}
+
+export function completeWizard(token: string): Promise<PublicSession> {
+  return request<PublicSession>(`/${enc(token)}/complete`, { method: 'POST' });
+}
+
+export function requestPremium(token: string): Promise<PublicSession> {
+  return request<PublicSession>(`/${enc(token)}/premium`, { method: 'POST' });
+}

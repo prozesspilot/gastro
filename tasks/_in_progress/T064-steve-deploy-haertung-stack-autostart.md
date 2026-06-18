@@ -25,7 +25,7 @@ Beim Vorfall am 2026-06-17 war der gesamte Stack ~4 Tage unten. Dass `restart: a
 - [x] Root-Cause des 2026-06-17-Ausfalls dokumentiert (siehe „Befunde": kein Reboot/Disk, kein OOM-Beweis, **fehlendes Swap** + **n8n-Crash-Loop** als Lücken; exakter Trigger nicht rekonstruierbar).
 - [x] Docker-Dienst on-boot `enabled` (verifiziert). Reboot-Test optional — Host hatte 156 Tage Uptime, Reboot war nicht die Ursache.
 - [x] `pg_isready`-Guard im Deploy mit Retry gehärtet (3× à 2 s) — `deploy-staging.yml`, `bash -n` grün.
-- [~] RAM-Härtung: n8n via `profiles` deaktiviert (Code ✅); **4 GB Swap am Server einrichten** (Steve, offen).
+- [x] RAM-Härtung: n8n via `profiles` deaktiviert (Code) + **4 GB Swap** am Server eingerichtet & reboot-fest (`/etc/fstab`), `free -m` zeigt `Swap: 4095`.
 
 ## Operator-Runbook (Steve am Server — SSH `root@87.106.8.111`)
 

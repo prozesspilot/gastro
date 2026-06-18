@@ -1,0 +1,118 @@
+name: Uptime Monitor
+
+# T063: Host-EXTERNER Uptime-Check auf die öffentlichen Prod-Endpoints.
+# Läuft auf GitHub-Runnern (NICHT auf dem IONOS-Host) → meldet auch, wenn der
+# Host selbst komplett weg ist (genau die Lücke des 4-Tage-Ausfalls 2026-06-17).
+#
+# Alarm + Recovery gehen an DISCORD_ALERTS_WEBHOOK. State (up/down) wird zwischen
+# den Läufen über den Actions-Cache gehalten (rolling key + restore-keys) →
+# Alert nur beim Statuswechsel (kein Spam), Recovery-Meldung bei Erholung.
+#
+# Ein-/Ausschalten: siehe infra/monitoring/uptime-monitoring.md.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # alle 5 Min (GitHub-Minimum; Timing kann ± einige Min schwanken)
+  workflow_dispatch: {} # manueller Test-Trigger
+
+concurrency:
+  group: uptime-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vorherigen Status aus Cache laden
+        uses: actions/cache/restore@v4
+        with:
+          path: uptime-state.txt
+          key: uptime-state-${{ github.run_id }}
+          restore-keys: |
+            uptime-state-
+
+      - name: Endpoints prüfen + bei Statuswechsel Discord-Alert
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_ALERTS_WEBHOOK }}
+          ROLE_ID: ${{ secrets.DISCORD_ROLE_ID_GF }}
+        run: |
+          set -u
+          HEALTH="https://api.prozesspilot.net/api/v1/health"
+          READY="https://api.prozesspilot.net/api/v1/ready"
+
+          # ── Ein Prüf-Durchlauf: 0 = gesund, 1 = krank (FAIL_REASON gesetzt) ──
+          check_once() {
+            local code
+            code=$(curl -sS -m 10 -o /tmp/h.json -w '%{http_code}' "$HEALTH" 2>/dev/null || echo 000)
+            if [ "$code" != "200" ] || ! grep -q '"ok":true' /tmp/h.json 2>/dev/null; then
+              FAIL_REASON="health HTTP $code"
+              return 1
+            fi
+            code=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$READY" 2>/dev/null || echo 000)
+            if [ "$code" != "200" ]; then
+              FAIL_REASON="ready HTTP $code"
+              return 1
+            fi
+            return 0
+          }
+
+          # ── Bis zu 3 Versuche (à 20 s Abstand) → filtert transiente Blips ──
+          FAIL_REASON=""
+          STATUS="up"
+          for attempt in 1 2 3; do
+            if check_once; then STATUS="up"; break; fi
+            STATUS="down"
+            echo "Versuch $attempt/3 fehlgeschlagen: $FAIL_REASON"
+            [ "$attempt" -lt 3 ] && sleep 20
+          done
+          echo "Aktueller Status: $STATUS ${FAIL_REASON:+($FAIL_REASON)}"
+
+          # ── Vorherigen Status lesen (Default: up) ──
+          PREV="up"
+          [ -f uptime-state.txt ] && PREV=$(cat uptime-state.txt 2>/dev/null | tr -d '[:space:]')
+          [ -z "$PREV" ] && PREV="up"
+          echo "Vorheriger Status: $PREV"
+
+          # ── Discord-Post. post <content> <ping:0|1> ──
+          # ping=1 + ROLE_ID gesetzt → gezielter GF-Rollen-Ping (nur echter Down-Alert).
+          # KEIN @everyone (Massen-Ping wurde projektweit entfernt). Recovery = still.
+          post() {
+            if [ -z "${WEBHOOK:-}" ]; then
+              echo "DISCORD_ALERTS_WEBHOOK nicht gesetzt — Alert übersprungen: $1"
+              return 0
+            fi
+            local payload
+            if [ "${2:-0}" = "1" ] && [ -n "${ROLE_ID:-}" ]; then
+              payload=$(jq -nc --arg c "<@&$ROLE_ID> $1" --arg r "$ROLE_ID" '{content:$c, allowed_mentions:{roles:[$r]}}')
+            else
+              payload=$(jq -nc --arg c "$1" '{content:$c, allowed_mentions:{parse:[]}}')
+            fi
+            curl -fsS -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+              -d "$payload" >/dev/null 2>&1 || echo "Discord-Post fehlgeschlagen (Monitor läuft weiter)."
+          }
+
+          # ── Nur bei Statuswechsel melden ──
+          if [ "$STATUS" = "down" ] && [ "$PREV" = "up" ]; then
+            post "🚨 **Prod ist DOWN** — \`$HEALTH\` nicht gesund ($FAIL_REASON). Stack prüfen: \`ssh root@<server> 'docker compose -f /opt/gastro/docker-compose.prod.yml ps'\` oder Recovery-Deploy \`gh workflow run deploy-staging.yml --ref main\`." 1
+            echo "ALERT gesendet: DOWN (GF-Ping)"
+          elif [ "$STATUS" = "up" ] && [ "$PREV" = "down" ]; then
+            post "✅ **Prod wieder ERREICHBAR** — \`$HEALTH\` ist wieder gesund." 0
+            echo "ALERT gesendet: RECOVERY"
+          else
+            echo "Kein Statuswechsel ($PREV → $STATUS) — keine Meldung."
+          fi
+
+          # ── Neuen Status für den nächsten Lauf sichern ──
+          echo "$STATUS" > uptime-state.txt
+          # Monitor selbst soll NICHT rot werden, wenn Prod down ist (Alert ist das Ergebnis).
+          exit 0
+
+      - name: Neuen Status in Cache schreiben
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: uptime-state.txt
+          key: uptime-state-${{ github.run_id }}

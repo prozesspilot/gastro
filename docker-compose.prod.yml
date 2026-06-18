@@ -193,7 +193,17 @@ services:
     mem_reservation: 16m
 
   # ── n8n Workflow-Engine ────────────────────────────────────────────────────
+  # T064 (2026-06-18): n8n ist im Pilot eingefroren/ungenutzt und crashte auf Prod
+  # in einer Endlosschleife (`database "n8n" does not exist` — die DB wurde nie
+  # angelegt). Per `profiles` deaktiviert → startet NICHT mehr bei
+  # `docker compose up -d` (auch nicht im Deploy). Spart die 800-MB-Reservierung
+  # auf dem 4-GB-Host und beendet den Crash-Loop.
+  # REAKTIVIEREN (sobald M10/M11 n8n brauchen):
+  #   1) DB anlegen: docker compose -f docker-compose.prod.yml exec postgres \
+  #        psql -U pp -c 'CREATE DATABASE n8n;'
+  #   2) starten:    docker compose -f docker-compose.prod.yml --profile optional up -d n8n
   n8n:
+    profiles: ["optional"]
     image: n8nio/n8n:latest
     restart: always
     # T012 Review-Fix B1: NUR auf Localhost binden — kein Public-Exposure.

@@ -22,10 +22,10 @@ Beim Vorfall am 2026-06-17 war der gesamte Stack ~4 Tage unten. Dass `restart: a
 
 ## Akzeptanz-Kriterien
 
-- [ ] Root-Cause des 2026-06-17-Ausfalls dokumentiert (Reboot / OOM / Disk / sonstiges).
-- [ ] Docker-Dienst on-boot enabled **und** verifiziert, dass der Stack nach Reboot von selbst hochkommt.
+- [x] Root-Cause des 2026-06-17-Ausfalls dokumentiert (siehe „Befunde": kein Reboot/Disk, kein OOM-Beweis, **fehlendes Swap** + **n8n-Crash-Loop** als Lücken; exakter Trigger nicht rekonstruierbar).
+- [x] Docker-Dienst on-boot `enabled` (verifiziert). Reboot-Test optional — Host hatte 156 Tage Uptime, Reboot war nicht die Ursache.
 - [x] `pg_isready`-Guard im Deploy mit Retry gehärtet (3× à 2 s) — `deploy-staging.yml`, `bash -n` grün.
-- [ ] Falls RAM die Ursache war: Maßnahme umgesetzt (Service entfernt / Swap / Limits).
+- [~] RAM-Härtung: n8n via `profiles` deaktiviert (Code ✅); **4 GB Swap am Server einrichten** (Steve, offen).
 
 ## Operator-Runbook (Steve am Server — SSH `root@87.106.8.111`)
 
@@ -70,6 +70,23 @@ reboot
 free -m
 ```
 n8n (`mem_limit: 800m`) ist im Pilot eingefroren — prüfen, ob es auf Prod laufen muss; ggf. `docker compose -f docker-compose.prod.yml stop n8n` (und aus dem Autostart nehmen) entlastet den 4-GB-Host deutlich. Entscheidung dokumentieren.
+
+## Befunde (Server-Diagnose 2026-06-18)
+
+- **Kein Host-Reboot:** `uptime` = **156 Tage** (Boot 2026-01-12). Die „Reboot-ohne-Autostart"-Hypothese ist **widerlegt**.
+- **Platte ok:** `df -h /` = 47 % belegt (62 G frei) → nicht die Ursache.
+- **Docker-Autostart bereits aktiv:** `systemctl is-enabled docker` = `enabled`. ✅
+- **KEIN Swap:** `free -m` zeigt `Swap: 0 0 0` — der Host hat **gar kein Swap**, obwohl `docker-compose.prod.yml` „4G Swap als Notfall-Puffer" vorsah. Auf 4 GB RAM → jede Speicher-Spitze führt **sofort** zum OOM-Kill ohne Puffer. **Das ist die eigentliche Resilienz-Lücke** und die plausibelste Ursachen-Klasse des Ausfalls.
+- **Kein OOM-Beweis im Journal:** `journalctl -k … oom` für 12.–18.06. = leer (Journal reicht vermutlich nicht bis 14.06. zurück → nicht beweisbar, nicht widerlegbar).
+- **`free -m` aktuell:** 3868 total / 1355 used / **2512 available** — momentan genug RAM (n8n frisst nichts, weil es beim Start abstürzt).
+- **n8n-Crash-Ursache gefunden:** `docker compose logs n8n` → **`database "n8n" does not exist`**. n8n crasht endlos, weil seine DB nie angelegt wurde. **Reiner Crash-Loop, kein Speicherfresser** — also NICHT der OOM-Auslöser, aber unnötiges Dauer-Gezappel auf einem ungenutzten, eingefrorenen Dienst.
+
+**Root-Cause-Fazit:** Der exakte 14.06.-Auslöser ist nicht mehr rekonstruierbar (Recovery hat den Zustand überschrieben, kein OOM-Beweis). Zwei echte Lücken gefunden, die gegen Wiederholung härten: **(1) fehlendes Swap** (war vorgesehen, nie eingerichtet) · **(2) n8n-Crash-Loop** (fehlende DB, ungenutzt).
+
+**Maßnahmen:**
+- **(Code, erledigt)** n8n in `docker-compose.prod.yml` per `profiles: ["optional"]` deaktiviert → startet nicht mehr bei `up -d`/Deploy.
+- **(Server, Steve)** 4 GB Swap einrichten (Notfall-Puffer) + laufenden n8n-Container stoppen/entfernen.
+- Docker-Autostart ist **bereits `enabled`** → Reboot-Resilienz ok (kein Reboot war die Ursache, daher Reboot-Test optional).
 
 ## Kontext
 

@@ -23,10 +23,12 @@ Der Prod-Stack (Postgres + Backend + Stubs) war ~4 Tage unten, ohne dass jemand 
 
 ## Akzeptanz-Kriterien
 
-- [ ] Ein host-externer Check auf `api/health` läuft periodisch.
-- [ ] Bei Ausfall kommt innerhalb weniger Minuten ein Discord-Alert.
-- [ ] Recovery-Meldung (wieder grün) ebenfalls.
-- [ ] Dokumentiert in `infra/` wie man es ein-/ausschaltet.
+- [x] Ein host-externer Check auf `api/health` (+ `/ready`) läuft periodisch — `.github/workflows/uptime-monitor.yml`, GitHub-Actions-Cron alle 5 Min (host-extern → meldet auch Host-Tod).
+- [x] Bei Ausfall Discord-Alert (nach 3 Fehlversuchen, nur bei Statuswechsel) an `DISCORD_ALERTS_WEBHOOK` mit gezieltem GF-Rollen-Ping (kein @everyone).
+- [x] Recovery-Meldung bei Erholung (still, kein Ping). State via Actions-Cache.
+- [x] Dokumentiert: `infra/monitoring/uptime-monitoring.md` (Funktion, Test `gh workflow run`, Ein-/Ausschalten, Grenzen + Upgrade-Pfad).
+
+**Hinweis:** Geplante Workflows laufen erst von `main` → nach Merge per `gh workflow run uptime-monitor.yml` der „up"-Pfad verifizierbar (kein Alert bei gesundem Prod). Down/Recovery-Pfad ist bash-verifiziert (`bash -n`) + reviewed; echter Down-Test nur bei realem Ausfall.
 
 ## Kontext
 

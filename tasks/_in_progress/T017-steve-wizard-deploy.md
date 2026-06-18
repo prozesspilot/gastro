@@ -17,7 +17,7 @@ T016 hat die `onboarding-wizard/`-App gebaut, aber **nicht deployt**. setup.proz
 Den Stub auf setup.* durch die echte Wizard-App ersetzen — Serving-Modell exakt wie die Mitarbeiter-Webapp gespiegelt:
 
 1. **`onboarding-wizard/Dockerfile`** — Multi-Stage (node:20-alpine build → nginx:1.25-alpine serve), wie `webapp/Dockerfile`. Kein VITE_-Build-Arg (Wizard nutzt relativen `/api/v1/wizard`).
-2. **`onboarding-wizard/nginx.conf`** — wie `webapp/nginx.conf`: `/api/` + `/webhooks/` → `backend:3000`, statische Assets cachen, **SPA-Fallback** `try_files … /index.html` (Pflicht für die `/<token>`-Routen), plus **`/health`-Endpoint** (Deploy-Smoke curlt `setup.prozesspilot.net/health`).
+2. **`onboarding-wizard/nginx.conf`** — wie `webapp/nginx.conf`: `/api/` → `backend:3000` (Least-Privilege: **kein** `/webhooks/`-Proxy — der Wizard ruft nur `/api/v1/wizard`, anders als die webapp), statische Assets cachen, **SPA-Fallback** `try_files … /index.html` (Pflicht für die `/<token>`-Routen), plus **`/health`-Endpoint** (Deploy-Smoke curlt `setup.prozesspilot.net/health`).
 3. **`onboarding-wizard/.dockerignore`** — node_modules/dist/coverage raus.
 4. **`docker-compose.prod.yml`** — neuer Service `onboarding-wizard` (Bind `127.0.0.1:8082:80`, übernimmt setups Port vom Stub); `stubs`-Service nur noch `127.0.0.1:8083:8080` (chat). RAM: ~128 MB — gedeckt durch die per T064 freigewordene n8n-Reservierung (~800 MB).
 5. **`infra/caddy/Caddyfile`** — setup-Block: Kommentar „Stub bis T016" → „Onboarding-Wizard"; CSP ergänzen (self + Google-Fonts, wie webapp). Route `localhost:8082` bleibt.

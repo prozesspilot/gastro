@@ -135,9 +135,23 @@ jobs:
             # dieser Deploy gerade beheben soll), darf der Backup-Schritt den Deploy
             # NICHT mit `set -e` abbrechen — sonst kann der Stack nie wieder
             # hochgefahren werden (Henne-Ei). Backup nur, wenn Postgres erreichbar.
+            #
+            # T064: pg_isready mit kurzem Retry (3× à 2 s). Ein transientes
+            # "not ready" direkt nach Container-Start soll NICHT fälschlich das
+            # Backup überspringen (false-negative-Härtung, Review-Hinweis aus PR #138).
+            # Im echten Recovery-Fall (Postgres dauerhaft unten) scheitern alle 3
+            # Versuche → Backup wird übersprungen, der Deploy läuft trotzdem weiter.
             mkdir -p /opt/gastro/backups
-            if docker compose -f docker-compose.prod.yml exec -T postgres \
-                 pg_isready -U pp -d prozesspilot >/dev/null 2>&1; then
+            PG_READY=0
+            for attempt in 1 2 3; do
+              if docker compose -f docker-compose.prod.yml exec -T postgres \
+                   pg_isready -U pp -d prozesspilot >/dev/null 2>&1; then
+                PG_READY=1; break
+              fi
+              echo "Postgres noch nicht bereit (Versuch $attempt/3) — warte 2 s…"
+              sleep 2
+            done
+            if [ "$PG_READY" = "1" ]; then
               BACKUP_FILE="/opt/gastro/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
               echo "Erstelle Pre-Deploy-Backup: $BACKUP_FILE"
               if docker compose -f docker-compose.prod.yml exec -T postgres \
@@ -148,7 +162,7 @@ jobs:
                 rm -f "$BACKUP_FILE"
               fi
             else
-              echo "WARN: Postgres nicht erreichbar — Pre-Deploy-Backup übersprungen (Recovery nach Ausfall)"
+              echo "WARN: Postgres nach 3 Versuchen nicht erreichbar — Pre-Deploy-Backup übersprungen (Recovery nach Ausfall)"
             fi
 
             # Images pullen + Container hochfahren

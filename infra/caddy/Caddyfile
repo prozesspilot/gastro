@@ -9,7 +9,7 @@
 #
 # Subdomain-Routing:
 #   admin.prozesspilot.net  → Mitarbeiter-Webapp        (Port 8081)
-#   setup.prozesspilot.net  → Onboarding-Wizard         (Port 8082, Stub bis T016)
+#   setup.prozesspilot.net  → Onboarding-Wizard         (Port 8082, T017)
 #   api.prozesspilot.net    → Backend-API               (Port 8080)
 #   chat.prozesspilot.net   → Web-Chat-Widget           (Port 8083, Stub bis Widget-Task)
 
@@ -45,7 +45,8 @@ admin.prozesspilot.net {
 }
 
 # ── Onboarding-Wizard (Wirt-Setup, einmalig) ─────────────────────────────────
-# Stub bis T016 (Onboarding-Wizard) implementiert ist.
+# T017: onboarding-wizard-Container (nginx) statt Stub. nginx proxyt /api/ intern
+# an backend:3000 → der Browser spricht nur mit setup.* (connect-src 'self').
 setup.prozesspilot.net {
 	encode gzip
 
@@ -54,7 +55,12 @@ setup.prozesspilot.net {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		# Vollseiten-Wizard, kein eingebettetes Widget → DENY.
+		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# CSP: eigene Assets + same-origin /api (von nginx ans Backend geproxyt) +
+		# Google-Fonts (Poppins/Manrope/JetBrains Mono aus index.html).
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 }

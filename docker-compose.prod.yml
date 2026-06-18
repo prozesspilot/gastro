@@ -163,12 +163,39 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
-  # ── Healthcheck-Stub: Platzhalter für setup.* + chat.* (NH2: konsolidiert) ──
-  # T012 Review-Fix NH2: setup-stub + chat-stub zu einem Service zusammengeführt.
-  # Container hört auf :8080 und bekommt zwei Port-Bindings (8082 + 8083).
+  # ── Onboarding-Wizard (setup.prozesspilot.net) ──────────────────────────────
+  # T017: ersetzt den setup-Stub. Static-Build (Vite) hinter nginx; nginx proxyt
+  # /api/ → backend:3000 und liefert /<token> via SPA-Fallback. Caddy routet
+  # setup.prozesspilot.net → 127.0.0.1:8082 → Container :80.
+  # RAM (~128 MB) gedeckt durch die per T064 freigewordene n8n-Reservierung.
+  onboarding-wizard:
+    image: ghcr.io/prozesspilot/gastro/onboarding-wizard:latest
+    pull_policy: always
+    build:
+      context: ./onboarding-wizard
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "127.0.0.1:8082:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - external
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    mem_limit: 128m
+    mem_reservation: 64m
+
+  # ── Healthcheck-Stub: Platzhalter für chat.* ────────────────────────────────
+  # T012 Review-Fix NH2: ursprünglich setup-stub + chat-stub konsolidiert.
+  # T017: setup.* übernimmt jetzt der onboarding-wizard-Service → der Stub hält
+  # nur noch chat.prozesspilot.net warm (bis zum Web-Chat-Widget-Task).
   # Caddy routet:
-  #   setup.prozesspilot.net → 127.0.0.1:8082 → Container :8080 (bis T016)
-  #   chat.prozesspilot.net  → 127.0.0.1:8083 → Container :8080 (bis Widget-Task)
+  #   chat.prozesspilot.net → 127.0.0.1:8083 → Container :8080 (bis Widget-Task)
   stubs:
     # T012 Review-Fix B2a: image:-Direktive ergänzt.
     image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
@@ -178,7 +205,6 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "127.0.0.1:8082:8080"
       - "127.0.0.1:8083:8080"
     networks:
       - external

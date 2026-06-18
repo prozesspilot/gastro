@@ -60,7 +60,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # T012: Healthcheck-Stub fuer setup.* und chat.* bauen
+      # T012: Healthcheck-Stub — seit T017 nur noch chat.* (setup.* = Wizard)
       - name: Build & Push Healthcheck-Stub Image
         uses: docker/build-push-action@v5
         with:
@@ -68,6 +68,18 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/healthcheck-stub:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # T017: Onboarding-Wizard (setup.prozesspilot.net) — ersetzt den setup-Stub
+      - name: Build & Push Onboarding-Wizard Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./onboarding-wizard
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/onboarding-wizard:latest
+            ghcr.io/${{ github.repository }}/onboarding-wizard:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

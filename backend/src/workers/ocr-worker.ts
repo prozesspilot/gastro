@@ -84,10 +84,10 @@ export function buildOcrJobProcessor(deps: OcrWorkerDeps) {
 async function sendDiscordAlert(belegId: string, errorMessage: string): Promise<void> {
   const url = config.DISCORD_OPS_WEBHOOK_URL;
   if (!url) return;
-  // Pingt @everyone — finaler OCR-Fail braucht Eingriff (Beleg in Status 'error').
+  // Finaler OCR-Fail braucht Eingriff (Beleg in Status 'error') — Alert ohne @everyone-Ping.
   const body = JSON.stringify({
-    content: `@everyone 🔴 OCR-Job für Beleg \`${belegId.slice(0, 8)}…\` ist nach ${config.OCR_MAX_ATTEMPTS} Versuchen final fehlgeschlagen.\nFehler: ${errorMessage.slice(0, 200)}`,
-    allowed_mentions: { parse: ['everyone'] },
+    content: `🔴 OCR-Job für Beleg \`${belegId.slice(0, 8)}…\` ist nach ${config.OCR_MAX_ATTEMPTS} Versuchen final fehlgeschlagen.\nFehler: ${errorMessage.slice(0, 200)}`,
+    allowed_mentions: { parse: [] },
   });
   try {
     await fetch(url, {

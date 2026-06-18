@@ -158,11 +158,11 @@ jobs:
             fi
 
             # Discord-Post
-            content=$(printf "@everyone %s **%s %s**: %s%s\n%s" \
+            content=$(printf "%s **%s %s**: %s%s\n%s" \
               "$emoji" "$owner" "$verb" "$title" "$branch_line" "$COMMIT_URL")
             payload=$(jq -nc \
               --arg c "$content" \
-              '{content: $c, allowed_mentions: {parse: ["everyone"]}}')
+              '{content: $c, allowed_mentions: {parse: []}}')
 
             echo "Sende Discord-Post: $content"
             curl -fsS -X POST "$DISCORD_WEBHOOK" \

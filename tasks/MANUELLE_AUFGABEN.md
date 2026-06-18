@@ -10,6 +10,14 @@
 
 ## 🎯 Steve — Frontend / Sales / Externe Konten
 
+### ⏳ SETUP_BASE_URL in .env.prod setzen (T017)
+- **Priorität:** P2 (nicht dringend — erst relevant, sobald echte Onboarding-Mails rausgehen; der Wizard ist bereits live auf setup.prozesspilot.net)
+- **Was:** Backend baut die Magic-Link-URL der Wizard-Einladungs-Mail aus `SETUP_BASE_URL` (Default `http://localhost:5174`). In Prod muss sie auf die echte Domain zeigen.
+- **Schritte:**
+  1. In `.env.prod` auf dem Server ergänzen: `SETUP_BASE_URL=https://setup.prozesspilot.net`
+  2. Greifen lassen: `docker compose -f /opt/gastro/docker-compose.prod.yml up -d --force-recreate backend` (ENV-Änderung braucht `--force-recreate`, nicht `restart`)
+- **Output:** Magic-Link in der Einladungs-Mail zeigt auf `https://setup.prozesspilot.net/<token>` statt localhost.
+
 ### ⏳ Discord Developer Portal — App registrieren (T001)
 - **Priorität:** P0 (Login funktioniert sonst nicht)
 - **Was:** Discord-App "ProzessPilot Admin" registrieren

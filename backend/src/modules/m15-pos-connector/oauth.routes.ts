@@ -18,32 +18,26 @@
  * Spec-Referenz: Modulkonzept/Konzeptentwicklung/modules/M15_Kassensystem_Connector.md §4.2, §8
  */
 
-import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../../core/config';
 import { verifyM14Token } from '../m14-auth/m14-jwt';
 import { logAuthEvent } from '../m14-auth/users.repository';
 import { deletePosCredentials, upsertPosCredentials } from './pos.repository';
+// OAuth-CSRF-State geteilt mit der Wizard-Brücke (T067) — gleicher Prefix/TTL,
+// damit der gemeinsame Callback beide Flows (Staff + Wizard) bedient.
+import {
+  type OAuthState,
+  STATE_KEY_PREFIX,
+  STATE_TTL_SECONDS,
+  generateOAuthState,
+} from './sumup-oauth-state';
 import {
   SumUpApiError,
   buildSumUpAuthUrl,
   exchangeCodeForTokens,
   fetchSumUpUserInfo,
 } from './sumup.service';
-
-// ── Interne Types ──────────────────────────────────────────────────────────
-
-/** Im Redis-State gespeichertes JSON-Objekt (CSRF-Schutz + Audit-Trail). */
-interface OAuthState {
-  tenant_id: string;
-  staff_user_id: string;
-}
-
-// ── Konstanten ─────────────────────────────────────────────────────────────
-
-const STATE_KEY_PREFIX = 'sumup:oauth:state:';
-const STATE_TTL_SECONDS = 300; // 5 Minuten
 
 // ── Zod-Schemas ────────────────────────────────────────────────────────────
 
@@ -138,16 +132,9 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'tenant_not_found' });
       }
 
-      // CSRF-State generieren (32 Bytes → 43 Base64URL-Zeichen)
-      const stateBytes = randomBytes(32);
-      const state = stateBytes
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-
-      // State → {tenant_id, staff_user_id} Mapping in Redis (atomar, TTL 5 Min)
-      // DECISION: JSON-Payload statt reiner tenant_id — ermöglicht staff_user_id im Audit-Log.
+      // CSRF-State generieren (geteilter Helper) + {tenant_id, staff_user_id} in Redis.
+      // JSON-Payload statt reiner tenant_id → staff_user_id im Audit-Log nutzbar.
+      const state = generateOAuthState();
       const statePayload: OAuthState = { tenant_id, staff_user_id: staff.userId };
       await app.redis.set(
         `${STATE_KEY_PREFIX}${state}`,
@@ -281,13 +268,16 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
         },
       });
 
-      // ── 8. Redirect zu Mitarbeiter-Webapp ─────────────────────────────
-      // DECISION: WEBAPP_URL aus Config (M4 Review-Finding) statt hardcodierter URL.
-      // Defense-in-depth: URL mit new URL() validieren — fängt fehlerhafte WEBAPP_URL-Config.
-      const frontendUrl = new URL(
-        `/tenants/${tenantId}?pos_connected=sumup`,
-        config.WEBAPP_URL,
-      ).toString();
+      // ── 8. Redirect zum richtigen Frontend (Staff-Webapp vs. Wizard) ──
+      // Wizard-Flow (T067): wizard_token im State → zurück zum Onboarding-Wizard
+      // (SETUP_BASE_URL/{token}?pos_connected=sumup). Sonst Staff-Flow → Webapp.
+      // Defense-in-depth: URL mit new URL() validieren (fängt fehlerhafte Config).
+      const frontendUrl = statePayload.wizard_token
+        ? new URL(
+            `/${encodeURIComponent(statePayload.wizard_token)}?pos_connected=sumup`,
+            config.SETUP_BASE_URL,
+          ).toString()
+        : new URL(`/tenants/${tenantId}?pos_connected=sumup`, config.WEBAPP_URL).toString();
       return reply.redirect(frontendUrl, 302);
     },
   );

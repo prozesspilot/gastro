@@ -15,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
 import { completeHandler } from './handlers/complete.handler';
+import { connectSumupHandler } from './handlers/connect-sumup.handler';
 import { createSessionHandler } from './handlers/create-session.handler';
 import { getSessionHandler } from './handlers/get-session.handler';
 import { premiumHandler } from './handlers/premium.handler';
@@ -34,4 +35,6 @@ export async function wizardPublicRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { token: string; n: string } }>('/:token/step/:n', saveStepHandler);
   app.post<{ Params: { token: string } }>('/:token/complete', completeHandler);
   app.post<{ Params: { token: string } }>('/:token/premium', premiumHandler);
+  // T067: öffentliche SumUp-OAuth-Brücke (Wizard-Schritt 6).
+  app.post<{ Params: { token: string } }>('/:token/oauth/sumup/start', connectSumupHandler);
 }

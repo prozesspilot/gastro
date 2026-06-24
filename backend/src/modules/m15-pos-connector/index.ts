@@ -45,3 +45,11 @@ export {
 
 // Token-Helper
 export { getSumUpAccessToken } from './pos-token-helper';
+
+// OAuth-CSRF-State (geteilt zwischen Staff-Route und Wizard-Brücke, T067)
+export {
+  STATE_KEY_PREFIX,
+  STATE_TTL_SECONDS,
+  type OAuthState,
+  generateOAuthState,
+} from './sumup-oauth-state';

@@ -6,9 +6,7 @@
  * Schritte 2–7 zeigen einen Platzhalter (Folge-PRs). Kein Login, kein Router.
  */
 import { type ReactNode } from 'react';
-import { ProgressBar } from './components/ProgressBar';
-import { type PublicSession } from './lib/api';
-import { Step1Stammdaten } from './steps/Step1Stammdaten';
+import { WizardFlow } from './components/WizardFlow';
 import { useWizardSession } from './hooks/useWizardSession';
 
 /** Token = erstes Pfad-Segment (setup.prozesspilot.net/<token>). */
@@ -93,7 +91,7 @@ export default function App({ initialToken }: { initialToken?: string | null } =
         <Centered title="Etwas ist schiefgelaufen" body={state.message} />
       );
   } else {
-    const session: PublicSession = state.session;
+    const session = state.session;
     if (session.status === 'completed') {
       content = (
         <Centered
@@ -108,25 +106,10 @@ export default function App({ initialToken }: { initialToken?: string | null } =
           body="Ein Mitarbeiter aus dem ProzessPilot-Team meldet sich und schließt dein Setup ab."
         />
       );
-    } else if (session.current_step <= 1) {
-      const step1Data = (session.step_data?.['1'] as Record<string, unknown> | undefined) ?? undefined;
-      content = (
-        <>
-          <ProgressBar current={1} />
-          {/* token ist hier garantiert non-null: state===ready ⇒ token war gesetzt */}
-          <Step1Stammdaten token={token as string} initialData={step1Data} onSaved={setSession} />
-        </>
-      );
     } else {
-      content = (
-        <>
-          <ProgressBar current={session.current_step} />
-          <Centered
-            title="Stammdaten gespeichert 🎉"
-            body="Die weiteren Setup-Schritte schalten wir in Kürze frei. Du kannst dieses Fenster schließen — dein Fortschritt ist gespeichert."
-          />
-        </>
-      );
+      // status === 'started' → navigierbarer 7-Schritt-Flow (T067).
+      // token ist hier garantiert non-null: state===ready ⇒ token war gesetzt.
+      content = <WizardFlow token={token as string} session={session} onSaved={setSession} />;
     }
   }
 

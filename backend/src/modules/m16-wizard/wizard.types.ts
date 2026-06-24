@@ -105,3 +105,77 @@ export const step1StammdatenSchema = z
   .strict();
 
 export type Step1Stammdaten = z.infer<typeof step1StammdatenSchema>;
+
+// ---------------------------------------------------------------------------
+// Schritte 2/4/5/6 — Auswahl-/Config-Formulare (Spec §2.3–2.7). Strikt validiert,
+// weil der complete-Handler die markierten Keys OHNE Enum-Prüfung in tenants
+// promotet (asString()/Array-Filter) — die Strenge muss hier liegen, sonst landet
+// Freitext in tenants.advisor_system / archive_provider / pos_system.
+// ---------------------------------------------------------------------------
+
+/** Steuerberater-System (Spec §2.3). SSoT für tenants.advisor_system. */
+export const ADVISOR_SYSTEMS = [
+  'lexware_office',
+  'datev_online',
+  'datev_csv',
+  'sevdesk',
+  'lexware_desktop',
+  'stotax',
+  'addison',
+  'unbekannt',
+] as const;
+
+/** Eingangskanal (Spec §2.5). SSoT für tenants.input_channels. */
+export const INPUT_CHANNELS = ['whatsapp', 'email'] as const;
+
+/** Archiv-Provider (Spec §2.6). SSoT für tenants.archive_provider. */
+export const ARCHIVE_PROVIDERS = ['google_drive', 'dropbox', 'pp_internal'] as const;
+
+/** Kassensystem-Auswahl (Spec §2.7). */
+export const POS_CHOICES = ['sumup', 'other_cloud', 'classic', 'skip'] as const;
+
+/** SumUp-Variante. Nur die von pos.repository.ts unterstützten Werte. SSoT für tenants.pos_system. */
+export const POS_SYSTEMS = ['sumup_lite', 'sumup_pos_pro'] as const;
+
+// Schritt 2 — Steuerberater-Setup. Nur advisor_system wird promotet; die
+// Kontaktfelder bleiben in step_data (Default T067: kein neues Spalten-Mapping).
+export const step2SteuerberaterSchema = z
+  .object({
+    steuerberater_kanzlei: z.string().trim().min(2, 'Kanzlei-Name angeben.').max(200),
+    ansprechpartner: z.string().trim().min(2, 'Ansprechpartner angeben.').max(200),
+    steuerberater_email: z.string().trim().email('Gültige E-Mail angeben.').max(200),
+    steuerberater_telefon: z.string().trim().max(40).optional().or(z.literal('')),
+    advisor_system: z.enum(ADVISOR_SYSTEMS),
+  })
+  .strict();
+export type Step2Steuerberater = z.infer<typeof step2SteuerberaterSchema>;
+
+// Schritt 4 — Eingangskanal. input_channels (Array, min 1) → tenants.input_channels.
+export const step4InputChannelSchema = z
+  .object({
+    input_channels: z
+      .array(z.enum(INPUT_CHANNELS))
+      .min(1, 'Mindestens einen Kanal wählen.')
+      .max(INPUT_CHANNELS.length),
+  })
+  .strict();
+export type Step4InputChannel = z.infer<typeof step4InputChannelSchema>;
+
+// Schritt 5 — Archiv-Verbindung. archive_provider → tenants.archive_provider.
+export const step5ArchiveSchema = z
+  .object({
+    archive_provider: z.enum(ARCHIVE_PROVIDERS),
+  })
+  .strict();
+export type Step5Archive = z.infer<typeof step5ArchiveSchema>;
+
+// Schritt 6 — Kassensystem. Nur pos_system (gesetzt wenn pos_choice='sumup')
+// wird promotet. pos_connected spiegelt den OAuth-Rückkehr-Status (best-effort).
+export const step6PosSchema = z
+  .object({
+    pos_choice: z.enum(POS_CHOICES),
+    pos_system: z.enum(POS_SYSTEMS).optional(),
+    pos_connected: z.boolean().optional(),
+  })
+  .strict();
+export type Step6Pos = z.infer<typeof step6PosSchema>;

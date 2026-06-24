@@ -6,9 +6,30 @@
  * Folge-PRs kommt) werden als generisches Objekt gespeichert.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { z } from 'zod';
 import { saveOnboardingStep, saveStammdatenAndActivate } from '../services/wizard.repository';
-import { step1StammdatenSchema, toPublicSession } from '../wizard.types';
+import {
+  step1StammdatenSchema,
+  step2SteuerberaterSchema,
+  step4InputChannelSchema,
+  step5ArchiveSchema,
+  step6PosSchema,
+  toPublicSession,
+} from '../wizard.types';
 import { resolveSession } from './_resolve-session';
+
+/**
+ * Strikt validierte Schritte (T067). Genau die Schritte, deren step_data der
+ * complete-Handler in tenants promotet — die Strenge muss hier liegen, sonst
+ * promotet complete still Freitext/Nichts. Schritte 3 + 7 sind reine
+ * step_data-Persistenz → generischer Objekt-Check (s. u.).
+ */
+const STRICT_STEP_SCHEMAS: Record<number, z.ZodTypeAny> = {
+  2: step2SteuerberaterSchema,
+  4: step4InputChannelSchema,
+  5: step5ArchiveSchema,
+  6: step6PosSchema,
+};
 
 export async function saveStepHandler(
   req: FastifyRequest<{ Params: { token: string; n: string } }>,
@@ -48,20 +69,31 @@ export async function saveStepHandler(
     return reply.send({ session: toPublicSession(activated) });
   }
 
-  // Schritte 2–7: Frontend/strikte Schemas kommen in Folge-PRs. Bis dahin nur
-  // sicherstellen, dass der Body ein JSON-Objekt ist (kein Array/Skalar).
-  const body = req.body;
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    return reply
-      .code(422)
-      .send({ error: 'validation_error', message: 'Body muss ein JSON-Objekt sein.' });
+  // Schritte 2/4/5/6: strikt Zod-validiert (T067). Schritte 3/7: generischer
+  // Objekt-Check (reine step_data-Persistenz, Platzhalter/Abschluss-Screen).
+  let data: Record<string, unknown>;
+  const strictSchema = STRICT_STEP_SCHEMAS[step];
+  if (strictSchema) {
+    const parsed = strictSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(422).send({ error: 'validation_error', issues: parsed.error.flatten() });
+    }
+    data = parsed.data as Record<string, unknown>;
+  } else {
+    const body = req.body;
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+      return reply
+        .code(422)
+        .send({ error: 'validation_error', message: 'Body muss ein JSON-Objekt sein.' });
+    }
+    data = body as Record<string, unknown>;
   }
 
   const updated = await saveOnboardingStep(req.server.db, {
     tenantId: r.session.tenant_id,
     token: req.params.token,
     step,
-    data: body as Record<string, unknown>,
+    data,
   });
   if (!updated) {
     return reply.code(404).send({ error: 'not_found', message: 'Session nicht gefunden.' });

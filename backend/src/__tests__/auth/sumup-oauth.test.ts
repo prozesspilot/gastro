@@ -493,6 +493,49 @@ describe('Route GET /m15/oauth/sumup/callback', () => {
     );
   });
 
+  it('Wizard-Flow (T067): wizard_token im State → Redirect zum Wizard statt zur Webapp', async () => {
+    const { app, mockRedis } = await buildTestApp();
+
+    const tenantId = '550e8400-e29b-41d4-a716-446655440000';
+    const wizardToken = 'wiz-token-abc123';
+    // State trägt wizard_token (kein staff_user_id) → Wizard-initiierter Flow.
+    (mockRedis.getdel as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      JSON.stringify({ tenant_id: tenantId, wizard_token: wizardToken }),
+    );
+
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => MOCK_TOKEN_RESPONSE,
+        text: async () => JSON.stringify(MOCK_TOKEN_RESPONSE),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => MOCK_USER_INFO,
+        text: async () => JSON.stringify(MOCK_USER_INFO),
+      } as Response);
+
+    const posRepo = await import('../../modules/m15-pos-connector/pos.repository');
+    vi.spyOn(posRepo, 'upsertPosCredentials').mockResolvedValueOnce({ id: 'wiz-cred-id' });
+    const usersRepo = await import('../../modules/m14-auth/users.repository');
+    vi.spyOn(usersRepo, 'logAuthEvent').mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/m15/oauth/sumup/callback?code=valid-code&state=valid-state',
+    });
+
+    // Rückkehr zum Wizard: SETUP_BASE_URL/{wizard_token}?pos_connected=sumup —
+    // NICHT der Staff-/tenants-Pfad (sonst landet der Wirt in der Mitarbeiter-Webapp).
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toContain(wizardToken);
+    expect(response.headers.location).toContain('pos_connected=sumup');
+    expect(response.headers.location).not.toContain('/tenants/');
+    expect(response.headers.location).not.toContain(tenantId);
+  });
+
   it('gibt 502 zurück wenn SumUp Token-Exchange fehlschlägt', async () => {
     const { app, mockRedis } = await buildTestApp();
 

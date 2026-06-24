@@ -77,3 +77,37 @@ export function completeWizard(token: string): Promise<PublicSession> {
 export function requestPremium(token: string): Promise<PublicSession> {
   return request<PublicSession>(`/${enc(token)}/premium`, { method: 'POST' });
 }
+
+/**
+ * T067 — Startet den SumUp-OAuth-Flow für den Session-Tenant. Antwort ist KEIN
+ * `{ session }` (anders als die übrigen Endpoints), sondern `{ redirect_url }` —
+ * das Frontend setzt `window.location` darauf, weil ein Fetch keinem 302 folgt.
+ */
+export async function startSumupConnect(token: string): Promise<{ redirect_url: string }> {
+  const res = await fetch(`${BASE}/${enc(token)}/oauth/sumup/start`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    let payload: { error?: string; message?: string } | undefined;
+    try {
+      payload = await res.json();
+    } catch {
+      /* kein JSON-Body */
+    }
+    throw new WizardApiError(
+      res.status,
+      payload?.message ?? res.statusText ?? `HTTP ${res.status}`,
+      payload?.error,
+    );
+  }
+  return (await res.json()) as { redirect_url: string };
+}
+
+/** Gemeinsame Props aller Schritt-Komponenten. Navigation (Zurück/Skip) liegt im WizardFlow. */
+export interface StepProps {
+  token: string;
+  initialData?: Record<string, unknown>;
+  /** Schritt gespeichert → Flow rückt vor (bei Abschluss: Session=completed). */
+  onSaved: (session: PublicSession) => void;
+}

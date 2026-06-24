@@ -83,6 +83,11 @@ function getM14Staff(req: FastifyRequest): { userId: string; role: string } | nu
 
 // ── Fastify-Plugin ─────────────────────────────────────────────────────────
 
+// T067: explizites Per-Route-Rate-Limiting (zusätzlich zum globalen 100/min).
+// OAuth-Start + Disconnect lösen externe SumUp-Calls / DB-Writes aus. Greift nur,
+// wenn @fastify/rate-limit registriert ist (Prod; im Test ignoriert).
+const M15_RL = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
+
 export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
   /**
    * GET /m15/oauth/sumup/start?tenant_id=<uuid>
@@ -94,6 +99,7 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get<{ Querystring: StartQuery }>(
     '/m15/oauth/sumup/start',
+    M15_RL,
     async (req: FastifyRequest<{ Querystring: StartQuery }>, reply: FastifyReply) => {
       // Auth-Check: Mitarbeiter-Login erforderlich
       const staff = getM14Staff(req);
@@ -294,6 +300,7 @@ export async function sumupOauthRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{ Params: DisconnectParams }>(
     '/m15/sumup/disconnect/:tenantId',
+    M15_RL,
     async (req: FastifyRequest<{ Params: DisconnectParams }>, reply: FastifyReply) => {
       // Auth-Check
       const staff = getM14Staff(req);

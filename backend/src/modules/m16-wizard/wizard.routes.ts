@@ -21,20 +21,27 @@ import { getSessionHandler } from './handlers/get-session.handler';
 import { premiumHandler } from './handlers/premium.handler';
 import { saveStepHandler } from './handlers/save-step.handler';
 
+// T067: explizites Per-Route-Rate-Limiting (zusätzlich zum globalen 100/min aus
+// app.ts). Die öffentliche Token-Brücke + Staff-Session-Erstellung sind sensibel
+// (DB-Writes, externe OAuth-/Mail-Trigger); 30/min ist für legitime Nutzung
+// (7-Schritt-Flow) großzügig und blockt Abuse. Greift nur, wenn @fastify/rate-limit
+// registriert ist (Prod; im Test ignoriert).
+const RL = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
+
 /** Staff-Endpoints (JWT-Cookie + Tenant-Context). */
 export async function wizardStaffRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', m14StaffAuthHook);
   app.addHook('preHandler', m14TenantContextHook);
 
-  app.post('/sessions', createSessionHandler);
+  app.post('/sessions', RL, createSessionHandler);
 }
 
 /** Öffentliche Wizard-Endpoints (Token = Credential, kein Staff-Cookie). */
 export async function wizardPublicRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Params: { token: string } }>('/:token', getSessionHandler);
-  app.post<{ Params: { token: string; n: string } }>('/:token/step/:n', saveStepHandler);
-  app.post<{ Params: { token: string } }>('/:token/complete', completeHandler);
-  app.post<{ Params: { token: string } }>('/:token/premium', premiumHandler);
+  app.get<{ Params: { token: string } }>('/:token', RL, getSessionHandler);
+  app.post<{ Params: { token: string; n: string } }>('/:token/step/:n', RL, saveStepHandler);
+  app.post<{ Params: { token: string } }>('/:token/complete', RL, completeHandler);
+  app.post<{ Params: { token: string } }>('/:token/premium', RL, premiumHandler);
   // T067: öffentliche SumUp-OAuth-Brücke (Wizard-Schritt 6).
-  app.post<{ Params: { token: string } }>('/:token/oauth/sumup/start', connectSumupHandler);
+  app.post<{ Params: { token: string } }>('/:token/oauth/sumup/start', RL, connectSumupHandler);
 }

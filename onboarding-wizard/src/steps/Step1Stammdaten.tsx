@@ -4,7 +4,8 @@
  * Native Inputs + Client-Validierung (gespiegelt vom Backend-Zod-Schema; der
  * Server bleibt die maßgebliche Instanz und liefert 422 bei Fehlern). Mobile-First.
  */
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, useState } from 'react';
+import { Field } from '../components/Field';
 import { type PublicSession, saveStep, WizardApiError } from '../lib/api';
 
 const RECHTSFORMEN: ReadonlyArray<[string, string]> = [
@@ -215,31 +216,3 @@ export function Step1Stammdaten({ token, initialData, onSaved }: Props) {
   );
 }
 
-function Field({
-  id,
-  label,
-  error,
-  hint,
-  children,
-}: {
-  id: string;
-  label: string;
-  error?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="field" style={{ marginBottom: 'var(--space-4)' }}>
-      <label htmlFor={id}>{label}</label>
-      {children}
-      {hint && !error && (
-        <span style={{ fontSize: '.75rem', color: 'var(--text-subtle)' }}>{hint}</span>
-      )}
-      {error && (
-        <span role="alert" style={{ fontSize: '.75rem', color: 'var(--status-error-fg)' }}>
-          {error}
-        </span>
-      )}
-    </div>
-  );
-}

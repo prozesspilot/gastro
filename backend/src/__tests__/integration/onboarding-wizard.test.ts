@@ -19,7 +19,9 @@ import {
   getOnboardingSessionByToken,
   requestPremiumHandoff,
   saveOnboardingStep,
+  saveStammdatenAndActivate,
 } from '../../modules/m16-wizard/services/wizard.repository';
+import type { Step1Stammdaten } from '../../modules/m16-wizard/wizard.types';
 
 const DB_URL =
   process.env.DATABASE_URL ??
@@ -192,6 +194,104 @@ describe('T016 — Wizard-Repository-Lifecycle (funktional)', () => {
     if (!dbAvailable) return;
     const none = await getOnboardingSessionByToken(pool, 'definitiv-kein-gueltiger-token');
     expect(none).toBeNull();
+  });
+
+  it('T066: saveStammdatenAndActivate promotet Stammdaten + aktiviert; complete regressiert NICHT', async () => {
+    if (!dbAvailable) return;
+
+    const session = await createOnboardingSession(pool, {
+      tenantId: T_W,
+      createdByUserId: STAFF,
+      ttlDays: 30,
+    });
+
+    const stammdaten: Step1Stammdaten = {
+      firmenname: 'Bella Italia GmbH',
+      rechtsform: 'gmbh',
+      inhaber: 'Mario Rossi',
+      strasse: 'Hauptstr. 1',
+      plz: '29614',
+      stadt: 'Soltau',
+      ust_id: 'DE123456789',
+      steuernummer: '11/123/45678',
+      telefon: '0151 1234567',
+      email: 'mario@bella.de',
+      branche: 'restaurant',
+      mitarbeiter_anzahl: 5,
+      belegvolumen_monat: 120,
+      steuerberater_kosten_monat: 250,
+    };
+
+    const updated = await saveStammdatenAndActivate(pool, {
+      tenantId: T_W,
+      token: session.token,
+      stammdaten,
+    });
+    expect(updated?.current_step).toBe(2);
+    expect((updated?.step_data as Record<string, unknown>)['1']).toMatchObject({ plz: '29614' });
+
+    // Stammdaten → tenants-Spalten + onboarding_status='activated'
+    const t1 = await pool.query<Record<string, unknown>>(
+      `SELECT onboarding_status, legal_name, contact_email, contact_phone, owner_name,
+              legal_form, address_street, address_postal_code, address_city, vat_id,
+              tax_number, industry, employee_count, monthly_receipt_volume, advisor_cost_monthly
+         FROM tenants WHERE id = $1`,
+      [T_W],
+    );
+    const row = t1.rows[0];
+    expect(row.onboarding_status).toBe('activated');
+    expect(row.legal_name).toBe('Bella Italia GmbH');
+    expect(row.contact_email).toBe('mario@bella.de');
+    expect(row.contact_phone).toBe('0151 1234567');
+    expect(row.owner_name).toBe('Mario Rossi');
+    expect(row.legal_form).toBe('gmbh');
+    expect(row.address_street).toBe('Hauptstr. 1');
+    expect(row.address_postal_code).toBe('29614');
+    expect(row.address_city).toBe('Soltau');
+    expect(row.vat_id).toBe('DE123456789');
+    expect(row.tax_number).toBe('11/123/45678');
+    expect(row.industry).toBe('restaurant');
+    expect(row.employee_count).toBe(5);
+    expect(row.monthly_receipt_volume).toBe(120);
+    expect(Number(row.advisor_cost_monthly)).toBe(250);
+
+    // Audit-Event 'tenant.activated' geschrieben (GoBD)
+    const audit = await pool.query(
+      `SELECT 1 FROM audit_log WHERE tenant_id = $1 AND event_type = 'tenant.activated'`,
+      [T_W],
+    );
+    expect(audit.rowCount ?? 0).toBeGreaterThanOrEqual(1);
+
+    // Generischer Step 2 (saveOnboardingStep) fasst tenants gar nicht an → Aktiv-Status bleibt.
+    await saveOnboardingStep(pool, {
+      tenantId: T_W,
+      token: session.token,
+      step: 2,
+      data: { advisor_system: 'lexware_office' },
+    });
+    const tStep2 = await pool.query<{ onboarding_status: string }>(
+      'SELECT onboarding_status FROM tenants WHERE id = $1',
+      [T_W],
+    );
+    expect(tStep2.rows[0].onboarding_status).toBe('activated');
+
+    // complete darf 'activated' NICHT auf 'wizard_done' zurückstufen — Promotion läuft trotzdem.
+    await completeOnboardingSession(pool, {
+      tenantId: T_W,
+      token: session.token,
+      promote: {
+        advisorSystem: 'lexware_office',
+        inputChannels: null,
+        archiveProvider: null,
+        posSystem: null,
+      },
+    });
+    const t2 = await pool.query<{ onboarding_status: string; advisor_system: string | null }>(
+      'SELECT onboarding_status, advisor_system FROM tenants WHERE id = $1',
+      [T_W],
+    );
+    expect(t2.rows[0].onboarding_status).toBe('activated');
+    expect(t2.rows[0].advisor_system).toBe('lexware_office');
   });
 });
 

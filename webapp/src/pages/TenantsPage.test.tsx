@@ -57,6 +57,7 @@ describe('TenantsPage', () => {
               display_name: 'Test-Mandant XYZ',
               package: 'pro',
               deletion_status: 'active',
+              onboarding_status: 'activated',
             },
           ],
         }),
@@ -65,6 +66,78 @@ describe('TenantsPage', () => {
     renderTenantsPage();
     await waitFor(() => {
       expect(screen.getByText('Test-Mandant XYZ')).toBeInTheDocument();
+    });
+  });
+
+  it('zeigt Onboarding-Status-Badge "Aktiv" für aktivierte Mandanten', async () => {
+    server.use(
+      http.get(`${BASE}/tenants`, () =>
+        HttpResponse.json({
+          ok: true,
+          data: [
+            {
+              id: 'tenant-act',
+              slug: 'act',
+              display_name: 'Aktiver Mandant',
+              package: 'pro',
+              deletion_status: 'active',
+              onboarding_status: 'activated',
+            },
+          ],
+        }),
+      ),
+    );
+    renderTenantsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Aktiv')).toBeInTheDocument();
+    });
+  });
+
+  it('zeigt Onboarding-Status-Badge "Offen" für pending-Mandanten', async () => {
+    server.use(
+      http.get(`${BASE}/tenants`, () =>
+        HttpResponse.json({
+          ok: true,
+          data: [
+            {
+              id: 'tenant-pend',
+              slug: 'pend',
+              display_name: 'Pending Mandant',
+              package: 'solo',
+              deletion_status: 'active',
+              onboarding_status: 'pending',
+            },
+          ],
+        }),
+      ),
+    );
+    renderTenantsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Offen')).toBeInTheDocument();
+    });
+  });
+
+  it('zeigt Onboarding-Status-Badge "Wizard fertig" für wizard_done-Mandanten', async () => {
+    server.use(
+      http.get(`${BASE}/tenants`, () =>
+        HttpResponse.json({
+          ok: true,
+          data: [
+            {
+              id: 'tenant-wd',
+              slug: 'wd',
+              display_name: 'Wizard-Done Mandant',
+              package: 'standard',
+              deletion_status: 'active',
+              onboarding_status: 'wizard_done',
+            },
+          ],
+        }),
+      ),
+    );
+    renderTenantsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Wizard fertig')).toBeInTheDocument();
     });
   });
 

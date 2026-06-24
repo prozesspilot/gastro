@@ -20,6 +20,7 @@ export const tenantHandlers = [
           display_name: 'Demo-Tenant',
           package: 'standard',
           deletion_status: 'active',
+          onboarding_status: 'activated',
         },
       ],
     }),

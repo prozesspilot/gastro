@@ -10,7 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { logAuditEvent } from '../../../core/audit/audit-log';
-import type { DbOnboardingSession } from '../wizard.types';
+import type { DbOnboardingSession, Step1Stammdaten } from '../wizard.types';
 
 /** 32 Zeichen Base64URL = 192 Bit Entropie (Spec §6.1). */
 export function generateWizardToken(): string {
@@ -150,6 +150,112 @@ export async function saveOnboardingStep(
   }
 }
 
+export interface SaveStammdatenInput {
+  tenantId: string;
+  token: string;
+  /** Server-validierte Stammdaten aus Wizard Schritt 1 (step1StammdatenSchema). */
+  stammdaten: Step1Stammdaten;
+}
+
+/**
+ * Wizard Schritt 1 (Stammdaten): merge step_data['1'] + current_step → 2 UND
+ * promotet die Stammdaten in echte tenants-Spalten + aktiviert den Mandanten
+ * (onboarding_status='activated') — alles in EINER Transaktion.
+ *
+ * ⚠️ Bewusste Spec-Abweichung (T066): Die dokumentierte Spec (Onboarding_Wizard.md /
+ * Mitarbeiter_Webapp.md) aktiviert erst nach MANUELLER Mitarbeiter-Freischaltung. Im
+ * Build-out-Self-Service (CLAUDE.md §3.6 — Testkunde spielt alles selbst durch)
+ * aktivieren wir automatisch, sobald der Wirt seine Stammdaten abschickt.
+ *
+ * onboarding_status='activated' wird unkonditional gesetzt → idempotent, weil
+ * 'activated' der terminale FSM-Zustand ist. completeOnboardingSession respektiert
+ * das und überschreibt 'activated' NICHT mehr mit 'wizard_done'.
+ */
+export async function saveStammdatenAndActivate(
+  pool: Pool,
+  input: SaveStammdatenInput,
+): Promise<DbOnboardingSession | null> {
+  const s = input.stammdaten;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+
+    // (a) step_data['1'] mergen + current_step → 2 (identisch zu saveOnboardingStep, step=1).
+    const res = await client.query<DbOnboardingSession>(
+      `UPDATE onboarding_sessions
+          SET step_data = step_data || jsonb_build_object('1', $2::jsonb),
+              current_step = GREATEST(current_step, 2),
+              last_activity_at = now()
+        WHERE token = $1
+        RETURNING *`,
+      [input.token, JSON.stringify(s)],
+    );
+    const session = res.rows[0];
+    if (!session) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return null;
+    }
+
+    // (b)+(c) Stammdaten → tenants-Spalten + Aktivierung (Migration 123).
+    // ust_id ('' oder undefined) → NULL; steuerberater_kosten_monat optional → NULL.
+    await client.query(
+      `UPDATE tenants
+          SET legal_name             = $2,
+              contact_email          = $3,
+              contact_phone          = $4,
+              owner_name             = $5,
+              legal_form             = $6,
+              address_street         = $7,
+              address_postal_code    = $8,
+              address_city           = $9,
+              vat_id                 = $10,
+              tax_number             = $11,
+              industry               = $12,
+              employee_count         = $13,
+              monthly_receipt_volume = $14,
+              advisor_cost_monthly   = $15,
+              onboarding_status      = 'activated'
+        WHERE id = $1`,
+      [
+        input.tenantId,
+        s.firmenname,
+        s.email,
+        s.telefon,
+        s.inhaber,
+        s.rechtsform,
+        s.strasse,
+        s.plz,
+        s.stadt,
+        s.ust_id && s.ust_id.length > 0 ? s.ust_id : null,
+        s.steuernummer,
+        s.branche,
+        s.mitarbeiter_anzahl,
+        s.belegvolumen_monat,
+        s.steuerberater_kosten_monat ?? null,
+      ],
+    );
+
+    // (d) Audit (GoBD): Mandant aktiviert. Bewusst keine PII im Payload.
+    await logAuditEvent(client, {
+      tenantId: input.tenantId,
+      entityType: 'tenant',
+      entityId: input.tenantId,
+      eventType: 'tenant.activated',
+      actor: { type: 'customer', id: null },
+      payloadAfter: { onboarding_status: 'activated', via: 'wizard_stammdaten' },
+    });
+
+    await client.query('COMMIT');
+    return session;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export interface CompleteInput {
   tenantId: string;
   token: string;
@@ -186,8 +292,12 @@ export async function completeOnboardingSession(
     }
 
     await client.query(
+      // onboarding_status regressions-frei: ein bereits per Stammdaten (Schritt 1)
+      // aktivierter Mandant (T066) bleibt 'activated' — complete darf ihn NICHT auf
+      // 'wizard_done' zurückstufen. Übrige Promotion (advisor_system etc.) bleibt.
       `UPDATE tenants
-          SET onboarding_status = 'wizard_done',
+          SET onboarding_status = CASE WHEN onboarding_status = 'activated'
+                                       THEN 'activated' ELSE 'wizard_done' END,
               advisor_system   = COALESCE($2::varchar, advisor_system),
               input_channels   = COALESCE($3::varchar[], input_channels),
               archive_provider = COALESCE($4::varchar, archive_provider),

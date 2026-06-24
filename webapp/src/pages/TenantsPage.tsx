@@ -55,6 +55,7 @@ export default function TenantsPage() {
                 <Th>Name</Th>
                 <Th>Slug</Th>
                 <Th>Paket</Th>
+                <Th>Onboarding</Th>
                 <Th />
               </tr>
             </thead>
@@ -68,12 +69,18 @@ export default function TenantsPage() {
                     <code style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.slug}</code>
                   </Td>
                   <Td style={{ color: 'var(--text-muted)' }}>{t.package}</Td>
+                  {/* Onboarding-Status (Badge) — NICHT zu verwechseln mit dem
+                      "Als aktiv setzen"-Button, der nur den Arbeits-Tenant wählt. */}
+                  <Td>
+                    <OnboardingBadge status={t.onboarding_status} />
+                  </Td>
                   <Td style={{ textAlign: 'right' }}>
                     <button
                       type="button"
                       className="secondary"
                       style={{ fontSize: 12 }}
                       onClick={() => setActiveTenantId(t.id)}
+                      title="Diesen Mandanten als Arbeits-Tenant wählen (Belege-Ansicht)"
                     >
                       Als aktiv setzen
                     </button>
@@ -107,4 +114,21 @@ function Th({ children }: { children?: React.ReactNode }) {
 
 function Td({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
   return <td style={{ padding: '12px 16px', ...style }}>{children}</td>;
+}
+
+/**
+ * Onboarding-Status als Badge. Bildet die `tenants.onboarding_status`-FSM
+ * (pending → wizard_started → wizard_done → activated) auf die Design-System-
+ * Badge-Klassen ab. `activated` = der Mandant hat seine Stammdaten eingegeben
+ * (T066) und ist freigeschaltet.
+ */
+function OnboardingBadge({ status }: { status: string }) {
+  const map: Record<string, { cls: string; label: string }> = {
+    activated: { cls: 'badge active', label: 'Aktiv' },
+    wizard_done: { cls: 'badge info', label: 'Wizard fertig' },
+    wizard_started: { cls: 'badge info', label: 'Wizard läuft' },
+    pending: { cls: 'badge pending', label: 'Offen' },
+  };
+  const b = map[status] ?? { cls: 'badge pending', label: status || 'Offen' };
+  return <span className={b.cls}>{b.label}</span>;
 }

@@ -10,6 +10,8 @@ export interface TenantListItem {
   display_name: string;
   package: string;
   deletion_status: string;
+  /** Onboarding-FSM: 'pending' | 'wizard_started' | 'wizard_done' | 'activated'. */
+  onboarding_status: string;
 }
 
 export async function getTenants(): Promise<TenantListItem[]> {

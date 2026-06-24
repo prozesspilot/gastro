@@ -24,6 +24,7 @@ const SAMPLE = [
     display_name: 'Almaz Gastro',
     package: 'standard',
     deletion_status: 'active',
+    onboarding_status: 'activated',
   },
 ];
 
@@ -68,6 +69,7 @@ describe('GET /api/v1/tenants', () => {
     expect(Array.isArray(body.data)).toBe(true);
     expect(body.data[0].slug).toBe('almaz');
     expect(body.data[0].display_name).toBe('Almaz Gastro');
+    expect(body.data[0].onboarding_status).toBe('activated');
   });
 
   it('200 + leere Liste, wenn keine Mandanten existieren', async () => {

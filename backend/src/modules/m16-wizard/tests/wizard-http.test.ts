@@ -48,6 +48,8 @@ interface MockOpts {
     legal_name: string | null;
     contact_email: string | null;
   } | null;
+  /** Optionaler Spy: bekommt jedes ausgeführte SQL (für Query-Assertions). */
+  onQuery?: (sql: string) => void;
 }
 
 function makeMockPool(opts: MockOpts = {}) {
@@ -63,6 +65,7 @@ function makeMockPool(opts: MockOpts = {}) {
 
   const mockClient = {
     query: vi.fn(async (sql: string) => {
+      opts.onQuery?.(sql);
       if (sql.includes('FROM tenants WHERE id')) return { rows: tenant ? [tenant] : [] };
       if (sql.includes('INSERT INTO onboarding_sessions')) return { rows: [makeSession()] };
       if (sql.includes('UPDATE onboarding_sessions')) {
@@ -83,6 +86,7 @@ function makeMockPool(opts: MockOpts = {}) {
   const pool = {
     connect: vi.fn(async () => mockClient),
     query: vi.fn(async (sql: string) => {
+      opts.onQuery?.(sql);
       if (sql.includes('get_onboarding_session_by_token'))
         return { rows: session ? [session] : [] };
       return { rows: [] };
@@ -254,6 +258,21 @@ describe('POST /api/v1/wizard/:token/step/:n (public)', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(JSON.parse(r.body).session.current_step).toBe(2);
+  });
+
+  it('T066: Step 1 löst UPDATE tenants … onboarding_status=activated aus', async () => {
+    const seen: string[] = [];
+    currentApp = await buildTestApp({ onQuery: (s) => seen.push(s) });
+    const r = await currentApp.inject({
+      method: 'POST',
+      url: `/api/v1/wizard/${TOKEN}/step/1`,
+      payload: validStep1,
+    });
+    expect(r.statusCode).toBe(200);
+    const activated = seen.some(
+      (s) => /update\s+tenants/i.test(s) && /onboarding_status\s*=\s*'activated'/i.test(s),
+    );
+    expect(activated).toBe(true);
   });
 });
 

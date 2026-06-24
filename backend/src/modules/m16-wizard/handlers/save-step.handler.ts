@@ -6,7 +6,7 @@
  * Folge-PRs kommt) werden als generisches Objekt gespeichert.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { saveOnboardingStep } from '../services/wizard.repository';
+import { saveOnboardingStep, saveStammdatenAndActivate } from '../services/wizard.repository';
 import { step1StammdatenSchema, toPublicSession } from '../wizard.types';
 import { resolveSession } from './_resolve-session';
 
@@ -30,30 +30,38 @@ export async function saveStepHandler(
     });
   }
 
-  let data: Record<string, unknown>;
+  // Schritt 1 (Stammdaten): strikt Zod-validiert → promotet in tenants-Spalten +
+  // aktiviert den Mandanten (onboarding_status='activated'), siehe T066.
   if (step === 1) {
     const parsed = step1StammdatenSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(422).send({ error: 'validation_error', issues: parsed.error.flatten() });
     }
-    data = parsed.data;
-  } else {
-    // Schritte 2–7: Frontend/strikte Schemas kommen in Folge-PRs. Bis dahin nur
-    // sicherstellen, dass der Body ein JSON-Objekt ist (kein Array/Skalar).
-    const body = req.body;
-    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-      return reply
-        .code(422)
-        .send({ error: 'validation_error', message: 'Body muss ein JSON-Objekt sein.' });
+    const activated = await saveStammdatenAndActivate(req.server.db, {
+      tenantId: r.session.tenant_id,
+      token: req.params.token,
+      stammdaten: parsed.data,
+    });
+    if (!activated) {
+      return reply.code(404).send({ error: 'not_found', message: 'Session nicht gefunden.' });
     }
-    data = body as Record<string, unknown>;
+    return reply.send({ session: toPublicSession(activated) });
+  }
+
+  // Schritte 2–7: Frontend/strikte Schemas kommen in Folge-PRs. Bis dahin nur
+  // sicherstellen, dass der Body ein JSON-Objekt ist (kein Array/Skalar).
+  const body = req.body;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return reply
+      .code(422)
+      .send({ error: 'validation_error', message: 'Body muss ein JSON-Objekt sein.' });
   }
 
   const updated = await saveOnboardingStep(req.server.db, {
     tenantId: r.session.tenant_id,
     token: req.params.token,
     step,
-    data,
+    data: body as Record<string, unknown>,
   });
   if (!updated) {
     return reply.code(404).send({ error: 'not_found', message: 'Session nicht gefunden.' });

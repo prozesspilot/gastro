@@ -117,6 +117,30 @@ describe('TenantsPage', () => {
     });
   });
 
+  it('zeigt Onboarding-Status-Badge "Wizard fertig" für wizard_done-Mandanten', async () => {
+    server.use(
+      http.get(`${BASE}/tenants`, () =>
+        HttpResponse.json({
+          ok: true,
+          data: [
+            {
+              id: 'tenant-wd',
+              slug: 'wd',
+              display_name: 'Wizard-Done Mandant',
+              package: 'standard',
+              deletion_status: 'active',
+              onboarding_status: 'wizard_done',
+            },
+          ],
+        }),
+      ),
+    );
+    renderTenantsPage();
+    await waitFor(() => {
+      expect(screen.getByText('Wizard fertig')).toBeInTheDocument();
+    });
+  });
+
   it('rendert auch bei API-Fehler ohne Crash', async () => {
     server.use(
       http.get(`${BASE}/tenants`, () =>

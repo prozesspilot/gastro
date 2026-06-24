@@ -25,8 +25,8 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   // Mandanten-Liste lesen. Begründung: der Tenant-Selector ist die Voraussetzung,
   // um überhaupt einen Mandanten zu wählen — und `support` hat im A3-Rollenmodell
   // `tenants.read` (read-only Belege-Sicht je Mandant). Exponiert werden nur
-  // nicht-sensible Business-Metadaten (slug/display_name/package/deletion_status),
-  // keine PII. Schreib-/Lösch-Operationen bleiben anderswo `support`-gesperrt.
+  // nicht-sensible Business-Metadaten (slug/display_name/package/deletion_status/
+  // onboarding_status), keine PII. Schreib-/Lösch-Operationen bleiben anderswo `support`-gesperrt.
   app.get('/', async (req, reply) => {
     const tenants = await listTenantsForStaff(req.server.db);
     return reply.send(apiOk(tenants));

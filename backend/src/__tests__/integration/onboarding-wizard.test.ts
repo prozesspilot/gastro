@@ -262,6 +262,19 @@ describe('T016 — Wizard-Repository-Lifecycle (funktional)', () => {
     );
     expect(audit.rowCount ?? 0).toBeGreaterThanOrEqual(1);
 
+    // Generischer Step 2 (saveOnboardingStep) fasst tenants gar nicht an → Aktiv-Status bleibt.
+    await saveOnboardingStep(pool, {
+      tenantId: T_W,
+      token: session.token,
+      step: 2,
+      data: { advisor_system: 'lexware_office' },
+    });
+    const tStep2 = await pool.query<{ onboarding_status: string }>(
+      'SELECT onboarding_status FROM tenants WHERE id = $1',
+      [T_W],
+    );
+    expect(tStep2.rows[0].onboarding_status).toBe('activated');
+
     // complete darf 'activated' NICHT auf 'wizard_done' zurückstufen — Promotion läuft trotzdem.
     await completeOnboardingSession(pool, {
       tenantId: T_W,

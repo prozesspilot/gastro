@@ -50,6 +50,8 @@ interface MockOpts {
   } | null;
   /** Optionaler Spy: bekommt jedes ausgeführte SQL (für Query-Assertions). */
   onQuery?: (sql: string) => void;
+  /** Optionaler Spy: bekommt jedes redis.set (key, value) — für SumUp-State-Assertions. */
+  onRedisSet?: (key: string, value: string) => void;
 }
 
 function makeMockPool(opts: MockOpts = {}) {
@@ -96,14 +98,20 @@ function makeMockPool(opts: MockOpts = {}) {
 }
 
 /** Minimaler Redis-Mock für die SumUp-Brücke (T067): set + getdel. */
-function makeMockRedis() {
-  return { set: vi.fn(async () => 'OK'), getdel: vi.fn(async () => null) };
+function makeMockRedis(opts: MockOpts = {}) {
+  return {
+    set: vi.fn(async (key: string, value: string) => {
+      opts.onRedisSet?.(key, value);
+      return 'OK';
+    }),
+    getdel: vi.fn(async () => null),
+  };
 }
 
 async function buildTestApp(opts: MockOpts = {}) {
   const app = Fastify({ logger: false });
   app.decorate('db', makeMockPool(opts));
-  app.decorate('redis', makeMockRedis() as never);
+  app.decorate('redis', makeMockRedis(opts) as never);
   await app.register(fastifyCookie);
   await app.register(wizardStaffRoutes, { prefix: '/api/v1/wizard' });
   await app.register(wizardPublicRoutes, { prefix: '/api/v1/wizard' });
@@ -356,8 +364,9 @@ describe('POST /api/v1/wizard/:token/step/:n (public)', () => {
 
 // ── Öffentlich: SumUp-OAuth-Brücke (T067) ────────────────────────────────────
 describe('POST /api/v1/wizard/:token/oauth/sumup/start (public)', () => {
-  it('200 + redirect_url bei gültiger Session', async () => {
-    currentApp = await buildTestApp();
+  it('200 + redirect_url + schreibt Redis-State mit wizard_token + tenant_id', async () => {
+    const states: Array<{ key: string; value: string }> = [];
+    currentApp = await buildTestApp({ onRedisSet: (key, value) => states.push({ key, value }) });
     const r = await currentApp.inject({
       method: 'POST',
       url: `/api/v1/wizard/${TOKEN}/oauth/sumup/start`,
@@ -366,6 +375,15 @@ describe('POST /api/v1/wizard/:token/oauth/sumup/start (public)', () => {
     const body = JSON.parse(r.body);
     expect(typeof body.redirect_url).toBe('string');
     expect(body.redirect_url).toContain('state=');
+
+    // Der CSRF-State muss den Wizard-Flow markieren (wizard_token) + den aus der
+    // Session aufgelösten Tenant tragen — sonst landet der Callback-Redirect falsch
+    // bzw. die Tokens beim falschen Tenant.
+    const stateEntry = states.find((s) => s.key.startsWith('sumup:oauth:state:'));
+    expect(stateEntry).toBeDefined();
+    const payload = JSON.parse(stateEntry?.value ?? '{}');
+    expect(payload.wizard_token).toBe(TOKEN);
+    expect(payload.tenant_id).toBe(TENANT_UUID);
   });
 
   it('409 wenn Session bereits abgeschlossen', async () => {

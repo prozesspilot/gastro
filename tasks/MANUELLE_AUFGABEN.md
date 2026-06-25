@@ -14,6 +14,16 @@
 - **Was:** Backend baut die Magic-Link-URL der Wizard-Einladungs-Mail aus `SETUP_BASE_URL`. In Prod gesetzt auf `https://setup.prozesspilot.net`.
 - **Durchgeführt:** `.env.prod` um `SETUP_BASE_URL=https://setup.prozesspilot.net` ergänzt (Backup `.env.prod.bak-T017`) + `docker compose up -d --force-recreate backend`. Verifiziert: `printenv SETUP_BASE_URL` im Container korrekt, api/health + api/ready = 200.
 
+### ⏳ CHAT_BASE_URL in .env.prod setzen (T068)
+- **Priorität:** P2 (erst nötig, wenn echte Chat-Links rausgehen — abhängig von T072 Widget-Deploy)
+- **Was:** Backend baut die Chat-Magic-Link-URL der Einladungs-/Alarm-Mail aus `CHAT_BASE_URL` (analog `SETUP_BASE_URL`). Ohne Prod-Wert landet `http://localhost:5175` in der Mail.
+- **Schritte:**
+  1. `.env.prod` um `CHAT_BASE_URL=https://chat.prozesspilot.net` ergänzen (Backup wie bei T017)
+  2. `docker compose -f docker-compose.prod.yml up -d --force-recreate backend` (Memory: `--force-recreate` Pflicht)
+  3. Verifizieren: `printenv CHAT_BASE_URL` im Backend-Container korrekt
+- **Output:** `CHAT_BASE_URL=https://chat.prozesspilot.net`
+- **Dependencies:** T072 (chat.prozesspilot.net muss als echte Widget-App live sein, sonst zeigt der Link auf den Healthcheck-Stub)
+
 ### ⏳ Discord Developer Portal — App registrieren (T001)
 - **Priorität:** P0 (Login funktioniert sonst nicht)
 - **Was:** Discord-App "ProzessPilot Admin" registrieren

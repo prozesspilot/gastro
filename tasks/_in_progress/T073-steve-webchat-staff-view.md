@@ -52,5 +52,15 @@ geschützt, auf den aktiven Mandanten gescopet. **Keine neue App.**
 
 ---
 
-## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+## Lessons Learned (Implementierung 2026-06-25)
+- **Staff-Live = Polling, KEIN SSE:** Der `/api/v1/events`-SSE-Kanal liest den Tenant aus dem
+  Header `x-pp-tenant-id` — EventSource kann aber keine Header setzen. Für die Staff-Webapp daher
+  Polling (Chat-Liste 30 s, Thread 10 s) statt SSE. Der Widget-Wirt nutzt SSE via Token-im-Pfad
+  (`/:token/events`); für Staff gibt es keinen header-losen SSE-Pfad → Polling ist korrekt.
+- **Unread-Badge:** Layout pollt zusätzlich `listChats()` und summiert `unread_count` → Pending-Dot
+  auf `/chats` (gleiches Muster wie der requires_review-Badge auf `/belege`).
+- **Lokale Test-Falle (bekannt):** `npm test` bricht lokal an `_client.test.ts` + `ProtectedRoute.test.tsx`
+  (8 Tests) mit „localStorage undefined" — Node-lokal ohne `--localstorage-file` (Memory
+  `webapp-test-stack`: CI=Node 20 grün). NICHT durch T073 verursacht; Chat-Tests nutzen gemocktes
+  `getActiveTenantId`. tsc + build + die 7 neuen Chat-Tests sind grün.
+- Beleg-Nachrichten (chat_messages.beleg_id) verlinken in die bestehende `/belege/:id`-Detailseite.

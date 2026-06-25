@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
 import { listBelege } from '../api/belege';
+import { listChats } from '../api/chats';
 import TenantSelector from './TenantSelector';
 import UserMenu from './UserMenu';
 
@@ -21,6 +22,7 @@ const NAV: NavSpec[] = [
   { to: '/', icon: '⊞', label: 'Dashboard' },
   { to: '/belege', icon: '📋', label: 'Belege' },
   { to: '/belege/upload', icon: '📤', label: 'Beleg hochladen' },
+  { to: '/chats', icon: '💬', label: 'Chats' },
   { to: '/tenants', icon: '🏢', label: 'Mandanten' },
 ];
 
@@ -30,6 +32,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const breadcrumb = buildBreadcrumb(location.pathname);
   const [pendingCount, setPendingCount] = useState(0);
+  const [chatUnread, setChatUnread] = useState(0);
 
   // Pending-Badge: Belege im Status requires_review für den aktiven Tenant.
   useEffect(() => {
@@ -39,6 +42,26 @@ export default function Layout({ children }: { children: ReactNode }) {
       try {
         const res = await listBelege({ status: 'requires_review', pageSize: 1 });
         if (!cancelled) setPendingCount(res.pagination.total);
+      } catch {
+        // Badge ist optional
+      }
+    }
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // T073: Chat-Badge — Summe ungelesener Customer-Nachrichten für den aktiven Tenant.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!getActiveTenantId()) return;
+      try {
+        const chats = await listChats();
+        if (!cancelled) setChatUnread(chats.reduce((sum, c) => sum + (c.unread_count ?? 0), 0));
       } catch {
         // Badge ist optional
       }
@@ -70,14 +93,18 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-section" aria-label="Primäre Navigation">
-          {NAV.map((item) => (
-            <NavItem
-              key={item.to}
-              item={item}
-              showPendingDot={item.to === '/belege' && pendingCount > 0}
-              pendingCount={item.to === '/belege' ? pendingCount : 0}
-            />
-          ))}
+          {NAV.map((item) => {
+            const count =
+              item.to === '/belege' ? pendingCount : item.to === '/chats' ? chatUnread : 0;
+            return (
+              <NavItem
+                key={item.to}
+                item={item}
+                showPendingDot={count > 0}
+                pendingCount={count}
+              />
+            );
+          })}
         </nav>
 
         <nav
@@ -168,6 +195,7 @@ function buildBreadcrumb(path: string): ReactNode[] {
   const labelMap: Record<string, string> = {
     belege: 'Belege',
     upload: 'Beleg hochladen',
+    chats: 'Chats',
     tenants: 'Mandanten',
     settings: 'Einstellungen',
   };
@@ -178,8 +206,9 @@ function buildBreadcrumb(path: string): ReactNode[] {
     const seg = segments[i];
     currentPath += `/${seg}`;
     let label = labelMap[seg] ?? seg;
-    if (i === segments.length - 1 && segments[0] === 'belege' && segments.length === 2) {
-      label = `Beleg ${seg.slice(0, 8)}…`;
+    if (i === segments.length - 1 && segments.length === 2) {
+      if (segments[0] === 'belege') label = `Beleg ${seg.slice(0, 8)}…`;
+      else if (segments[0] === 'chats') label = `Chat ${seg.slice(0, 8)}…`;
     }
     const isLast = i === segments.length - 1;
     if (isLast) {

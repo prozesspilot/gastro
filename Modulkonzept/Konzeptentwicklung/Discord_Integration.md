@@ -3,6 +3,15 @@
 > **Status:** Erstfassung 2026-05-15
 > **Zielgruppe:** Andreas (Entwickler), Steve (Geschäftsführung), Anwalt (Subunternehmer-Liste + Datenschutz)
 > **Verhältnis zu anderen Dokumenten:** Setzt `00_Architektur_Hauptdokument.md` voraus. Wird referenziert von `Mitarbeiter_Webapp.md`, `M14_User_Verwaltung_Auth.md` und allen Konzept-Dokumenten, die Mitarbeiter-Workflows betreffen.
+>
+> **⚠️ ÜBERHOLT — Customer-Support-Bridge gestrichen (GF Steve, 2026-06-25):** Der Support läuft
+> **komplett über das Web-Chat**: der Wirt schreibt im Widget (`chat.prozesspilot.net`), Mitarbeiter
+> antworten in der **Mitarbeiter-Webapp** (`admin.prozesspilot.net/chats`, T073). Die in §1.1 („Bridge"),
+> §3.2 und §7 beschriebene **Customer-Chat-Bridge** und **„Reply-aus-Discord"** (Spiegeln der
+> Customer-Messages nach `#support-tickets`, Antworten aus dem Discord-Thread) wird **NICHT gebaut**.
+> Discord bleibt: Mitarbeiter-**Login** (M14, live), interne **Team-Koordination** und optionale
+> **System-Notifications** (Deploy/Ops/Uptime). Der Phase-C-Web-Chat (T068–T073, gebaut) ist damit die
+> finale Support-Architektur — `chat_messages` ist die Single Source of Truth, kein Discord-Mapping nötig.
 
 ---
 

@@ -1,5 +1,11 @@
-# T031 — Discord-Bot-Service (Notifications / Customer-Bridge)
+# T031 — Discord-Bot-Service (Notifications / ~~Customer-Bridge~~)
 
+> **⚠️ Scope-Reduktion (GF Steve, 2026-06-25):** Der **Customer-Support-Bridge-Teil ist gestrichen** —
+> Support läuft komplett über das Web-Chat (Wirt: Widget; Mitarbeiter: Webapp `/chats`, gebaut in T073).
+> Kein Spiegeln nach `#support-tickets`, kein „Reply-aus-Discord". Falls dieser Bot je reaktiviert wird,
+> nur noch für **interne Team-Koordination + System-Notifications** (Deploy/Ops/Uptime), NICHT als
+> Customer-Bridge. Siehe Konzept-Notiz oben in `Discord_Integration.md`.
+>
 > **Owner:** Andreas (Backend/Infra)
 > **Priorität:** P1 (Pilot — Team-Koordination + n8n/Task-Benachrichtigungen laufen über Discord)
 > **Dependencies:** profitiert von T024/T025 (Task-Events), aber eigenständig startbar

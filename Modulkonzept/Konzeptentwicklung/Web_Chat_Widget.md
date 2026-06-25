@@ -3,6 +3,15 @@
 > **Status:** Erstfassung 2026-05-15
 > **Zielgruppe:** Andreas (Frontend-Entwicklung), Steve (Customer-Kommunikation), Anwalt (Datenschutz-Hinweise)
 > **Verhältnis zu anderen Dokumenten:** Setzt `Discord_Integration.md` voraus (für Backend-Bridge). Wird referenziert von `Mitarbeiter_Webapp.md`, `M14_User_Verwaltung_Auth.md` (für Magic-Link-Auth-Flow).
+>
+> **⚠️ Umsetzungs-Update (Build-out, gebaut als T068–T073, 2026-06-25):** Auf der belege-Welt umgesetzt.
+> Abweichungen von dieser Erstfassung: **(1)** Das Widget IST der Beleg-**Eingangskanal** (Foto/PDF-Upload
+> → bestehender belege-Pfad), NICHT „kein Belegerfassungs-Kanal" (§1.2 überholt durch CLAUDE.md §3.6).
+> **(2)** Mitarbeiter antworten über die **Webapp** (`admin.prozesspilot.net/chats`), **NICHT über eine
+> Discord-Bridge** (GF-Entscheidung „alle über Web-Chat", 2026-06-25) — die „Discord-Backend-Bridge"
+> (§1.2) und die Discord-Spiegelung (§8) entfallen. **(3)** Live via SSE (`chat.message`) + Polling-Fallback.
+> **(4)** DB: `chat_sessions`/`chat_messages` (Migration 124/125, `sender_type`), ohne die Discord-Mapping-
+> Spalten der Erstfassung (§4).
 
 ---
 

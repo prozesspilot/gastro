@@ -33,6 +33,15 @@ export async function staffReplyHandler(
   if (!session) {
     return reply.code(404).send({ error: 'not_found', message: 'Chat-Session nicht gefunden.' });
   }
+  // In eine widerrufene/geschlossene Session zu antworten liefe ins Leere: der Wirt
+  // erreicht seinen Token nicht mehr (resolveChatSession → 410), sähe die Antwort nie.
+  // Das Lesen der Historie (staff-thread) bleibt dagegen für jeden Status erlaubt.
+  if (session.status !== 'active') {
+    return reply.code(409).send({
+      error: 'session_not_active',
+      message: 'Diese Chat-Session ist nicht mehr aktiv — bitte erst einen neuen Link erzeugen.',
+    });
+  }
 
   const message = await insertChatMessage(req.server.db, {
     tenantId,

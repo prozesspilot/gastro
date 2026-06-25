@@ -231,7 +231,23 @@ describe('GET /sessions/:id/messages + POST /sessions/:id/reply (Staff)', () => 
       payload: { text: 'Wir kümmern uns drum.' },
     });
     expect(r.statusCode).toBe(201);
-    expect(JSON.parse(r.body).message.sender_type).toBe('customer'); // Mock liefert generische Msg
+    // Mock liefert eine generische Nachricht zurück → hier nur „Nachricht existiert"
+    // prüfen. Dass Staff-Nachrichten sender_type='staff' tragen, deckt der echte
+    // DB-Integrationstest ab (webchat-messages.test.ts).
+    expect(JSON.parse(r.body).message).toBeDefined();
+  });
+
+  it('Reply: 409 in widerrufene Session (Wirt erreicht sie nicht mehr)', async () => {
+    currentApp = await buildTestApp({ sessionById: makeSession({ status: 'revoked' }) });
+    const r = await currentApp.inject({
+      method: 'POST',
+      url: `/api/v1/chat/sessions/${SESSION_UUID}/reply`,
+      cookies: { pp_auth: makeToken('mitarbeiter') },
+      headers: { 'x-pp-tenant-id': TENANT_UUID },
+      payload: { text: 'Hallo?' },
+    });
+    expect(r.statusCode).toBe(409);
+    expect(JSON.parse(r.body).error).toBe('session_not_active');
   });
 
   it('Reply: 422 bei leerem Text', async () => {

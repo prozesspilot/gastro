@@ -6,6 +6,10 @@
  * DEFINER-Lookup (T068) aufgelöst, dann wird auf den tenant-gescopten SSE-Kanal
  * subscribed (Pilot-Entscheidung: tenant-scoped; Heartbeat alle 30 s).
  *
+ * TODO (vor Multi-Session-pro-Tenant, T070+): Kanal auf session-scoped umstellen.
+ * Aktuell faktisch identisch, weil 124 genau EINEN aktiven Link pro Tenant erzwingt;
+ * bei mehreren parallelen Sessions je Tenant bekäme ein Wirt sonst fremde Threads.
+ *
  * Muster wie routes/sse.ts (Staff-Webapp), nur Token- statt Header-basiert.
  */
 import type { ServerResponse } from 'node:http';

@@ -116,6 +116,12 @@ const envSchema = z.object({
   // Port 5174 (5173 = Mitarbeiter-Webapp).
   SETUP_BASE_URL: z.string().default('http://localhost:5174'),
 
+  // ── T068: Web-Chat-Widget-Basis-URL ──────────────────────────────────────
+  // Basis-URL des Web-Chat-Widgets (chat.prozesspilot.net). Der Magic-Link wird
+  // als `${CHAT_BASE_URL}/${token}` gebaut. Dev: Widget-App läuft auf Port 5175
+  // (5173 = Mitarbeiter-Webapp, 5174 = Onboarding-Wizard).
+  CHAT_BASE_URL: z.string().default('http://localhost:5175'),
+
   // ── T018: DSGVO-Cleanup fuer POS-Credentials ───────────────────────────
   // Inaktive pos_credentials werden nach dieser Frist (Tage) endgueltig
   // geloescht. Default 30 Tage. Token sind kein Geschaeftsdaten-Bestandteil,

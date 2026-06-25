@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
 import { chatEventsHandler } from './handlers/chat-events.handler';
+import { chatUploadHandler } from './handlers/chat-upload.handler';
 import { createChatSessionHandler } from './handlers/create-session.handler';
 import { getChatSessionHandler } from './handlers/get-session.handler';
 import { listChatsHandler } from './handlers/list-chats.handler';
@@ -29,6 +30,8 @@ import { staffThreadHandler } from './handlers/staff-thread.handler';
 // Greift nur mit @fastify/rate-limit (Prod; im Test ignoriert). Verhindert zugleich
 // den CodeQL-Missing-Rate-Limiting-Alert (Memory codeql-missing-rate-limiting).
 const RL = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
+// Beleg-Upload großzügiger: der Wirt schickt evtl. mehrere Fotos am Stück.
+const RL_UPLOAD = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
 
 /** Staff-Endpoints (JWT-Cookie + Tenant-Context). */
 export async function chatStaffRoutes(app: FastifyInstance): Promise<void> {
@@ -48,4 +51,5 @@ export async function chatPublicRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { token: string } }>('/:token/messages', RL, sendMessageHandler);
   app.get<{ Params: { token: string } }>('/:token/messages', RL, listMessagesHandler);
   app.get<{ Params: { token: string } }>('/:token/events', RL, chatEventsHandler);
+  app.post<{ Params: { token: string } }>('/:token/belege', RL_UPLOAD, chatUploadHandler);
 }

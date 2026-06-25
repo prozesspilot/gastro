@@ -104,12 +104,17 @@ const LIST_COLUMNS = [
 
 const InsertBelegInputSchema = z.object({
   tenantId: z.string().uuid({ message: 'tenantId muss eine gültige UUID sein' }),
-  sourceChannel: z.literal('manual_upload'),
+  // T070: web_chat-Eingang (Wirt) zusätzlich zum Staff-Upload — rückwärts-kompatibel.
+  sourceChannel: z.enum(['manual_upload', 'web_chat']),
   fileObjectKey: z.string().min(1),
   fileMimeType: z.string().min(1),
   fileSizeBytes: z.number().int().nonnegative(),
   fileSha256: z.string().length(64),
-  uploadedByUserId: z.string().uuid({ message: 'uploadedByUserId muss eine gültige UUID sein' }),
+  // Nur beim Staff-Upload gesetzt; beim web_chat-Eingang (Wirt, kein Account) NULL.
+  uploadedByUserId: z
+    .string()
+    .uuid({ message: 'uploadedByUserId muss eine gültige UUID sein' })
+    .nullable(),
   originalFilename: z.string().min(1),
 });
 
@@ -195,12 +200,16 @@ export async function insertBeleg(
       isDuplicate = false;
 
       // B1: Audit-Log in derselben Tx (GoBD-Atomicity)
+      // T070: Staff-Upload → actor 'staff'; web_chat-Eingang (uploadedByUserId NULL)
+      // → actor 'customer' (Wirt, kein Account). AuditActor.id erlaubt null.
       await logAuditEvent(client, {
         tenantId: parsed.tenantId,
         entityType: 'beleg',
         entityId: beleg.id,
         eventType: 'beleg.uploaded',
-        actor: { type: 'staff', id: parsed.uploadedByUserId },
+        actor: parsed.uploadedByUserId
+          ? { type: 'staff', id: parsed.uploadedByUserId }
+          : { type: 'customer', id: null },
         payloadAfter: {
           source_channel: parsed.sourceChannel,
           file_mime_type: parsed.fileMimeType,
@@ -354,7 +363,7 @@ export async function undeleteBelegBySha256(
   pool: Pool,
   tenantId: string,
   sha256: string,
-  actor: { type: 'staff' | 'system' | 'customer'; id: string },
+  actor: { type: 'staff' | 'system' | 'customer'; id: string | null },
 ): Promise<DbBeleg | null> {
   const client = await pool.connect();
   try {
@@ -407,6 +416,7 @@ export async function getBelegById(
   pool: Pool,
   tenantId: string,
   id: string,
+  opts: { includeDeleted?: boolean } = {},
 ): Promise<DbBeleg | null> {
   const client = await pool.connect();
   try {
@@ -416,8 +426,12 @@ export async function getBelegById(
     // T015: Soft-deleted Belege werden im Detail-Endpoint NICHT mehr zurueck-
     // gegeben (UI soll sie nicht oeffnen koennen). Hart-Loeschung erfolgt
     // erst nach Aufbewahrungsfrist via separater Cron-Job.
+    // T070: opts.includeDeleted=true für den Upload-Dedup-Pfad — dort muss auch ein
+    // (noch) soft-gelöschter Beleg als Duplikat erkannt werden (kein neuer Insert).
     const result = await client.query<DbBeleg>(
-      'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+      opts.includeDeleted
+        ? 'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2'
+        : 'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
       [id, tenantId],
     );
 

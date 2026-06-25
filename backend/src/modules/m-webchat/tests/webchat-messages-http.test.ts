@@ -273,3 +273,18 @@ describe('GET /sessions/:id/messages + POST /sessions/:id/reply (Staff)', () => 
     expect(r.statusCode).toBe(401);
   });
 });
+
+// ── Wirt: POST /:token/belege (T070, Route-Wiring) ───────────────────────────
+describe('POST /api/v1/chat/:token/belege (Wirt — Upload)', () => {
+  it('404 bei unbekanntem Token (Resolve vor Datei-Parse)', async () => {
+    currentApp = await buildTestApp({ sessionByToken: null });
+    const r = await currentApp.inject({ method: 'POST', url: `/api/v1/chat/${TOKEN}/belege` });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('410 bei widerrufenem Token', async () => {
+    currentApp = await buildTestApp({ sessionByToken: makeSession({ status: 'revoked' }) });
+    const r = await currentApp.inject({ method: 'POST', url: `/api/v1/chat/${TOKEN}/belege` });
+    expect(r.statusCode).toBe(410);
+  });
+});

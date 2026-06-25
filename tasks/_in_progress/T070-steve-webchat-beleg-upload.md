@@ -57,11 +57,24 @@ nur die Stellen anpassen, an denen der Wirt **kein Staff-User** ist.
 ---
 
 ## Offene Fragen (während der Bearbeitung)
-- `insertBeleg` lockern vs. separate Funktion → **lockern** (entschieden); falls beim Bau Risiken
-  auftauchen, hier dokumentieren statt raten.
-- Beleg-Status-`emit` in den Worker-Pfad: Teil dieser Task oder Folge-Mini-Task? Beim Bau entscheiden.
+- `insertBeleg` lockern vs. separate Funktion → **gelockert** (1 SSoT): `sourceChannel`
+  `z.enum(['manual_upload','web_chat'])`, `uploadedByUserId` nullable, Audit-Actor konditional
+  (`staff` mit id / `customer` mit null). M01-Verhalten unverändert.
+- **Beleg-Status-`emit` in den OCR-Worker → als Folge-Mini-Task ausgegliedert** (nicht in T070).
+  Begründung: berührt den OCR-Worker/M03-Pfad (eigener Scope/Review). Der Wirt bekommt schon
+  Live-Feedback über das `chat.message`-Event beim Upload (T069-SSE). Live-`beleg.status`
+  (extracting→extracted→categorized) ist die Folge-Verfeinerung. **TODO: Backlog-Task anlegen.**
 
 ---
 
-## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+## Lessons Learned (Implementierung 2026-06-25)
+- **DRY statt Duplikat:** Die M01-Upload-Pipeline (Magic-Bytes, SHA256-Dedup/Undelete, MinIO,
+  insertBeleg, OCR-Enqueue) wurde aus `upload.handler.ts` in den geteilten Service
+  `m01-receipt-intake/services/beleg-upload.service.ts` (`processBelegUpload`) extrahiert. Beide
+  Eingänge (Staff `manual_upload`, Wirt `web_chat`) nutzen ihn; M01-Handler hält nur noch
+  Auth/Rolle/Tenant. **Netto-Gewinn:** der zuvor ungetestete M01-Upload-Pfad hat jetzt
+  Test-Abdeckung (Integrationstest deckt beide Kanäle ab).
+- Service liefert `{ ok:false, code, body }` statt zu werfen → Handler sendet 1:1 als HTTP-Antwort
+  (M01-Response-Form unverändert: 201 neu / 200 dup+undelete).
+- Integrationstest nutzt **Fake-S3** (`{ send: async ()=>({}) }`) + `vi.mock` der OCR-Queue → kein
+  MinIO/Redis nötig; läuft als pp (kein gastro_app-Grant), daher keine Parallel-DDL-Kollision.

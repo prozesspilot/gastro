@@ -61,5 +61,15 @@ fotografiert am Handy).
 
 ---
 
-## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+## Lessons Learned (Implementierung 2026-06-25)
+- **CI-Job in T071 (nicht T072):** Damit die App schon beim Merge getestet ist, wurde der
+  `web-chat-widget`-Job (tsc + vitest + build) gleich hier in `ci-backend.yml` ergänzt
+  (gespiegelt vom `onboarding-wizard`-Job). T072 macht nur noch Docker/nginx/Caddy/Deploy.
+- **jsdom-Fallen:** `EventSource` existiert nicht in jsdom → SSE-Effekt per `typeof EventSource`
+  geguardet (Polling-Fallback trägt die Tests). `scrollIntoView` fehlt ebenfalls → optionaler
+  Method-Call (`?.scrollIntoView?.()`). `global` ist im Browser-tsconfig untypisiert → in Tests
+  `globalThis.fetch`.
+- **a11y:** Verstecktes File-Input + Button dürfen NICHT dasselbe `aria-label` tragen (sonst
+  `getByLabelText` mehrdeutig) — Input `aria-hidden`, Button trägt das Label.
+- Stack 1:1 wie onboarding-wizard (React 18 + Vite 5 + vitest 2.1 + jsdom 25.0.1-Pin), Port 5175,
+  `index.css`-Design-Tokens übernommen. SSE-Empfang `chat.message` + Polling-Fallback (10 s).

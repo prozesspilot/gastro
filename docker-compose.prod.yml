@@ -1,6 +1,6 @@
 # DECISION: Interne Services (postgres, redis, minio) sind nicht nach außen
 # erreichbar. Caddy (System-Service, nicht Container) macht TLS-Terminierung
-# auf Port 80/443 und routet zu den Containern auf localhost:8080-8083.
+# auf Port 80/443 und routet zu den Containern auf localhost:8080-8084.
 #
 # T012: webapp-Ports von 80/443 auf 127.0.0.1:8081:80 geaendert,
 # damit Caddy die Ports 80+443 halten kann.
@@ -10,9 +10,9 @@
 # (Non-Swarm) stillschweigend ignoriert.
 #
 # IONOS 4 GB RAM Budget (Phase 4):
-#   postgres 1G, n8n 800M, backend 768M, redis 256M, minio 256M, webapp 128M,
-#   stubs 32M (1 Container für setup+chat) = ~3.3 GB Container + ~700 MB OS-Reserve.
-#   4G Swap als Notfall-Puffer.
+#   postgres 1G, backend 768M, redis 256M, minio 256M, webapp 128M,
+#   onboarding-wizard 128M, web-chat-widget 128M (T072, ersetzt den 32M-chat-Stub).
+#   n8n per `profiles` deaktiviert (T064, spart 800M). 4G Swap als Notfall-Puffer.
 
 networks:
   internal:
@@ -190,33 +190,32 @@ services:
     mem_limit: 128m
     mem_reservation: 64m
 
-  # ── Healthcheck-Stub: Platzhalter für chat.* ────────────────────────────────
-  # T012 Review-Fix NH2: ursprünglich setup-stub + chat-stub konsolidiert.
-  # T017: setup.* übernimmt jetzt der onboarding-wizard-Service → der Stub hält
-  # nur noch chat.prozesspilot.net warm (bis zum Web-Chat-Widget-Task).
-  # Caddy routet:
-  #   chat.prozesspilot.net → 127.0.0.1:8083 → Container :8080 (bis Widget-Task)
-  stubs:
-    # T012 Review-Fix B2a: image:-Direktive ergänzt.
-    image: ghcr.io/prozesspilot/gastro/healthcheck-stub:latest
+  # ── Web-Chat-Widget (chat.prozesspilot.net) ─────────────────────────────────
+  # T072: ersetzt den chat-Healthcheck-Stub. Static-Build (Vite) hinter nginx;
+  # nginx proxyt /api/ → backend:3000 (inkl. SSE) und liefert /<token> via
+  # SPA-Fallback. Caddy routet chat.prozesspilot.net → 127.0.0.1:8084 → Container :80.
+  # RAM (~128 MB) gedeckt durch die per T064 freigewordene n8n-Reservierung.
+  web-chat-widget:
+    image: ghcr.io/prozesspilot/gastro/web-chat-widget:latest
     pull_policy: always
     build:
-      context: ./infra/healthcheck-stub
+      context: ./web-chat-widget
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "127.0.0.1:8083:8080"
+      - "127.0.0.1:8084:80"
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - external
-    # T012 Review-Fix M4: 127.0.0.1 statt localhost — musl-libc resolved
-    # localhost ggf. erst zu ::1 (IPv6), Caddy-Alpine bindet aber auf 0.0.0.0 IPv4.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-    mem_limit: 32m
-    mem_reservation: 16m
+    mem_limit: 128m
+    mem_reservation: 64m
 
   # ── n8n Workflow-Engine ────────────────────────────────────────────────────
   # T064 (2026-06-18): n8n ist im Pilot eingefroren/ungenutzt und crashte auf Prod

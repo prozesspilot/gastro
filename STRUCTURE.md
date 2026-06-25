@@ -81,7 +81,7 @@ prozesspilot/                              ← Repo-Root (lokaler Ordnername; Gi
 │   ├── runbook/                           ← Deployment, Rollback, Oncall, Onboarding
 │   ├── backup/                            ← Postgres + S3 Backup-Skripte + Restore-Test
 │   ├── caddy/                             ← Caddy Reverse-Proxy-Config
-│   ├── healthcheck-stub/                  ← Health-Check-Stub
+│   ├── healthcheck-stub/                  ← Health-Check-Stub (ungenutzt seit T072)
 │   ├── decisions/                         ← ADRs (PDF-Engine, Mail-Provider, Plugin-Sandbox)
 │   ├── security/                          ← Security-Checklist, Incident-Response
 │   ├── scripts/                           ← Infra-Skripte

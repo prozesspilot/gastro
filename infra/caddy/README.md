@@ -20,7 +20,7 @@ und routet Anfragen an die jeweiligen Docker-Container.
 | `admin.prozesspilot.net` | `localhost:8081` (Mitarbeiter-Webapp) | aktiv |
 | `setup.prozesspilot.net` | `localhost:8082` (Onboarding-Wizard) | Stub bis T016 |
 | `api.prozesspilot.net` | `localhost:8080` (Backend-API) | aktiv |
-| `chat.prozesspilot.net` | `localhost:8083` (Web-Chat-Widget) | Stub bis Widget-Task |
+| `chat.prozesspilot.net` | `localhost:8084` (Web-Chat-Widget) | aktiv (T071/T072, Stub abgelöst) |
 
 ## Caddy auf dem Server reloaden
 

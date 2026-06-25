@@ -187,16 +187,23 @@ export async function processBelegUpload(
     if (existing.deleted_at !== null) {
       const undeleted = await undeleteBelegBySha256(db, tenantId, fileSha256, undeleteActor);
       if (undeleted !== null) {
+        logger.info(
+          { belegId: undeleted.id },
+          '[m01] Soft-deleted Beleg via SHA256-Reupload reaktiviert',
+        );
         return { ok: true, beleg: undeleted, isDuplicate: false, isUndeleted: true };
       }
-      // Undelete-Race: wie normales Duplikat behandeln.
+      // Undelete-Race (parallel reaktiviert/verändert) → unten als Duplikat behandeln.
     }
-    // Duplikat: vollständigen Beleg laden (für einheitliches Ergebnis).
-    const full = await getBelegById(db, tenantId, existing.id);
+    // Existierender Beleg (aktiv ODER nach Undelete-Race noch soft-deleted) → als
+    // Duplikat zurückgeben, OHNE neuen MinIO-Write (Parität zu main: keine verwaisten
+    // Objekte). includeDeleted, damit auch der soft-deleted Race-Fall ein vollständiges
+    // Ergebnis liefert statt zur Upload-Strecke durchzufallen.
+    const full = await getBelegById(db, tenantId, existing.id, { includeDeleted: true });
     if (full) {
       return { ok: true, beleg: full, isDuplicate: true, isUndeleted: false };
     }
-    // (Edge: existing aber nicht ladbar — z. B. weiterhin soft-deleted → neu inserten.)
+    // (Theoretisch: Row zwischenzeitlich hart gelöscht — extrem selten → neuer Upload.)
   }
 
   if (!s3) {

@@ -19,6 +19,7 @@ import {
   listChatMessages,
 } from '../../modules/m-webchat/services/webchat.repository';
 import { processBelegUpload } from '../../modules/m01-receipt-intake/services/beleg-upload.service';
+import { softDeleteBeleg } from '../../modules/m01-receipt-intake/services/beleg.repository';
 
 vi.mock('../../core/queue/ocr-queue', () => ({ enqueueOcrJob: vi.fn(async () => undefined) }));
 
@@ -196,5 +197,40 @@ describe('T070 — Web-Chat-Upload (Wirt) → belege-Pfad', () => {
     });
     expect(badMime.ok).toBe(false);
     if (!badMime.ok) expect(badMime.code).toBe(415);
+  });
+
+  it('Undelete: soft-gelöscht + gleiche Bytes erneut → isUndeleted, gleiche ID, reaktiviert', async () => {
+    if (!dbAvailable) return;
+    const buf = pngBuffer('undelete');
+    const first = await processBelegUpload(deps(), {
+      tenantId: T_U,
+      sourceChannel: 'web_chat',
+      fileBuffer: buf,
+      filename: 'u.png',
+      uploadedByUserId: null,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    // Soft-Delete, dann gleiche Bytes erneut → Reaktivierung statt zweitem Insert
+    // (UNIQUE tenant_id+file_sha256). Genau der refactorte Undelete-Pfad.
+    await softDeleteBeleg(pool, T_U, first.beleg.id, STAFF_U, 'test');
+    const again = await processBelegUpload(deps(), {
+      tenantId: T_U,
+      sourceChannel: 'web_chat',
+      fileBuffer: buf,
+      filename: 'u.png',
+      uploadedByUserId: null,
+    });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.isUndeleted).toBe(true);
+    expect(again.beleg.id).toBe(first.beleg.id);
+
+    const row = await pool.query<{ deleted_at: Date | null }>(
+      'SELECT deleted_at FROM belege WHERE id = $1',
+      [first.beleg.id],
+    );
+    expect(row.rows[0].deleted_at).toBeNull();
   });
 });

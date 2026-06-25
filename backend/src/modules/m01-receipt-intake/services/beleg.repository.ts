@@ -416,6 +416,7 @@ export async function getBelegById(
   pool: Pool,
   tenantId: string,
   id: string,
+  opts: { includeDeleted?: boolean } = {},
 ): Promise<DbBeleg | null> {
   const client = await pool.connect();
   try {
@@ -425,8 +426,12 @@ export async function getBelegById(
     // T015: Soft-deleted Belege werden im Detail-Endpoint NICHT mehr zurueck-
     // gegeben (UI soll sie nicht oeffnen koennen). Hart-Loeschung erfolgt
     // erst nach Aufbewahrungsfrist via separater Cron-Job.
+    // T070: opts.includeDeleted=true für den Upload-Dedup-Pfad — dort muss auch ein
+    // (noch) soft-gelöschter Beleg als Duplikat erkannt werden (kein neuer Insert).
     const result = await client.query<DbBeleg>(
-      'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+      opts.includeDeleted
+        ? 'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2'
+        : 'SELECT * FROM belege WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
       [id, tenantId],
     );
 

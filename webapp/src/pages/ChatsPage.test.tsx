@@ -63,6 +63,14 @@ describe('ChatsPage', () => {
     await waitFor(() => expect(screen.getByText(/Noch keine Chats/i)).toBeInTheDocument());
   });
 
+  it('zeigt Fehlermeldung bei Server-Fehler', async () => {
+    server.use(http.get(`${BASE}/chat/sessions`, () => new HttpResponse(null, { status: 500 })));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByText(/konnten nicht geladen werden/i)).toBeInTheDocument(),
+    );
+  });
+
   it('Klick auf einen Chat navigiert zur Detailseite', async () => {
     server.use(
       http.get(`${BASE}/chat/sessions`, () =>

@@ -8,6 +8,7 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
+import { ApiError } from '../api/_client';
 import { type ChatMessage, getChatMessages, sendStaffReply } from '../api/chats';
 import NoTenantHint from '../components/NoTenantHint';
 import { useToast } from '../components/ToastProvider';
@@ -94,7 +95,15 @@ export default function ChatDetailPage() {
       merge([await sendStaffReply(id, t)]);
       setText('');
     } catch (err: unknown) {
-      toast('error', err instanceof Error ? err.message : 'Antwort konnte nicht gesendet werden.');
+      // 409 = Session nicht mehr aktiv → freundlicher, handlungsleitender Hinweis
+      // statt des technischen Backend-Strings.
+      const msg =
+        err instanceof ApiError && err.status === 409
+          ? 'Diese Chat-Session ist nicht mehr aktiv — bitte einen neuen Chat-Link erzeugen.'
+          : err instanceof Error
+            ? err.message
+            : 'Antwort konnte nicht gesendet werden.';
+      toast('error', msg);
     } finally {
       setBusy(false);
     }
@@ -169,7 +178,10 @@ export default function ChatDetailPage() {
 
 function MessageRow({ m }: { m: ChatMessage }) {
   const isStaff = m.sender_type === 'staff';
-  const isBeleg = m.beleg_id !== null && (m.body === null || m.body === '');
+  // Beleg-Link IMMER zeigen, sobald beleg_id gesetzt ist; ein optionaler Body
+  // (z. B. spätere Bildunterschrift) wird zusätzlich darunter gerendert.
+  const hasBeleg = m.beleg_id !== null;
+  const hasBody = m.body !== null && m.body !== '';
   return (
     <div style={{ display: 'flex', justifyContent: isStaff ? 'flex-end' : 'flex-start' }}>
       <div
@@ -186,12 +198,18 @@ function MessageRow({ m }: { m: ChatMessage }) {
         <div style={{ fontSize: '0.7rem', opacity: 0.75, marginBottom: 2 }}>
           {SENDER_LABEL[m.sender_type] ?? m.sender_type} · {fmtTime(m.created_at)}
         </div>
-        {isBeleg ? (
-          <Link to={`/belege/${m.beleg_id}`} style={{ color: isStaff ? '#fff' : 'inherit' }}>
+        {hasBeleg && (
+          <Link
+            to={`/belege/${m.beleg_id}`}
+            style={{ color: isStaff ? '#fff' : 'inherit', display: 'block' }}
+          >
             📎 Beleg ansehen
           </Link>
-        ) : (
-          <span style={{ whiteSpace: 'pre-wrap' }}>{m.body}</span>
+        )}
+        {hasBody && (
+          <span style={{ whiteSpace: 'pre-wrap', display: 'block', marginTop: hasBeleg ? 4 : 0 }}>
+            {m.body}
+          </span>
         )}
       </div>
     </div>

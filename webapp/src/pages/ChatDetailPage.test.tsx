@@ -85,4 +85,34 @@ describe('ChatDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Senden' }));
     expect(await screen.findByText('Meine Antwort')).toBeInTheDocument();
   });
+
+  it('Dedup: Reply mit bereits vorhandener id dupliziert nicht', async () => {
+    server.use(
+      http.get(`${BASE}/chat/sessions/sess-1/messages`, () =>
+        HttpResponse.json({ messages: [msg({ id: 'm-x', body: 'Vorhanden' })] }),
+      ),
+      http.post(`${BASE}/chat/sessions/sess-1/reply`, () =>
+        HttpResponse.json({ message: msg({ id: 'm-x', body: 'Vorhanden' }) }, { status: 201 }),
+      ),
+    );
+    renderDetail();
+    await screen.findByText('Vorhanden');
+    await userEvent.type(await screen.findByLabelText('Antwort'), 'egal');
+    await userEvent.click(screen.getByRole('button', { name: 'Senden' }));
+    await waitFor(() => expect(screen.getAllByText('Vorhanden')).toHaveLength(1));
+  });
+
+  it('Beleg-Nachricht mit Body zeigt Link UND Text', async () => {
+    server.use(
+      http.get(`${BASE}/chat/sessions/sess-1/messages`, () =>
+        HttpResponse.json({
+          messages: [msg({ id: 'mb', body: 'Hier mein Beleg', beleg_id: 'b-9' })],
+        }),
+      ),
+    );
+    renderDetail();
+    const link = await screen.findByRole('link', { name: /Beleg ansehen/i });
+    expect(link).toHaveAttribute('href', '/belege/b-9');
+    expect(screen.getByText('Hier mein Beleg')).toBeInTheDocument();
+  });
 });

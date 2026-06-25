@@ -92,26 +92,47 @@ export async function createChatSession(
       return { session: existing.rows[0], created: false };
     }
 
+    // Race-sicher: zwischen dem SELECT oben und dem INSERT kann ein paralleler
+    // Create (Doppel-Klick) bereits eine aktive Session angelegt haben → der
+    // partielle Unique-Index uq_chat_sessions_active_tenant greift. ON CONFLICT
+    // DO NOTHING + Re-Select statt eines 23505-Fehlers (500). So hält die
+    // Idempotenz-Zusage auch im Race, ohne die harte „ein aktiver Link"-Garantie
+    // aufzuweichen.
     const token = generateChatToken();
-    const res = await client.query<DbChatSession>(
+    const inserted = await client.query<DbChatSession>(
       `INSERT INTO chat_sessions (tenant_id, token, trigger_type, trigger_reference_id)
        VALUES ($1, $2, $3, $4)
+       ON CONFLICT (tenant_id) WHERE status = 'active' DO NOTHING
        RETURNING *`,
       [input.tenantId, token, input.triggerType, input.triggerReferenceId ?? null],
     );
-    const session = res.rows[0];
 
-    await logAuditEvent(client, {
-      tenantId: input.tenantId,
-      entityType: 'chat_session',
-      entityId: session.id,
-      eventType: 'chat_session.created',
-      actor: input.actor,
-      payloadAfter: { trigger_type: input.triggerType },
-    });
+    if (inserted.rows[0]) {
+      const session = inserted.rows[0];
+      await logAuditEvent(client, {
+        tenantId: input.tenantId,
+        entityType: 'chat_session',
+        entityId: session.id,
+        eventType: 'chat_session.created',
+        actor: input.actor,
+        payloadAfter: { trigger_type: input.triggerType },
+      });
+      await client.query('COMMIT');
+      return { session, created: true };
+    }
 
+    // Konflikt: parallel wurde bereits eine aktive Session angelegt → diese laden
+    // (kein zweiter Audit-Event, da kein neuer Datensatz entstand).
+    const raced = await client.query<DbChatSession>(
+      "SELECT * FROM chat_sessions WHERE tenant_id = $1 AND status = 'active' LIMIT 1",
+      [input.tenantId],
+    );
     await client.query('COMMIT');
-    return { session, created: true };
+    const racedSession = raced.rows[0];
+    if (!racedSession) {
+      throw new Error('chat_session: aktive Session nach ON CONFLICT nicht auffindbar');
+    }
+    return { session: racedSession, created: false };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

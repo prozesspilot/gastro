@@ -169,6 +169,29 @@ describe('T068 — Web-Chat-Session-Repository-Lifecycle (funktional)', () => {
     const none = await getChatSessionByToken(pool, 'definitiv-kein-gueltiger-token');
     expect(none).toBeNull();
   });
+
+  it('paralleler Create ist race-sicher: genau eine aktive Session, kein 500 (S1/S2)', async () => {
+    if (!dbAvailable) return;
+    // Ausgangslage: keine aktive Session (vorherige Tests können eine offen gelassen haben).
+    await pool.query(
+      "UPDATE chat_sessions SET status='revoked', revoked_at=now() WHERE tenant_id=$1 AND status='active'",
+      [T_C],
+    );
+    // Zwei echt nebenläufige Creates (eigene Pool-Connections) — sie rennen gegen den
+    // partiellen Unique-Index uq_chat_sessions_active_tenant.
+    const [a, b] = await Promise.all([
+      createChatSession(pool, { tenantId: T_C, triggerType: 'staff_manual', actor: ACTOR }),
+      createChatSession(pool, { tenantId: T_C, triggerType: 'staff_manual', actor: ACTOR }),
+    ]);
+    // Beide kehren ohne Fehler zurück und zeigen auf DIESELBE Session.
+    expect(a.session.id).toBe(b.session.id);
+    // Und es existiert genau EINE aktive Session für den Tenant.
+    const active = await pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM chat_sessions WHERE tenant_id=$1 AND status='active'",
+      [T_C],
+    );
+    expect(active.rows[0].n).toBe(1);
+  });
 });
 
 describe('T068 — RLS + SECURITY DEFINER unter gastro_app (NOBYPASSRLS)', () => {
@@ -213,6 +236,23 @@ describe('T068 — RLS + SECURITY DEFINER unter gastro_app (NOBYPASSRLS)', () =>
     });
     const count = await asGastroApp(async (c) => {
       await c.query('SELECT id FROM get_chat_session_by_token($1)', [session.token]);
+      const res = await c.query('SELECT id FROM chat_sessions WHERE token = $1', [session.token]);
+      return res.rowCount;
+    });
+    expect(count).toBe(0);
+  });
+
+  it('Session von Tenant A ist unter FALSCHEM Tenant-Context (B) unsichtbar (S3, RLS)', async () => {
+    if (!dbAvailable) return;
+    const { session } = await createChatSession(pool, {
+      tenantId: T_C,
+      triggerType: 'staff_manual',
+      actor: ACTOR,
+    });
+    // Fremder Tenant-Context: Policy tenant_id = current_tenant_id() greift → 0 Zeilen.
+    const T_OTHER = '0c0c0c0c-0068-4068-8068-00000000b000';
+    const count = await asGastroApp(async (c) => {
+      await c.query("SELECT set_config('app.current_tenant', $1, true)", [T_OTHER]);
       const res = await c.query('SELECT id FROM chat_sessions WHERE token = $1', [session.token]);
       return res.rowCount;
     });

@@ -23,7 +23,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -101,7 +101,7 @@ jobs:
     # baut der manuelle Lauf nur Images und deployt nie (Recovery unmöglich).
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: SSH Deploy on IONOS
         uses: appleboy/ssh-action@v1

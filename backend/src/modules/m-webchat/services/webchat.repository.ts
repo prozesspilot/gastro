@@ -10,7 +10,14 @@
 import { randomBytes } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { type AuditActor, logAuditEvent } from '../../../core/audit/audit-log';
-import type { DbChatSession } from '../webchat.types';
+import { sseManager } from '../../../core/sse/sse.manager';
+import {
+  type ChatSenderType,
+  type DbChatMessage,
+  type DbChatSession,
+  type StaffChatListItem,
+  toPublicChatMessage,
+} from '../webchat.types';
 
 /** 32 Zeichen Base64URL = 192 Bit Entropie (wie Wizard-Token, Spec §6.1). */
 export function generateChatToken(): string {
@@ -191,6 +198,171 @@ export async function revokeChatSession(
 
     await client.query('COMMIT');
     return session;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chat-Nachrichten (T069, Migration 125)
+// ---------------------------------------------------------------------------
+
+export interface InsertChatMessageInput {
+  tenantId: string;
+  sessionId: string;
+  senderType: ChatSenderType;
+  /** Nur bei sender_type='staff' gesetzt. */
+  senderUserId?: string | null;
+  body?: string | null;
+  /** Verknüpfter Beleg (Foto-Upload), gesetzt in T070. */
+  belegId?: string | null;
+}
+
+/**
+ * Schreibt eine Chat-Nachricht (Transaktion + RLS-Context) und bumpt
+ * last_activity_at der Session. NACH dem Commit wird das Live-Event über den
+ * SSE-Manager an die Subscriber des Tenant-Kanals gepusht (Wirt /:token/events +
+ * Staff /events).
+ *
+ * Bewusst KEIN Audit-Log pro Nachricht: Chat-Inhalte sind Support-Kommunikation
+ * (kein GoBD-Geschäftsvorfall) und würden sonst PII (den Nachrichtentext) ins
+ * audit_log schreiben (CLAUDE.md §6.6/§9 — keine PII in Logs).
+ */
+export async function insertChatMessage(
+  pool: Pool,
+  input: InsertChatMessageInput,
+): Promise<DbChatMessage> {
+  const client = await pool.connect();
+  let message: DbChatMessage;
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+    const res = await client.query<DbChatMessage>(
+      `INSERT INTO chat_messages
+         (tenant_id, session_id, sender_type, sender_user_id, body, beleg_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.sessionId,
+        input.senderType,
+        input.senderUserId ?? null,
+        input.body ?? null,
+        input.belegId ?? null,
+      ],
+    );
+    message = res.rows[0];
+    await client.query('UPDATE chat_sessions SET last_activity_at = now() WHERE id = $1', [
+      input.sessionId,
+    ]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+  // Live-Zustellung (best-effort, in-memory) NACH dem Commit, damit Subscriber
+  // nur committete Nachrichten sehen.
+  sseManager.emit(input.tenantId, 'chat.message', toPublicChatMessage(message));
+  return message;
+}
+
+/** Liest den Nachrichtenverlauf einer Session (chronologisch, älteste zuerst). */
+export async function listChatMessages(
+  pool: Pool,
+  input: { tenantId: string; sessionId: string },
+): Promise<DbChatMessage[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+    const res = await client.query<DbChatMessage>(
+      'SELECT * FROM chat_messages WHERE session_id = $1 ORDER BY created_at ASC',
+      [input.sessionId],
+    );
+    await client.query('COMMIT');
+    return res.rows;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Lädt eine Session per id im Tenant-Context (RLS-gescopet) — null wenn fremd/unbekannt. */
+export async function getChatSessionById(
+  pool: Pool,
+  input: { tenantId: string; sessionId: string },
+): Promise<DbChatSession | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+    const res = await client.query<DbChatSession>('SELECT * FROM chat_sessions WHERE id = $1', [
+      input.sessionId,
+    ]);
+    await client.query('COMMIT');
+    return res.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Markiert ungelesene Customer-Nachrichten als gelesen (Staff öffnet den Thread). */
+export async function markCustomerMessagesRead(
+  pool: Pool,
+  input: { tenantId: string; sessionId: string },
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+    await client.query(
+      `UPDATE chat_messages SET read_at = now()
+        WHERE session_id = $1 AND sender_type = 'customer' AND read_at IS NULL`,
+      [input.sessionId],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Staff-Übersicht: alle Chat-Sessions des (gewählten) Tenants mit Zähler-Metadaten. */
+export async function listChatsForStaff(
+  pool: Pool,
+  tenantId: string,
+): Promise<StaffChatListItem[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+    const res = await client.query<StaffChatListItem>(
+      `SELECT s.id,
+              s.status,
+              s.created_at,
+              s.last_activity_at,
+              (SELECT max(m.created_at) FROM chat_messages m WHERE m.session_id = s.id)
+                AS last_message_at,
+              (SELECT count(*) FROM chat_messages m
+                 WHERE m.session_id = s.id AND m.sender_type = 'customer' AND m.read_at IS NULL)::int
+                AS unread_count
+         FROM chat_sessions s
+        ORDER BY s.last_activity_at DESC`,
+    );
+    await client.query('COMMIT');
+    return res.rows;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

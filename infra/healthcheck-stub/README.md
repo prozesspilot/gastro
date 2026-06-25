@@ -11,13 +11,14 @@ einfachen HTML-Seite und einem `/health`-Endpoint.
 
 ## Aktueller Einsatz
 
-Ein einziger Container (`stubs`-Service in `docker-compose.prod.yml`) hört
-auf Port 8080 und bekommt zwei Port-Bindings:
+**UNGENUTZT seit T072 (2026-06-25).** Beide vormals gestubbten Subdomains haben jetzt
+echte Container — der `stubs`-Service wurde aus `docker-compose.prod.yml` entfernt
+(und der Build-Step aus dem Deploy). Dieses Verzeichnis ist toter Code (Abbau optional).
 
-| Subdomain | Host-Port | Stub bis... |
+| Subdomain | Host-Port | Status |
 |---|---|---|
-| `setup.prozesspilot.net` | 127.0.0.1:8082 → :8080 | T016 Onboarding-Wizard implementiert |
-| `chat.prozesspilot.net` | 127.0.0.1:8083 → :8080 | Web-Chat-Widget-Task implementiert |
+| `setup.prozesspilot.net` | 127.0.0.1:8082 → :80 | ✅ Onboarding-Wizard (T016/T017) |
+| `chat.prozesspilot.net` | 127.0.0.1:8084 → :80 | ✅ Web-Chat-Widget (T071/T072) |
 
 ## Abloesung
 

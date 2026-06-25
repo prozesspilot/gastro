@@ -199,10 +199,11 @@ curl -v https://api.prozesspilot.net/api/v1/health
 #   {"status":"ok"} oder ähnlich
 #   Certificate: Let's Encrypt
 
-# Healthcheck-Stub testen (setup + chat)
+# Frontend-Container testen (setup = Onboarding-Wizard, chat = Web-Chat-Widget)
 curl -s https://setup.prozesspilot.net/health | jq .
+# Erwartet: {"status":"ok","service":"onboarding-wizard"}
 curl -s https://chat.prozesspilot.net/health | jq .
-# Erwartet: {"status":"ok","service":"healthcheck-stub"}
+# Erwartet: {"status":"ok","service":"web-chat-widget"}   (seit T072 kein Stub mehr)
 
 # Mitarbeiter-Webapp
 curl -I https://admin.prozesspilot.net

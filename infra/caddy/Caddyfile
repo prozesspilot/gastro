@@ -4,14 +4,14 @@
 # Caddy übernimmt:
 #   - TLS-Terminierung (Let's Encrypt, automatisch)
 #   - HTTP → HTTPS-Redirect (automatisch)
-#   - Reverse-Proxy zu Docker-Containern (localhost:8080-8083)
+#   - Reverse-Proxy zu Docker-Containern (localhost:8080-8084)
 #   - Security-Header
 #
 # Subdomain-Routing:
 #   admin.prozesspilot.net  → Mitarbeiter-Webapp        (Port 8081)
 #   setup.prozesspilot.net  → Onboarding-Wizard         (Port 8082, T017)
 #   api.prozesspilot.net    → Backend-API               (Port 8080)
-#   chat.prozesspilot.net   → Web-Chat-Widget           (Port 8083, Stub bis Widget-Task)
+#   chat.prozesspilot.net   → Web-Chat-Widget           (Port 8084, T072)
 
 # Globale Optionen
 {
@@ -89,17 +89,25 @@ api.prozesspilot.net {
 }
 
 # ── Web-Chat-Widget (Customer-facing) ────────────────────────────────────────
-# Stub bis Web-Chat-Widget-Task implementiert ist.
-# Wird von Customer-Websites per Iframe eingebunden → kein X-Frame-Options DENY
+# T072: web-chat-widget-Container (nginx) statt Stub. nginx proxyt /api/ intern an
+# backend:3000 (inkl. SSE) → der Browser spricht nur mit chat.* (CSP connect-src
+# 'self'). Gelockte Entscheidung (2026-06-24): EIGENE Seite, kein Cross-Origin-
+# Iframe-Embed im Pilot → X-Frame-Options DENY. (Same-origin-Embed auf
+# prozesspilot.net = Folge; dann frame-ancestors statt DENY.)
 chat.prozesspilot.net {
 	encode gzip
 
-	reverse_proxy localhost:8083
+	reverse_proxy localhost:8084
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		# Vollseiten-Widget, kein eingebettetes Iframe → DENY.
+		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		# Absichtlich kein X-Frame-Options — Widget wird per Iframe eingebettet
+		# CSP: eigene Assets + same-origin /api (von nginx ans Backend geproxyt) +
+		# Google-Fonts (Poppins/Manrope/JetBrains Mono aus index.html).
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 }

@@ -60,5 +60,17 @@ docker-compose-Service, Dockerfile/nginx, CI-Job und Deploy-Image — alles nach
 
 ---
 
-## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+## Lessons Learned (Implementierung 2026-06-25)
+- **chat-Stub komplett entfernt:** Der `stubs`-Service (compose) + der Healthcheck-Stub-Build-Step
+  (deploy) sind raus — chat.* serviert jetzt der `web-chat-widget`-Container (Port 8084). Der alte
+  Stub-Container wird beim Deploy via `--remove-orphans` entfernt. `infra/healthcheck-stub/` bleibt
+  als ungenutztes Verzeichnis liegen (harmlos; Abbau optional).
+- **Gelockte Entscheidung umgesetzt:** EIGENE Seite → Caddy chat-Block `X-Frame-Options DENY` + CSP
+  (wie `setup.*`), NICHT das alte „kein DENY, per Iframe einbettbar". Same-origin-Embed auf
+  prozesspilot.net = Folge (dann `frame-ancestors`).
+- **nginx-Verifikation:** Das Image startet NICHT standalone — `proxy_pass http://backend:3000`
+  resolved den Host `backend` nur im compose-Netz (sonst „host not found in upstream"). Das ist
+  identisch zum funktionierenden onboarding-wizard-Container; `depends_on: backend: service_healthy`
+  stellt im Deploy sicher, dass backend vorher da ist. Verifiziert: `docker build` grün,
+  `docker compose config` valide, Caddyfile wird im Deploy via `caddy validate` geprüft.
+- CI-Job war schon in T071; T072 = nur Docker/nginx/compose/Caddy/Deploy-Image.

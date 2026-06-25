@@ -62,7 +62,13 @@ export function ChatWindow({ token }: { token: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  /** Fügt neue Nachrichten hinzu (dedupe nach id, chronologisch sortiert). */
+  /**
+   * Fügt neue Nachrichten hinzu (dedupe nach id, chronologisch sortiert).
+   * Hinweis: Der SSE-Kanal ist im Pilot tenant-scoped (genau 1 aktive Session pro
+   * Tenant, Migration 124) → keine session_id-Filterung nötig. Vor Multi-Session-
+   * pro-Tenant hier `m.session_id === ownSessionId` ergänzen (vgl. Backend-TODO in
+   * chat-events.handler.ts).
+   */
   const mergeMessages = useCallback((incoming: PublicChatMessage[]) => {
     setMessages((prev) => {
       const seen = new Set(prev.map((m) => m.id));
@@ -195,12 +201,14 @@ export function ChatWindow({ token }: { token: string }) {
           borderTop: '1px solid var(--border-subtle)',
         }}
       >
-        {/* Verstecktes Input — bedient wird der Button daneben (gleiches Label dort). */}
+        {/* Verstecktes Input — bedient wird der Button daneben (gleiches Label dort).
+            Bewusst KEIN `capture` — der Wirt soll auch ein bereits gespeichertes Foto/PDF
+            aus der Galerie wählen können (capture würde auf manchen Mobile-Browsern direkt
+            in die Kamera zwingen). `accept` schlägt die Kamera ohnehin als Option vor. */}
         <input
           ref={fileRef}
           type="file"
           accept="image/*,application/pdf"
-          capture="environment"
           tabIndex={-1}
           aria-hidden="true"
           style={{ display: 'none' }}

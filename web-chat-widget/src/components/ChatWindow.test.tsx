@@ -1,7 +1,7 @@
 /**
  * T071 — Tests für ChatWindow (Verlauf rendern + Senden). API gemockt.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { PublicChatMessage } from '../lib/api';
@@ -62,5 +62,38 @@ describe('ChatWindow', () => {
     await userEvent.click(screen.getByLabelText('Senden'));
     await waitFor(() => expect(api.sendMessage).toHaveBeenCalledWith('tok', 'Neue Nachricht'));
     expect(await screen.findByText('Neue Nachricht')).toBeInTheDocument();
+  });
+
+  it('Upload: feuert uploadBeleg, zeigt Beleg-Bubble + Notice', async () => {
+    vi.mocked(api.listMessages).mockResolvedValue([]);
+    vi.mocked(api.uploadBeleg).mockResolvedValue({
+      beleg_id: 'b1',
+      status: 'received',
+      message: msg({ id: 'm-beleg', sender_type: 'customer', body: null, beleg_id: 'b1' }),
+    });
+    const { container } = render(<ChatWindow token="tok" />);
+    await screen.findByLabelText('Senden'); // gerendert
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], 'beleg.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(api.uploadBeleg).toHaveBeenCalledWith('tok', file));
+    expect(await screen.findByText(/Beleg gesendet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Beleg erhalten/i)).toBeInTheDocument();
+  });
+
+  it('Dedup: gleiche id aus Verlauf + Send-Echo → nur ein Eintrag', async () => {
+    vi.mocked(api.listMessages).mockResolvedValue([
+      msg({ id: 'X', sender_type: 'customer', body: 'Erste' }),
+    ]);
+    // Send liefert dieselbe id zurück (z. B. SSE/Server-Echo) → mergeMessages dedupt.
+    vi.mocked(api.sendMessage).mockResolvedValue(
+      msg({ id: 'X', sender_type: 'customer', body: 'Erste' }),
+    );
+    render(<ChatWindow token="tok" />);
+    await screen.findByText('Erste');
+    await userEvent.type(await screen.findByLabelText('Nachricht'), 'nochmal');
+    await userEvent.click(screen.getByLabelText('Senden'));
+    await waitFor(() => expect(api.sendMessage).toHaveBeenCalled());
+    expect(screen.getAllByText('Erste')).toHaveLength(1);
   });
 });

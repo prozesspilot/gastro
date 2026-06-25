@@ -142,5 +142,17 @@ T069/T070 — diese Task liefert nur Session + Token + Auflösung + Einladung.
 
 ---
 
-## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+## Lessons Learned (Implementierung 2026-06-25)
+
+- **`audit_log` ist append-only (DB-Trigger):** Ein `DELETE FROM audit_log` wirft
+  „audit_log is append-only". Integrationstests dürfen es daher **nicht** im
+  `beforeAll` leeren — sie brauchen eine **frische** `prozesspilot_test`-DB
+  (drop/create/migrate). CI ist ephemer = grün; lokal vor dem Lauf neu anlegen
+  (Memory `backend-db-test-fresh-db`). Muster wie `onboarding-wizard.test.ts`.
+- **Test-DB-Gate via `REQUIRE_DB = CI==='true'`, NICHT `PP_E2E=1`:** Der neue
+  Integrationstest folgt dem `src/__tests__/integration/*`-Muster (läuft in CI gegen
+  echtes Postgres). `PP_E2E=1` würde die alten `backend/tests/*`-DB-Tests aktivieren,
+  die am Legacy-Name-Drift rot werden — bewusst nicht gesetzt. Die ursprüngliche
+  Akzeptanz-Zeile „DB-Tests mit PP_E2E=1" ist damit überholt.
+- **Rollen vor Migrate:** Migration 124 (wie 122) macht `GRANT … TO gastro_app` →
+  die Rollen `gastro_app`/`gastro_owner` müssen vor `migrate` existieren (cluster-global).

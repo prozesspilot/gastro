@@ -7,6 +7,8 @@ import { ToastProvider } from './components/ToastProvider';
 import BelegeDetailPage from './pages/BelegeDetailPage';
 import BelegeListPage from './pages/BelegeListPage';
 import BelegeUploadPage from './pages/BelegeUploadPage';
+import ChatDetailPage from './pages/ChatDetailPage';
+import ChatsPage from './pages/ChatsPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -39,6 +41,8 @@ export default function App() {
                         <Route path="/belege" element={<BelegeListPage />} />
                         <Route path="/belege/upload" element={<BelegeUploadPage />} />
                         <Route path="/belege/:id" element={<BelegeDetailPage />} />
+                        <Route path="/chats" element={<ChatsPage />} />
+                        <Route path="/chats/:id" element={<ChatDetailPage />} />
                         <Route path="/tenants" element={<TenantsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="*" element={<NotFoundPage />} />

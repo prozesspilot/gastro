@@ -141,6 +141,33 @@ jobs:
       - name: Build
         run: cd onboarding-wizard && npm run build
 
+  web-chat-widget:
+    name: Web-Chat-Widget — TypeScript Check, Tests, Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-chat-widget/package-lock.json
+
+      - name: Install dependencies
+        run: cd web-chat-widget && npm ci
+
+      - name: TypeScript check
+        run: cd web-chat-widget && npx tsc --noEmit
+
+      - name: Vitest
+        run: cd web-chat-widget && npm test -- --run
+
+      - name: Build
+        run: cd web-chat-widget && npm run build
+
   playwright:
     name: Webapp — Playwright E2E
     runs-on: ubuntu-latest

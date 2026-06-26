@@ -52,4 +52,19 @@ Web-Chat-Widget den Fortschritt seines hochgeladenen Belegs **live** sieht
 ---
 
 ## Lessons Learned (nach Abschluss)
-_(nach Merge ausfüllen)_
+
+- **Repository-Schicht emittiert SSE** (wie T069 `chat.message`): zentraler Best-Effort-Helper
+  `core/sse/beleg-status.ts`, aufgerufen **nach** `COMMIT` in allen 6 Status-Writern — ein
+  Pfad statt Verdrahtung pro Aufrufer (OCR-Worker/Webapp/Export profitieren automatisch).
+- **rowCount/`if(updated)`-Gate ist Pflicht:** der Emit darf nie für einen nicht-committeten
+  Statuswechsel feuern. `markBelegExported` emittierte zunächst unbedingt → im Review auf
+  `RETURNING id` + `if (rowCount === 1)` gehärtet (Symmetrie zu den M01-Writern).
+- **PII-Garantie strukturell:** Payload hart auf `{beleg_id, status}` begrenzt; Test mit
+  `toEqual` (exakt) statt nur Substring-Checks beweist, dass nichts aus `payload.extraction`
+  in den Wirt-Stream leakt (§6.6).
+- **DB-Test-Cleanup:** `audit_log` ist append-only (BEFORE-DELETE-Trigger) → Löschen nur in
+  einer Tx mit `SET LOCAL app.bypass_rls/app.audit_maintenance = 'on'` (Pattern aus
+  `tests/migrations/schema.test.ts`) → Test lokal re-runnable, nicht nur in der ephemeren CI-DB.
+- **Lokaler Toolchain nachgerüstet:** Node 20 unter `%LOCALAPPDATA%\nodejs20` installiert; seither
+  build/lint/test lokal fahrbar (DB-Tests brauchen zusätzlich Postgres — laufen sonst nur in CI).
+  Windows-Checkout brauchte `core.autocrlf=false`, sonst meckert biome CRLF.

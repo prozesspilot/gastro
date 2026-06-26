@@ -35,7 +35,7 @@ Ziel: **nur** Memory/Koordination auf `main`, garantiert **ohne** Code. Der Sync
 
 **(a) Sync-Branch + nur sichere Pfade stagen** (ein Befehl):
 ```sh
-git fetch origin && BR="sync/feierabend-$(date +%Y%m%d-%H%M)" && git checkout -b "$BR" origin/main && git add .claude/memory tasks MANUELLE_AUFGABEN.md && git status --short
+git fetch origin && BR="sync/feierabend-$(date +%Y%m%d-%H%M)" && git checkout -b "$BR" origin/main && git add .claude/memory tasks && git status --short
 ```
 - Die uncommitteten Memory-Änderungen wandern mit auf den neuen Branch; gestaged wird **nur** die Allowlist (`git add -A` ist **verboten** — würde `.env`/Secrets/Müll mitnehmen).
 

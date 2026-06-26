@@ -9,7 +9,9 @@ export default function RatingStars({
   value: number;
   size?: string;
 }) {
-  const v = Math.max(0, Math.min(5, Math.round(value)));
+  // Defensive Hülle: nicht-endliche Werte (NaN/Infinity) auf 0 abbilden, damit
+  // '★'.repeat() nie mit NaN aufgerufen wird (auch für künftige Aufrufer).
+  const v = Number.isFinite(value) ? Math.max(0, Math.min(5, Math.round(value))) : 0;
   return (
     <span
       aria-label={`Bewertung: ${v} von 5 Sternen`}

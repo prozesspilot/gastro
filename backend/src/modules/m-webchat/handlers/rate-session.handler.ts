@@ -52,7 +52,9 @@ export async function rateSessionHandler(
     tenantId: r.session.tenant_id,
     sessionId: r.session.id,
     rating: parsed.data.stars,
-    comment: parsed.data.comment ?? null,
+    // Zod trimmt bereits; leeren String (z. B. nur Whitespace) auf NULL normalisieren,
+    // damit „kein Kommentar" konsistent als NULL persistiert (nicht als '').
+    comment: parsed.data.comment || null,
     actor: { type: 'customer', id: null },
   });
   // null = zwischenzeitlich bewertet (Race) → 409 statt 500.

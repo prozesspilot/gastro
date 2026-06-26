@@ -19,5 +19,13 @@ export type { TenantListItem } from './tenants';
 export { fetchHealth, fetchReady, pingUrl } from './health';
 export type { HealthResponse, ReadyResponse } from './health';
 
-export { listChats, getChatMessages, sendStaffReply } from './chats';
-export type { StaffChatListItem, ChatMessage, ChatSessionStatus, ChatSenderType } from './chats';
+export { listChats, getChatThread, sendStaffReply, closeChatSession } from './chats';
+export type {
+  StaffChatListItem,
+  StaffChatThread,
+  StaffChatThreadMeta,
+  ChatMessage,
+  ChatSessionStatus,
+  ChatSenderType,
+  ChatClosedBy,
+} from './chats';

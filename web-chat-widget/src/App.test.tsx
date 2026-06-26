@@ -29,12 +29,41 @@ describe('getTokenFromPath', () => {
   });
 });
 
+const session = (over: Partial<api.PublicChatSession>): api.PublicChatSession => ({
+  status: 'active',
+  expires_at: null,
+  closed_at: null,
+  rating: null,
+  rating_comment: null,
+  ...over,
+});
+
 describe('App — Session-Zustände', () => {
   it('aktive Session → Chat-Eingabe sichtbar', async () => {
-    vi.mocked(api.getSession).mockResolvedValue({ status: 'active', expires_at: null });
+    vi.mocked(api.getSession).mockResolvedValue(session({ status: 'active' }));
     render(<App initialToken="tok" />);
     await waitFor(() => expect(screen.getByLabelText('Nachricht')).toBeInTheDocument());
     expect(screen.getByLabelText('Beleg hochladen')).toBeInTheDocument();
+  });
+
+  it('beendete Session ohne Bewertung → Sterne-Abfrage', async () => {
+    vi.mocked(api.getSession).mockResolvedValue(session({ status: 'closed' }));
+    render(<App initialToken="tok" />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /chat beendet/i })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Bewertung senden' })).toBeInTheDocument();
+  });
+
+  it('beendete Session mit Bewertung → Danke-Ansicht', async () => {
+    vi.mocked(api.getSession).mockResolvedValue(
+      session({ status: 'closed', rating: 4, rating_comment: 'Top Service' }),
+    );
+    render(<App initialToken="tok" />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /danke für deine bewertung/i })).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Top Service/)).toBeInTheDocument();
   });
 
   it('410 → „Chat nicht mehr aktiv"', async () => {
@@ -52,7 +81,7 @@ describe('App — Session-Zustände', () => {
   });
 
   it('revoked Session → „Chat nicht mehr aktiv"', async () => {
-    vi.mocked(api.getSession).mockResolvedValue({ status: 'revoked', expires_at: null });
+    vi.mocked(api.getSession).mockResolvedValue(session({ status: 'revoked' }));
     render(<App initialToken="tok" />);
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /nicht mehr aktiv/i })).toBeInTheDocument(),

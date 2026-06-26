@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from 'react';
 import { ChatWindow } from './components/ChatWindow';
+import { RatingView } from './components/RatingView';
 import { useChatSession } from './hooks/useChatSession';
 
 /**
@@ -90,7 +91,7 @@ export default function App({ initialToken }: { initialToken?: string | null } =
     initialToken !== undefined
       ? initialToken
       : getTokenFromPath(typeof window !== 'undefined' ? window.location.pathname : '');
-  const { state } = useChatSession(token);
+  const { state, applySession } = useChatSession(token);
 
   let content: ReactNode;
   if (state.status === 'loading') {
@@ -110,6 +111,11 @@ export default function App({ initialToken }: { initialToken?: string | null } =
       ) : (
         <Centered title="Etwas ist schiefgelaufen" body={state.message} />
       );
+  } else if (state.session.status === 'closed') {
+    // Beendet → Sterne-Bewertung (bzw. „Danke", wenn bereits bewertet).
+    content = (
+      <RatingView token={token as string} session={state.session} onRated={applySession} />
+    );
   } else if (state.session.status !== 'active') {
     content = (
       <Centered
@@ -119,7 +125,7 @@ export default function App({ initialToken }: { initialToken?: string | null } =
     );
   } else {
     // active → token ist hier garantiert non-null (state===ready ⇒ token war gesetzt).
-    content = <ChatWindow token={token as string} />;
+    content = <ChatWindow token={token as string} onClosed={applySession} />;
   }
 
   return <FullScreen>{content}</FullScreen>;

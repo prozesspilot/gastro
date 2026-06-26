@@ -9,14 +9,27 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from 're
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
 import { ApiError } from '../api/_client';
-import { type ChatMessage, getChatMessages, sendStaffReply } from '../api/chats';
+import {
+  type ChatMessage,
+  closeChatSession,
+  getChatThread,
+  sendStaffReply,
+  type StaffChatThreadMeta,
+} from '../api/chats';
 import NoTenantHint from '../components/NoTenantHint';
+import RatingStars from '../components/RatingStars';
 import { useToast } from '../components/ToastProvider';
 
 const SENDER_LABEL: Record<string, string> = {
   customer: 'Wirt',
   staff: 'ProzessPilot',
   system: 'System',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Aktiv',
+  revoked: 'Widerrufen',
+  closed: 'Geschlossen',
 };
 
 function fmtTime(iso: string): string {
@@ -43,9 +56,11 @@ export default function ChatDetailPage() {
   const { toast } = useToast();
   const hasTenant = getActiveTenantId() !== null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [meta, setMeta] = useState<StaffChatThreadMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const merge = useCallback((incoming: ChatMessage[]) => {
@@ -63,10 +78,11 @@ export default function ChatDetailPage() {
     if (!hasTenant || !id) return;
     let active = true;
     const load = () => {
-      getChatMessages(id)
-        .then((msgs) => {
+      getChatThread(id)
+        .then(({ session, messages: msgs }) => {
           if (active) {
             merge(msgs);
+            setMeta(session);
             setLoading(false);
           }
         })
@@ -109,7 +125,29 @@ export default function ChatDetailPage() {
     }
   }, [text, busy, id, merge, toast]);
 
+  const handleClose = useCallback(async () => {
+    if (closing || !id) return;
+    setClosing(true);
+    try {
+      const updated = await closeChatSession(id);
+      setMeta(updated);
+      toast('success', 'Chat beendet. Der Wirt kann jetzt eine Bewertung abgeben.');
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiError && err.status === 409
+          ? 'Dieser Chat ist nicht mehr aktiv.'
+          : err instanceof Error
+            ? err.message
+            : 'Chat konnte nicht beendet werden.';
+      toast('error', msg);
+    } finally {
+      setClosing(false);
+    }
+  }, [closing, id, toast]);
+
   if (!hasTenant) return <NoTenantHint what="den Chat" />;
+
+  const isActive = meta === null || meta.status === 'active';
 
   return (
     <div>
@@ -122,7 +160,46 @@ export default function ChatDetailPage() {
           ← Zurück
         </button>
         <h1 className="page-title">Chat {id?.slice(0, 8)}…</h1>
+        {meta && (
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            · {STATUS_LABEL[meta.status] ?? meta.status}
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        {meta?.status === 'active' && (
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={closing}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface, #fff)',
+              color: 'var(--text-muted)',
+              cursor: closing ? 'default' : 'pointer',
+              fontSize: '0.9rem',
+            }}
+          >
+            {closing ? 'Beende…' : 'Chat beenden'}
+          </button>
+        )}
       </div>
+
+      {meta && typeof meta.rating === 'number' && (
+        <div
+          className="card"
+          style={{ padding: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}
+        >
+          <RatingStars value={meta.rating} size="1.3rem" />
+          <span style={{ fontWeight: 600 }}>{meta.rating}/5</span>
+          {meta.rating_comment && (
+            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', wordBreak: 'break-word' }}>
+              „{meta.rating_comment}"
+            </span>
+          )}
+        </div>
+      )}
 
       <div
         className="card"
@@ -138,40 +215,47 @@ export default function ChatDetailPage() {
         <div ref={endRef} />
       </div>
 
-      <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={2}
-          aria-label="Antwort"
-          placeholder="Antwort an den Wirt… (Strg/Cmd+Enter sendet)"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              void handleSend();
-            }
-          }}
-          style={{
-            flex: 1,
-            minHeight: 44,
-            maxHeight: 160,
-            resize: 'vertical',
-            padding: '10px 12px',
-            borderRadius: 8,
-            border: '1px solid var(--border)',
-            fontFamily: 'inherit',
-            fontSize: '1rem',
-          }}
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={busy || text.trim() === ''}
-          style={sendBtn}
-        >
-          Senden
-        </button>
-      </div>
+      {isActive ? (
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={2}
+            aria-label="Antwort"
+            placeholder="Antwort an den Wirt… (Strg/Cmd+Enter sendet)"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void handleSend();
+              }
+            }}
+            style={{
+              flex: 1,
+              minHeight: 44,
+              maxHeight: 160,
+              resize: 'vertical',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              fontFamily: 'inherit',
+              fontSize: '1rem',
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={busy || text.trim() === ''}
+            style={sendBtn}
+          >
+            Senden
+          </button>
+        </div>
+      ) : (
+        <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          Dieser Chat ist {STATUS_LABEL[meta?.status ?? ''] ?? 'beendet'} — es kann nicht mehr
+          geantwortet werden. Für eine neue Konversation einen neuen Chat-Link erzeugen.
+        </p>
+      )}
     </div>
   );
 }

@@ -10,8 +10,10 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import {
   chatEventsUrl,
+  closeChat,
   listMessages,
   type PublicChatMessage,
+  type PublicChatSession,
   sendMessage,
   uploadBeleg,
 } from '../lib/api';
@@ -54,13 +56,35 @@ const textareaStyle: CSSProperties = {
   fontSize: '1rem',
 };
 
-export function ChatWindow({ token }: { token: string }) {
+export function ChatWindow({
+  token,
+  onClosed,
+}: {
+  token: string;
+  onClosed: (session: PublicChatSession) => void;
+}) {
   const [messages, setMessages] = useState<PublicChatMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Zwei-Schritt-Beenden (kein window.confirm): erst „Chat beenden", dann bestätigen.
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [closing, setClosing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const handleClose = useCallback(async () => {
+    if (closing) return;
+    setClosing(true);
+    setNotice(null);
+    try {
+      onClosed(await closeChat(token));
+    } catch {
+      setNotice('Chat konnte nicht beendet werden. Bitte nochmal versuchen.');
+      setClosing(false);
+      setConfirmClose(false);
+    }
+  }, [closing, token, onClosed]);
 
   /**
    * Fügt neue Nachrichten hinzu (dedupe nach id, chronologisch sortiert).
@@ -160,6 +184,76 @@ export function ChatWindow({ token }: { token: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div
+        style={{
+          flex: 'none',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 8,
+          padding: '4px var(--space-2)',
+          borderBottom: '1px solid var(--border-subtle)',
+          minHeight: 36,
+        }}
+      >
+        {confirmClose ? (
+          <>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginRight: 'auto' }}>
+              Chat wirklich beenden?
+            </span>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={closing}
+              style={{
+                minHeight: 32,
+                padding: '0 12px',
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                background: 'var(--danger, #c0392b)',
+                color: '#fff',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              {closing ? 'Beende…' : 'Ja, beenden'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmClose(false)}
+              disabled={closing}
+              style={{
+                minHeight: 32,
+                padding: '0 12px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--surface-card)',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              Abbrechen
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmClose(true)}
+            style={{
+              minHeight: 32,
+              padding: '0 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--surface-card)',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+            }}
+          >
+            Chat beenden
+          </button>
+        )}
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-2)' }}>
         {messages.length === 0 ? (
           <p

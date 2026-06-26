@@ -17,12 +17,15 @@ import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
 import { chatEventsHandler } from './handlers/chat-events.handler';
 import { chatUploadHandler } from './handlers/chat-upload.handler';
+import { closeSessionHandler } from './handlers/close-session.handler';
 import { createChatSessionHandler } from './handlers/create-session.handler';
 import { getChatSessionHandler } from './handlers/get-session.handler';
 import { listChatsHandler } from './handlers/list-chats.handler';
 import { listMessagesHandler } from './handlers/list-messages.handler';
+import { rateSessionHandler } from './handlers/rate-session.handler';
 import { revokeChatSessionHandler } from './handlers/revoke-session.handler';
 import { sendMessageHandler } from './handlers/send-message.handler';
+import { staffCloseSessionHandler } from './handlers/staff-close-session.handler';
 import { staffReplyHandler } from './handlers/staff-reply.handler';
 import { staffThreadHandler } from './handlers/staff-thread.handler';
 
@@ -41,6 +44,7 @@ export async function chatStaffRoutes(app: FastifyInstance): Promise<void> {
   app.post('/sessions', RL, createChatSessionHandler);
   app.get('/sessions', RL, listChatsHandler);
   app.post<{ Params: { id: string } }>('/sessions/:id/revoke', RL, revokeChatSessionHandler);
+  app.post<{ Params: { id: string } }>('/sessions/:id/close', RL, staffCloseSessionHandler);
   app.get<{ Params: { id: string } }>('/sessions/:id/messages', RL, staffThreadHandler);
   app.post<{ Params: { id: string } }>('/sessions/:id/reply', RL, staffReplyHandler);
 }
@@ -52,4 +56,6 @@ export async function chatPublicRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { token: string } }>('/:token/messages', RL, listMessagesHandler);
   app.get<{ Params: { token: string } }>('/:token/events', RL, chatEventsHandler);
   app.post<{ Params: { token: string } }>('/:token/belege', RL_UPLOAD, chatUploadHandler);
+  app.post<{ Params: { token: string } }>('/:token/close', RL, closeSessionHandler);
+  app.post<{ Params: { token: string } }>('/:token/rating', RL, rateSessionHandler);
 }

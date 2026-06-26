@@ -41,6 +41,19 @@ function msg(over: Record<string, unknown>) {
   };
 }
 
+function sess(over: Record<string, unknown> = {}) {
+  return {
+    id: 'sess-1',
+    status: 'active',
+    closed_at: null,
+    closed_by: null,
+    rating: null,
+    rating_comment: null,
+    rated_at: null,
+    ...over,
+  };
+}
+
 describe('ChatDetailPage', () => {
   it('zeigt NoTenantHint ohne aktiven Mandanten', () => {
     mockGetActiveTenantId.mockReturnValueOnce(null);
@@ -114,5 +127,39 @@ describe('ChatDetailPage', () => {
     const link = await screen.findByRole('link', { name: /Beleg ansehen/i });
     expect(link).toHaveAttribute('href', '/belege/b-9');
     expect(screen.getByText('Hier mein Beleg')).toBeInTheDocument();
+  });
+
+  it('beendete Session mit Bewertung: zeigt Sterne + Kommentar, keine Antwort-Eingabe', async () => {
+    server.use(
+      http.get(`${BASE}/chat/sessions/sess-1/messages`, () =>
+        HttpResponse.json({
+          session: sess({ status: 'closed', rating: 5, rating_comment: 'Top!' }),
+          messages: [msg({ id: 'm1', body: 'Danke' })],
+        }),
+      ),
+    );
+    renderDetail();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Bewertung: 5 von 5 Sternen')).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Top!/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Antwort')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Senden' })).not.toBeInTheDocument();
+  });
+
+  it('„Chat beenden": ruft close-Endpoint und blendet die Antwort-Eingabe aus', async () => {
+    server.use(
+      http.get(`${BASE}/chat/sessions/sess-1/messages`, () =>
+        HttpResponse.json({ session: sess({ status: 'active' }), messages: [] }),
+      ),
+      http.post(`${BASE}/chat/sessions/sess-1/close`, () =>
+        HttpResponse.json({ session: sess({ status: 'closed', closed_by: 'staff' }) }),
+      ),
+    );
+    renderDetail();
+    const closeBtn = await screen.findByRole('button', { name: 'Chat beenden' });
+    await userEvent.click(closeBtn);
+    await waitFor(() => expect(screen.queryByLabelText('Antwort')).not.toBeInTheDocument());
+    expect(screen.getByText(/nicht mehr\s+geantwortet/i)).toBeInTheDocument();
   });
 });

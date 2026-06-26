@@ -14,6 +14,10 @@ export type ChatSenderType = 'customer' | 'staff' | 'system';
 export interface PublicChatSession {
   status: ChatStatus;
   expires_at: string | null;
+  closed_at: string | null;
+  /** Kundenseitige Bewertung 1–5 (null = noch nicht bewertet). */
+  rating: number | null;
+  rating_comment: string | null;
 }
 
 export interface PublicChatMessage {
@@ -73,6 +77,27 @@ function enc(token: string): string {
 
 export async function getSession(token: string): Promise<PublicChatSession> {
   const json = await requestJson<{ session: PublicChatSession }>(`/${enc(token)}`);
+  return json.session;
+}
+
+/** Beendet den Chat (Wirt). Danach folgt die Sterne-Bewertung. */
+export async function closeChat(token: string): Promise<PublicChatSession> {
+  const json = await requestJson<{ session: PublicChatSession }>(`/${enc(token)}/close`, {
+    method: 'POST',
+  });
+  return json.session;
+}
+
+/** Sendet die kundenseitige Bewertung (1–5 Sterne + optionaler Kommentar). */
+export async function rateChat(
+  token: string,
+  stars: number,
+  comment?: string,
+): Promise<PublicChatSession> {
+  const json = await requestJson<{ session: PublicChatSession }>(`/${enc(token)}/rating`, {
+    method: 'POST',
+    body: { stars, ...(comment && comment.trim() ? { comment: comment.trim() } : {}) },
+  });
   return json.session;
 }
 

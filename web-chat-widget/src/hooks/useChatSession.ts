@@ -2,7 +2,7 @@
  * T071 — Lädt die Chat-Session anhand des Magic-Link-Tokens und hält sie im State.
  * Muster wie useWizardSession (T016).
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChatApiError, getSession, type PublicChatSession } from '../lib/api';
 
 export type ChatSessionState =
@@ -37,5 +37,14 @@ export function useChatSession(token: string | null) {
     };
   }, [token]);
 
-  return { state };
+  /**
+   * Setzt die Session direkt (nach „Chat beenden" / „Bewertung senden"), ohne
+   * neu zu laden — die jeweiligen Endpoints liefern die aktualisierte Session
+   * bereits zurück.
+   */
+  const applySession = useCallback((session: PublicChatSession) => {
+    setState({ status: 'ready', session });
+  }, []);
+
+  return { state, applySession };
 }

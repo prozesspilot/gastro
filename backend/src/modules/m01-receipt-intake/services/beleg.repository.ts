@@ -754,6 +754,102 @@ export async function updateBelegStatus(
 }
 
 /**
+ * T078 — Bestätigt einen geprüften `requires_review`-Beleg als `categorized`
+ * (manuelle Freigabe durch einen Mitarbeiter). STATUS-GEGATETER Writer:
+ * transitioniert ausschließlich `requires_review → categorized` (idempotent +
+ * race-sicher über `WHERE status='requires_review'`). `category` und
+ * `payload.categorization` bleiben UNVERÄNDERT (keine Re-Kategorisierung);
+ * `payload.audit.events` bekommt einen `review_confirmed`-Eintrag, zusätzlich
+ * GoBD-Audit-Event `beleg.review_confirmed`.
+ *
+ * Returns die aktualisierte Zeile, oder `null` wenn nicht gefunden ODER nicht
+ * (mehr) im Status `requires_review` (Race). Vorlage: updateBelegStatus +
+ * payload.audit.events-Append aus updateBelegCategorization.
+ */
+export async function confirmBelegReview(
+  pool: Pool,
+  tenantId: string,
+  belegId: string,
+  audit: { actorType: 'staff'; actorId: string },
+): Promise<DbBeleg | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, tenantId);
+
+    const current = await client.query<{
+      status: BelegStatus;
+      payload: Record<string, unknown>;
+      category: string | null;
+    }>('SELECT status, payload, category FROM belege WHERE id = $1 AND tenant_id = $2', [
+      belegId,
+      tenantId,
+    ]);
+    if (current.rows.length === 0) {
+      await client.query('COMMIT');
+      return null;
+    }
+    if (current.rows[0].status !== 'requires_review') {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return null;
+    }
+
+    const existingPayload = current.rows[0].payload ?? {};
+    const auditEvents = Array.isArray(
+      (existingPayload as { audit?: { events?: unknown[] } }).audit?.events,
+    )
+      ? (existingPayload as { audit: { events: unknown[] } }).audit.events
+      : [];
+    const newPayload: Record<string, unknown> = {
+      ...existingPayload,
+      audit: {
+        ...((existingPayload as { audit?: Record<string, unknown> }).audit ?? {}),
+        events: [
+          ...auditEvents,
+          {
+            at: new Date().toISOString(),
+            type: 'review_confirmed',
+            actor: { type: audit.actorType, id: audit.actorId },
+          },
+        ],
+      },
+    };
+
+    const updateResult = await client.query<DbBeleg>(
+      `UPDATE belege
+         SET status = 'categorized', payload = $3
+       WHERE id = $1 AND tenant_id = $2 AND status = 'requires_review'
+       RETURNING *`,
+      [belegId, tenantId, JSON.stringify(newPayload)],
+    );
+    const row = updateResult.rows[0];
+    if (!row) {
+      // Race: Status hat sich zwischen SELECT und UPDATE geändert.
+      await client.query('ROLLBACK').catch(() => undefined);
+      return null;
+    }
+
+    await logAuditEvent(client, {
+      tenantId,
+      entityType: 'beleg',
+      entityId: belegId,
+      eventType: 'beleg.review_confirmed',
+      actor: { type: audit.actorType, id: audit.actorId },
+      payloadBefore: { status: 'requires_review' },
+      payloadAfter: { status: 'categorized', category: current.rows[0].category },
+    });
+
+    await client.query('COMMIT');
+    return row;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * T048/F2 — Schreibt das Kategorisier-Ergebnis: Status (categorized/requires_review),
  * denormalisierte `category`-Spalte und `payload.categorization`. Transaktional mit
  * Audit (`beleg.categorized`). Vorlage: updateBelegOcrResult.

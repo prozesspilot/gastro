@@ -8,17 +8,19 @@ import type { Pool } from 'pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BelegCategorizationResult } from '../services/belege-categorizer';
 
-const { getBelegById, updateBelegCategorization } = vi.hoisted(() => ({
+const { getBelegById, updateBelegCategorization, confirmBelegReview } = vi.hoisted(() => ({
   getBelegById: vi.fn(),
   updateBelegCategorization: vi.fn(),
+  confirmBelegReview: vi.fn(),
 }));
 
 vi.mock('../../m01-receipt-intake/services/beleg.repository', () => ({
   getBelegById,
   updateBelegCategorization,
+  confirmBelegReview,
 }));
 
-import { categorizeBelegById } from '../services/categorize.service';
+import { categorizeBelegById, confirmBelegReviewById } from '../services/categorize.service';
 
 const db = {} as unknown as Pool;
 
@@ -38,6 +40,7 @@ function result(over: Partial<BelegCategorizationResult> = {}): BelegCategorizat
 beforeEach(() => {
   getBelegById.mockReset();
   updateBelegCategorization.mockReset();
+  confirmBelegReview.mockReset();
 });
 
 describe('categorizeBelegById (T077)', () => {
@@ -148,5 +151,96 @@ describe('categorizeBelegById (T077)', () => {
     const args = updateBelegCategorization.mock.calls[0][3];
     expect(args.category).toBe('bewirtung');
     expect(args.categorization.skr_account).toBe('4650');
+  });
+});
+
+describe('confirmBelegReviewById (T078)', () => {
+  const STAFF = { type: 'staff', id: 'user-9' } as const;
+
+  function reviewBeleg(over: Record<string, unknown> = {}) {
+    return {
+      status: 'requires_review',
+      category: 'wareneinkauf_food',
+      payload: { categorization: { category: 'wareneinkauf_food' } },
+      ...over,
+    };
+  }
+
+  it('happy-path requires_review -> categorized (Repo mit staff-Actor aufgerufen)', async () => {
+    getBelegById.mockResolvedValue(reviewBeleg());
+    confirmBelegReview.mockResolvedValue({ id: 'b1', status: 'categorized' });
+
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+
+    expect(outcome).toEqual({ ok: true, status: 'categorized' });
+    expect(confirmBelegReview).toHaveBeenCalledWith(db, 'tenant-1', 'b1', {
+      actorType: 'staff',
+      actorId: 'user-9',
+    });
+  });
+
+  it('invalid_status fuer nicht-requires_review (z. B. categorized = Idempotenz/2. Aufruf)', async () => {
+    getBelegById.mockResolvedValue(reviewBeleg({ status: 'categorized' }));
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'invalid_status', status: 'categorized' });
+    expect(confirmBelegReview).not.toHaveBeenCalled();
+  });
+
+  it('not_found fuer unbekannten Beleg', async () => {
+    getBelegById.mockResolvedValue(null);
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'not_found' });
+    expect(confirmBelegReview).not.toHaveBeenCalled();
+  });
+
+  it('category_required wenn category null', async () => {
+    getBelegById.mockResolvedValue(reviewBeleg({ category: null }));
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'category_required' });
+  });
+
+  it('not_categorized wenn payload.categorization fehlt', async () => {
+    getBelegById.mockResolvedValue(reviewBeleg({ payload: {} }));
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'not_categorized' });
+  });
+
+  it('Bewirtung: happy wenn anlass+teilnehmer gesetzt', async () => {
+    getBelegById.mockResolvedValue(
+      reviewBeleg({
+        category: 'bewirtung',
+        payload: {
+          categorization: { category: 'bewirtung' },
+          extraction: {
+            fields: { bewirtung_anlass: 'Geschaeftsessen', bewirtung_teilnehmer: 'Kunde X' },
+          },
+        },
+      }),
+    );
+    confirmBelegReview.mockResolvedValue({ id: 'b1', status: 'categorized' });
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: true, status: 'categorized' });
+  });
+
+  it('Bewirtung: bewirtung_fields_required wenn anlass ODER teilnehmer leer', async () => {
+    getBelegById.mockResolvedValue(
+      reviewBeleg({
+        category: 'bewirtung_kunden',
+        payload: {
+          categorization: { category: 'bewirtung' },
+          extraction: { fields: { bewirtung_anlass: 'Essen', bewirtung_teilnehmer: '   ' } },
+        },
+      }),
+    );
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'bewirtung_fields_required' });
+    expect(confirmBelegReview).not.toHaveBeenCalled();
+  });
+
+  it('Race: confirmBelegReview liefert null -> not_found', async () => {
+    getBelegById.mockResolvedValue(reviewBeleg());
+    confirmBelegReview.mockResolvedValue(null);
+    const outcome = await confirmBelegReviewById(db, 'tenant-1', 'b1', { actor: STAFF });
+    expect(outcome).toEqual({ ok: false, reason: 'not_found' });
   });
 });

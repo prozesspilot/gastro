@@ -14,6 +14,7 @@ import type { Pool } from 'pg';
 import type { AuditActor } from '../../../core/audit/audit-log';
 import {
   type BelegStatus,
+  confirmBelegReview,
   getBelegById,
   updateBelegCategorization,
 } from '../../m01-receipt-intake/services/beleg.repository';
@@ -156,4 +157,82 @@ export async function categorizeBelegById(
       bewirtung_preserved: preserveBewirtung,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// T078 — requires_review → categorized (manuelle Freigabe)
+// ---------------------------------------------------------------------------
+
+export type ConfirmReviewOutcome =
+  | { ok: true; status: 'categorized' }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'invalid_status'; status: BelegStatus }
+  | { ok: false; reason: 'category_required' }
+  | { ok: false; reason: 'not_categorized' }
+  | { ok: false; reason: 'bewirtung_fields_required' };
+
+/**
+ * Liest die Bewirtungs-Pflichtfelder aus payload.extraction.fields (gleiche
+ * Quelle + Regel wie update.handler.ts: der M05-Voucher liest sie ebendort).
+ */
+function bewirtungFields(payload: Record<string, unknown>): {
+  anlass: string | null;
+  teilnehmer: string | null;
+} {
+  const fields = ((payload.extraction as { fields?: Record<string, unknown> } | undefined)
+    ?.fields ?? {}) as { bewirtung_anlass?: unknown; bewirtung_teilnehmer?: unknown };
+  const anlass =
+    typeof fields.bewirtung_anlass === 'string' && fields.bewirtung_anlass.trim()
+      ? fields.bewirtung_anlass
+      : null;
+  const teilnehmer =
+    typeof fields.bewirtung_teilnehmer === 'string' && fields.bewirtung_teilnehmer.trim()
+      ? fields.bewirtung_teilnehmer
+      : null;
+  return { anlass, teilnehmer };
+}
+
+/**
+ * Bestätigt einen geprüften `requires_review`-Beleg als `categorized` (manuelle
+ * Mitarbeiter-Freigabe → danach exportierbar). Strikt nur Statuswechsel, keine
+ * Re-Kategorisierung. Gates: Status===requires_review, category gesetzt,
+ * payload.categorization vorhanden, bei Bewirtung anlass+teilnehmer Pflicht.
+ */
+export async function confirmBelegReviewById(
+  db: Pool,
+  tenantId: string,
+  belegId: string,
+  opts: { actor: { type: 'staff'; id: string } },
+): Promise<ConfirmReviewOutcome> {
+  const beleg = await getBelegById(db, tenantId, belegId);
+  if (!beleg) {
+    return { ok: false, reason: 'not_found' };
+  }
+  if (beleg.status !== 'requires_review') {
+    return { ok: false, reason: 'invalid_status', status: beleg.status };
+  }
+  if (!beleg.category || !beleg.category.trim()) {
+    return { ok: false, reason: 'category_required' };
+  }
+  // payload.categorization muss vorhanden sein (defensiv — bei requires_review
+  // immer gesetzt; ohne sie gäbe es kein SKR-Konto für den Export).
+  if (!(beleg.payload as { categorization?: unknown }).categorization) {
+    return { ok: false, reason: 'not_categorized' };
+  }
+  if (beleg.category.toLowerCase().includes('bewirtung')) {
+    const { anlass, teilnehmer } = bewirtungFields(beleg.payload);
+    if (!anlass || !teilnehmer) {
+      return { ok: false, reason: 'bewirtung_fields_required' };
+    }
+  }
+
+  const saved = await confirmBelegReview(db, tenantId, belegId, {
+    actorType: 'staff',
+    actorId: opts.actor.id,
+  });
+  // null = Race (Status zwischen Gate und Schreib-Tx geändert) → not_found.
+  if (!saved) {
+    return { ok: false, reason: 'not_found' };
+  }
+  return { ok: true, status: 'categorized' };
 }

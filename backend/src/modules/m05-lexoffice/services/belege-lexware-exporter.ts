@@ -44,6 +44,18 @@ import { hasPersistedCategorization, resolveExportSkrAccount } from './resolve-e
 
 const MAX_ATTEMPTS = 3;
 
+// T078: Nur kategorisierte (oder spätere) Belege dürfen exportiert werden. Alles
+// davor — insb. 'requires_review' (hat payload.categorization, aber ungeprüft) —
+// wird abgewiesen.
+const EXPORTABLE_STATUS = new Set<string>([
+  'categorized',
+  'archiving',
+  'archived',
+  'exporting',
+  'exported',
+  'completed',
+]);
+
 export interface ExportBelegResult {
   beleg_id: string;
   status: 'pushed' | 'skipped' | 'failed';
@@ -242,6 +254,15 @@ export async function exportBelegToLexware(
   //     (findBelegIdsPendingExport); dies ist die Absicherung für den direkten
   //     Einzel-Export-Endpoint. → 'not_categorized' mappt im Handler auf 422.
   if (!hasPersistedCategorization(beleg.payload)) {
+    return { beleg_id: belegId, status: 'failed', error: 'not_categorized', attempts: 0 };
+  }
+
+  // T078: Status-Gate. Ein requires_review-Beleg HAT bereits payload.categorization
+  // (updateBelegCategorization schreibt sie auch im requires_review-Zweig), würde
+  // also das Gate oben passieren und still an den Steuerberater gebucht — obwohl er
+  // noch ungeprüft ist. Exportierbar ist nur 'categorized' oder später im
+  // Lebenszyklus; alles davor (insb. requires_review) → not_categorized (422).
+  if (!EXPORTABLE_STATUS.has(beleg.status)) {
     return { beleg_id: belegId, status: 'failed', error: 'not_categorized', attempts: 0 };
   }
 

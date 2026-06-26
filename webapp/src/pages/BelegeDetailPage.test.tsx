@@ -739,4 +739,76 @@ describe('BelegeDetailPage', () => {
     expect(screen.queryByTestId('btn-categorize')).not.toBeInTheDocument();
     expect(screen.queryByTestId('btn-export')).not.toBeInTheDocument();
   });
+
+  // ── T078 — „Als geprüft bestätigen" (requires_review → categorized) ───────
+
+  it('T078: Bestätigen-Button nur bei Status requires_review', async () => {
+    mockGet(makeBeleg({ status: 'categorized' }));
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-save')).toBeInTheDocument());
+    expect(screen.queryByTestId('btn-confirm-review')).not.toBeInTheDocument();
+  });
+
+  it('T078: Bestätigen ruft POST /confirm-review + zeigt Toast', async () => {
+    let called = false;
+    mockGet(makeBeleg({ status: 'requires_review' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/confirm-review`, () => {
+        called = true;
+        return HttpResponse.json({ ok: true, data: { beleg_id: 'b-detail-001', status: 'categorized' } });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-confirm-review')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-confirm-review'));
+    });
+    await waitFor(() => expect(called).toBe(true));
+    expect(await screen.findByText(/Als geprüft bestätigt/i)).toBeInTheDocument();
+  });
+
+  it('T078: 422 BEWIRTUNG_FIELDS_REQUIRED zeigt verständlichen Toast', async () => {
+    mockGet(makeBeleg({ status: 'requires_review', category: 'bewirtung_kunden' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/confirm-review`, () =>
+        HttpResponse.json(
+          {
+            ok: false,
+            error: {
+              code: 'BEWIRTUNG_FIELDS_REQUIRED',
+              message: 'Bei Bewirtungs-Belegen sind Anlass und Teilnehmer Pflichtfelder — bitte erst ergänzen und speichern.',
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderDetailPage();
+    // Bei category 'bewirtung_kunden' erscheinen Bewirtungs-Felder; Bestätigen-Button ist da.
+    await waitFor(() => expect(screen.getByTestId('btn-confirm-review')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-confirm-review'));
+    });
+    expect(await screen.findByText(/Anlass und Teilnehmer Pflichtfelder/i)).toBeInTheDocument();
+  });
+
+  it('T078: Bestätigen bei ungespeicherten Änderungen gesperrt', async () => {
+    mockGet(makeBeleg({ status: 'requires_review' }));
+    renderDetailPage();
+    const btn = (await screen.findByTestId('btn-confirm-review')) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    const supplierInput = screen.getByTestId('field-supplier_name') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(supplierInput, { target: { value: 'Geändert' } });
+    });
+    expect((screen.getByTestId('btn-confirm-review') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('T078: support-Rolle sieht keinen Bestätigen-Button', async () => {
+    mockAuthRole = 'support';
+    mockGet(makeBeleg({ status: 'requires_review' }));
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-save')).toBeInTheDocument());
+    expect(screen.queryByTestId('btn-confirm-review')).not.toBeInTheDocument();
+  });
 });

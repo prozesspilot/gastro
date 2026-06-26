@@ -239,6 +239,26 @@ export async function categorizeBeleg(id: string): Promise<CategorizeResult> {
   return unwrap<CategorizeResult>(res);
 }
 
+/** Ergebnis von POST /belege/:id/confirm-review (T078). */
+export interface ConfirmReviewResult {
+  beleg_id: string;
+  status: BelegStatus;
+}
+
+/**
+ * Bestätigt einen geprüften Beleg (Status muss 'requires_review' sein → sonst
+ * ApiError 422). `support`-Rolle → 403. Bei Bewirtungs-Kategorie sind
+ * Anlass + Teilnehmer Pflicht → sonst 422 BEWIRTUNG_FIELDS_REQUIRED. Danach ist
+ * der Beleg 'categorized' und exportierbar.
+ */
+export async function confirmBelegReview(id: string): Promise<ConfirmReviewResult> {
+  const res = await apiRequest<{ ok: boolean; data: ConfirmReviewResult }>(
+    `/belege/${id}/confirm-review`,
+    { method: 'POST' },
+  );
+  return unwrap<ConfirmReviewResult>(res);
+}
+
 /** Ergebnis eines Lexware-Single-Push (bare, kein `{ ok, data }`-Wrapper). */
 export interface ExportResult {
   beleg_id: string;

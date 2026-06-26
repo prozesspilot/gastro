@@ -28,6 +28,7 @@ import { logger } from '../core/logger';
 import { OCR_QUEUE_NAME, type OcrJobData, type OcrJobResult } from '../core/queue/ocr-queue';
 import { markBelegOcrFailed } from '../modules/m01-receipt-intake/services/beleg.repository';
 import { processBeleg } from '../modules/m01-receipt-intake/services/ocr.service';
+import { categorizeBelegById } from '../modules/m03-categorization/services/categorize.service';
 
 export interface OcrWorkerDeps {
   db: Pool;
@@ -56,6 +57,33 @@ export function buildOcrJobProcessor(deps: OcrWorkerDeps) {
 
     try {
       const result = await processBeleg(deps.db, tenantId, belegId, { s3: deps.s3 });
+
+      // T077: Auto-Kategorisieren direkt nach erfolgreichem OCR (best-effort).
+      // Nur wenn ein CLAUDE_API_KEY gesetzt ist — sonst liefert der Categorizer
+      // 'fallback' → 'requires_review' für JEDEN Beleg (Review-Flut). Ohne Key
+      // bleibt der Beleg 'extracted' + manueller Button (T076). Ein Fehler hier
+      // darf den OCR-Job NICHT failen (sonst Retry-Schleife) → eigener try/catch.
+      if (result.status === 'extracted' && config.CLAUDE_API_KEY) {
+        try {
+          const cat = await categorizeBelegById(deps.db, tenantId, belegId, {
+            actor: { type: 'system', id: null },
+          });
+          logger.info(
+            { belegId, tenantId, autoCategorize: cat.ok ? cat.status : cat.reason },
+            '[ocr-worker] Auto-Kategorisieren abgeschlossen',
+          );
+        } catch (catErr) {
+          logger.warn(
+            {
+              belegId,
+              tenantId,
+              err: catErr instanceof Error ? catErr.message : String(catErr),
+            },
+            '[ocr-worker] Auto-Kategorisieren fehlgeschlagen — Beleg bleibt extracted',
+          );
+        }
+      }
+
       return {
         status: result.status,
         overall_confidence: result.overall_confidence,

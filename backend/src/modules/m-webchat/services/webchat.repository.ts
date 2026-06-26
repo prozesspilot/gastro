@@ -206,6 +206,119 @@ export async function revokeChatSession(
   }
 }
 
+export interface CloseChatSessionInput {
+  tenantId: string;
+  sessionId: string;
+  /** Wer beendet: 'customer' (Wirt im Widget) oder 'staff' (Mitarbeiter). */
+  closedBy: 'customer' | 'staff' | 'system';
+  actor: AuditActor;
+}
+
+/**
+ * Beendet eine AKTIVE Chat-Session (status='closed', closed_at/closed_by).
+ * Idempotent: ist die Session nicht (mehr) aktiv, wird `null` zurückgegeben (der
+ * Handler entscheidet dann über die Antwort). Audit-Event `chat_session.closed`.
+ * Nach dem Schließen ist der partielle Unique-Index `uq_chat_sessions_active_tenant`
+ * frei → der Mandant kann einen neuen aktiven Link bekommen.
+ */
+export async function closeChatSession(
+  pool: Pool,
+  input: CloseChatSessionInput,
+): Promise<DbChatSession | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+
+    const res = await client.query<DbChatSession>(
+      `UPDATE chat_sessions
+          SET status = 'closed', closed_at = now(), closed_by = $2, last_activity_at = now()
+        WHERE id = $1 AND status = 'active'
+        RETURNING *`,
+      [input.sessionId, input.closedBy],
+    );
+    const session = res.rows[0];
+    if (!session) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return null;
+    }
+
+    await logAuditEvent(client, {
+      tenantId: input.tenantId,
+      entityType: 'chat_session',
+      entityId: session.id,
+      eventType: 'chat_session.closed',
+      actor: input.actor,
+      payloadAfter: { closed_by: input.closedBy },
+    });
+
+    await client.query('COMMIT');
+    return session;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export interface RateChatSessionInput {
+  tenantId: string;
+  sessionId: string;
+  /** 1–5; wird zusätzlich per DB-CHECK abgesichert. */
+  rating: number;
+  comment?: string | null;
+  actor: AuditActor;
+}
+
+/**
+ * Speichert die kundenseitige Bewertung einer BEENDETEN Session. Nur erlaubt,
+ * solange `status='closed'` UND noch keine Bewertung vorliegt (`rating IS NULL`)
+ * — sonst `null` (Handler → 409). Audit-Event `chat_session.rated` enthält
+ * BEWUSST nur die Zahl `rating`; der Freitext-Kommentar ist PII und wird NICHT
+ * ins audit_log geschrieben (CLAUDE.md §6.6/§9).
+ */
+export async function rateChatSession(
+  pool: Pool,
+  input: RateChatSessionInput,
+): Promise<DbChatSession | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await setTenantContext(client, input.tenantId);
+
+    const res = await client.query<DbChatSession>(
+      `UPDATE chat_sessions
+          SET rating = $2, rating_comment = $3, rated_at = now()
+        WHERE id = $1 AND status = 'closed' AND rating IS NULL
+        RETURNING *`,
+      [input.sessionId, input.rating, input.comment ?? null],
+    );
+    const session = res.rows[0];
+    if (!session) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return null;
+    }
+
+    await logAuditEvent(client, {
+      tenantId: input.tenantId,
+      entityType: 'chat_session',
+      entityId: session.id,
+      eventType: 'chat_session.rated',
+      actor: input.actor,
+      payloadAfter: { rating: input.rating },
+    });
+
+    await client.query('COMMIT');
+    return session;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Chat-Nachrichten (T069, Migration 125)
 // ---------------------------------------------------------------------------
@@ -353,6 +466,7 @@ export async function listChatsForStaff(
               s.status,
               s.created_at,
               s.last_activity_at,
+              s.rating,
               (SELECT max(m.created_at) FROM chat_messages m WHERE m.session_id = s.id)
                 AS last_message_at,
               (SELECT count(*) FROM chat_messages m

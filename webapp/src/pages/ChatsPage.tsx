@@ -11,6 +11,7 @@ import { getActiveTenantId } from '../api';
 import { listChats, type StaffChatListItem } from '../api/chats';
 import EmptyState from '../components/EmptyState';
 import NoTenantHint from '../components/NoTenantHint';
+import RatingStars from '../components/RatingStars';
 
 const STATUS_LABEL: Record<string, string> = {
   active: 'Aktiv',
@@ -111,6 +112,11 @@ export default function ChatsPage() {
                       {STATUS_LABEL[chat.status] ?? chat.status} · letzte Nachricht{' '}
                       {fmtTime(chat.last_message_at)}
                     </span>
+                    {typeof chat.rating === 'number' && (
+                      <span style={{ display: 'block', marginTop: 2, fontSize: '0.85rem' }}>
+                        <RatingStars value={chat.rating} /> Bewertung
+                      </span>
+                    )}
                   </span>
                   {chat.unread_count > 0 && (
                     <span

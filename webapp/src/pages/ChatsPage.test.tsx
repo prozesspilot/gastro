@@ -93,4 +93,28 @@ describe('ChatsPage', () => {
     await userEvent.click(row);
     expect(await screen.findByTestId('detail-page')).toBeInTheDocument();
   });
+
+  it('beendeter Chat mit Bewertung zeigt Sterne', async () => {
+    server.use(
+      http.get(`${BASE}/chat/sessions`, () =>
+        HttpResponse.json({
+          chats: [
+            {
+              id: 'sess-cccc-3333',
+              status: 'closed',
+              created_at: '2026-06-25T09:00:00Z',
+              last_activity_at: '2026-06-25T10:00:00Z',
+              last_message_at: '2026-06-25T10:00:00Z',
+              unread_count: 0,
+              rating: 4,
+            },
+          ],
+        }),
+      ),
+    );
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Bewertung: 4 von 5 Sternen')).toBeInTheDocument(),
+    );
+  });
 });

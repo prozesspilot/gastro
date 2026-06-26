@@ -12,7 +12,7 @@ import {
   listChatMessages,
   markCustomerMessagesRead,
 } from '../services/webchat.repository';
-import { toPublicChatMessage } from '../webchat.types';
+import { toPublicChatMessage, toStaffChatThreadMeta } from '../webchat.types';
 
 export async function staffThreadHandler(
   req: FastifyRequest<{ Params: { id: string } }>,
@@ -31,5 +31,8 @@ export async function staffThreadHandler(
 
   await markCustomerMessagesRead(req.server.db, { tenantId, sessionId: session.id });
   const messages = await listChatMessages(req.server.db, { tenantId, sessionId: session.id });
-  return reply.send({ messages: messages.map(toPublicChatMessage) });
+  return reply.send({
+    session: toStaffChatThreadMeta(session),
+    messages: messages.map(toPublicChatMessage),
+  });
 }

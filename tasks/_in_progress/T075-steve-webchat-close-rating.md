@@ -21,28 +21,28 @@ GF-Entscheidungen (2026-06-26):
 ## Akzeptanz-Kriterien
 
 ### Backend
-- [ ] Migration 126: `chat_sessions` += `closed_at`, `closed_by` (`customer|staff|system`), `rating` (SMALLINT CHECK 1..5), `rating_comment` (TEXT), `rated_at`. Rückwärts-kompatibel (alle nullable) + Rollback.
-- [ ] `get_chat_session_by_token()` (SECURITY DEFINER) gibt die neuen Spalten mit zurück (DROP+CREATE, Re-GRANT) — sonst sieht das Widget die Bewertung nicht.
-- [ ] `closeChatSession()` (RLS-tenant-gescopet): `active → closed`, setzt `closed_at`/`closed_by`/`last_activity_at`; Audit `chat_session.closed` (payload `{closed_by}`). Idempotent (kein Row wenn nicht `active`).
-- [ ] `rateChatSession()`: nur auf `status='closed'` und `rating IS NULL`; setzt `rating`/`rating_comment`/`rated_at`; Audit `chat_session.rated` (payload **nur** `{rating}` — Kommentar ist PII, NICHT ins Log).
-- [ ] Wirt-Endpoints: `POST /api/v1/chat/:token/close`, `POST /api/v1/chat/:token/rating` (Token = Credential). `resolveChatSession` erlaubt für diese + `GET /:token` den Status `closed` (neue Option `allowClosed`), `revoked`/`expired` bleiben 410.
-- [ ] Staff-Endpoint: `POST /api/v1/chat/sessions/:id/close` (m14-Auth + Tenant-Context).
-- [ ] `GET /api/v1/chat/sessions/:id/messages` (Staff-Thread) liefert zusätzlich Session-Meta (`status`, `rating`, `rating_comment`, `closed_at`, `closed_by`). `listChatsForStaff` += `rating`.
-- [ ] DTO-Erweiterung: `PublicChatSession` += `rating`, `rating_comment`, `closed_at`; `StaffChatListItem` += `rating`.
+- [x] Migration 126: `chat_sessions` += `closed_at`, `closed_by` (`customer|staff|system`), `rating` (SMALLINT CHECK 1..5), `rating_comment` (TEXT), `rated_at`. Rückwärts-kompatibel (alle nullable) + Rollback.
+- [x] `get_chat_session_by_token()` (SECURITY DEFINER) gibt die neuen Spalten mit zurück (DROP+CREATE, Re-GRANT) — sonst sieht das Widget die Bewertung nicht.
+- [x] `closeChatSession()` (RLS-tenant-gescopet): `active → closed`, setzt `closed_at`/`closed_by`/`last_activity_at`; Audit `chat_session.closed` (payload `{closed_by}`). Idempotent (kein Row wenn nicht `active`).
+- [x] `rateChatSession()`: nur auf `status='closed'` und `rating IS NULL`; setzt `rating`/`rating_comment`/`rated_at`; Audit `chat_session.rated` (payload **nur** `{rating}` — Kommentar ist PII, NICHT ins Log).
+- [x] Wirt-Endpoints: `POST /api/v1/chat/:token/close`, `POST /api/v1/chat/:token/rating` (Token = Credential). `resolveChatSession` erlaubt für diese + `GET /:token` den Status `closed` (neue Option `allowClosed`), `revoked`/`expired` bleiben 410.
+- [x] Staff-Endpoint: `POST /api/v1/chat/sessions/:id/close` (m14-Auth + Tenant-Context).
+- [x] `GET /api/v1/chat/sessions/:id/messages` (Staff-Thread) liefert zusätzlich Session-Meta (`status`, `rating`, `rating_comment`, `closed_at`, `closed_by`). `listChatsForStaff` += `rating`.
+- [x] DTO-Erweiterung: `PublicChatSession` += `rating`, `rating_comment`, `closed_at`; `StaffChatListItem` += `rating`.
 
 ### Widget (web-chat-widget)
-- [ ] „Chat beenden"-Aktion (zwei-Schritt-Bestätigung, kein `window.confirm`). → `POST /:token/close` → Übergang zur Bewertung.
-- [ ] `status='closed'` + `rating === null` → Sterne-Auswahl (1–5, Tap-Targets ≥ 44 px) + optionaler Kommentar + „Bewertung senden" → `POST /:token/rating`.
-- [ ] `status='closed'` + `rating !== null` → „Danke"-Ansicht mit gefüllten Sternen (read-only) + ggf. Kommentar. `revoked` bleibt „nicht mehr aktiv".
+- [x] „Chat beenden"-Aktion (zwei-Schritt-Bestätigung, kein `window.confirm`). → `POST /:token/close` → Übergang zur Bewertung.
+- [x] `status='closed'` + `rating === null` → Sterne-Auswahl (1–5, Tap-Targets ≥ 44 px) + optionaler Kommentar + „Bewertung senden" → `POST /:token/rating`.
+- [x] `status='closed'` + `rating !== null` → „Danke"-Ansicht mit gefüllten Sternen (read-only) + ggf. Kommentar. `revoked` bleibt „nicht mehr aktiv".
 
 ### Webapp (Staff)
-- [ ] `/chats`-Liste: bei beendeten Chats die Sterne-Bewertung anzeigen.
-- [ ] Chat-Detailseite: Status + Bewertung (Sterne + Kommentar) prominent; „Chat beenden"-Button (nur wenn `active`); Antwort-Eingabe gesperrt/ausgeblendet wenn nicht `active`.
+- [x] `/chats`-Liste: bei beendeten Chats die Sterne-Bewertung anzeigen.
+- [x] Chat-Detailseite: Status + Bewertung (Sterne + Kommentar) prominent; „Chat beenden"-Button (nur wenn `active`); Antwort-Eingabe gesperrt/ausgeblendet wenn nicht `active`.
 
 ### Tests + Gates
-- [ ] Backend-Integration: close (Wirt+Staff), rate, doppelte Bewertung → 409, Bewertung ohne Beenden → 409, `allowClosed`-Resolve, Liste/Thread enthalten `rating`.
-- [ ] Widget-Unit: RatingView (Sterne rendern/auswählen/senden), App routet `closed → Bewertung`.
-- [ ] `npm run build` + `npm test` (Backend mit DB) + Lint/Typecheck grün.
+- [x] Backend-Integration: close (Wirt+Staff), rate, doppelte Bewertung → 409, Bewertung ohne Beenden → 409, `allowClosed`-Resolve, Liste/Thread enthalten `rating`.
+- [x] Widget-Unit: RatingView (Sterne rendern/auswählen/senden), App routet `closed → Bewertung`.
+- [x] `npm run build` + `npm test` (Backend mit DB) + Lint/Typecheck grün.
 
 ---
 

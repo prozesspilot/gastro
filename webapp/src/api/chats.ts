@@ -9,6 +9,8 @@ import { apiRequest } from './_client';
 export type ChatSessionStatus = 'active' | 'revoked' | 'closed';
 export type ChatSenderType = 'customer' | 'staff' | 'system';
 
+export type ChatClosedBy = 'customer' | 'staff' | 'system';
+
 export interface StaffChatListItem {
   id: string;
   status: ChatSessionStatus;
@@ -16,6 +18,8 @@ export interface StaffChatListItem {
   last_activity_at: string;
   last_message_at: string | null;
   unread_count: number;
+  /** Kundenseitige Bewertung 1–5 (null = noch nicht bewertet). T075 */
+  rating: number | null;
 }
 
 export interface ChatMessage {
@@ -28,18 +32,47 @@ export interface ChatMessage {
   created_at: string;
 }
 
-/** Liste der Chat-Sessions des aktiven Mandanten (mit unread/last_message). */
+/** Session-Meta der Thread-Ansicht: Status + Bewertung + Abschluss-Info (T075). */
+export interface StaffChatThreadMeta {
+  id: string;
+  status: ChatSessionStatus;
+  closed_at: string | null;
+  closed_by: ChatClosedBy | null;
+  rating: number | null;
+  rating_comment: string | null;
+  rated_at: string | null;
+}
+
+export interface StaffChatThread {
+  session: StaffChatThreadMeta;
+  messages: ChatMessage[];
+}
+
+/** Liste der Chat-Sessions des aktiven Mandanten (mit unread/last_message/rating). */
 export async function listChats(): Promise<StaffChatListItem[]> {
   const res = await apiRequest<{ chats: StaffChatListItem[] }>('/chat/sessions');
   return res.chats;
 }
 
-/** Nachrichtenverlauf einer Session (markiert Customer-Nachrichten als gelesen). */
-export async function getChatMessages(sessionId: string): Promise<ChatMessage[]> {
-  const res = await apiRequest<{ messages: ChatMessage[] }>(
+/**
+ * Nachrichtenverlauf + Session-Meta einer Session (markiert Customer-Nachrichten
+ * als gelesen). Fällt defensiv auf eine aktive Default-Meta zurück, falls das
+ * Backend (ältere Version) noch kein `session`-Feld mitliefert.
+ */
+export async function getChatThread(sessionId: string): Promise<StaffChatThread> {
+  const res = await apiRequest<{ session?: StaffChatThreadMeta; messages: ChatMessage[] }>(
     `/chat/sessions/${sessionId}/messages`,
   );
-  return res.messages;
+  const session: StaffChatThreadMeta = res.session ?? {
+    id: sessionId,
+    status: 'active',
+    closed_at: null,
+    closed_by: null,
+    rating: null,
+    rating_comment: null,
+    rated_at: null,
+  };
+  return { session, messages: res.messages };
 }
 
 /** Staff antwortet im Thread. */
@@ -49,4 +82,13 @@ export async function sendStaffReply(sessionId: string, text: string): Promise<C
     body: { text },
   });
   return res.message;
+}
+
+/** Staff beendet die Chat-Session (status → 'closed'). T075 */
+export async function closeChatSession(sessionId: string): Promise<StaffChatThreadMeta> {
+  const res = await apiRequest<{ session: StaffChatThreadMeta }>(
+    `/chat/sessions/${sessionId}/close`,
+    { method: 'POST' },
+  );
+  return res.session;
 }

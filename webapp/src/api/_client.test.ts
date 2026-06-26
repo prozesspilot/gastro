@@ -114,6 +114,27 @@ describe('apiRequest', () => {
     await expect(apiRequest('/test')).rejects.toThrow('Kein Zugriff');
   });
 
+  it('T076: liest Legacy-Error-Shape { error: code, message } (Export-/Webchat-Endpoints)', async () => {
+    server.use(
+      http.get('/api/v1/test', () =>
+        HttpResponse.json(
+          { error: 'not_categorized', message: 'Beleg ist noch nicht kategorisiert.' },
+          { status: 422 },
+        ),
+      ),
+    );
+    try {
+      await apiRequest('/test');
+      throw new Error('sollte werfen');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      const apiErr = err as ApiError;
+      expect(apiErr.status).toBe(422);
+      expect(apiErr.message).toBe('Beleg ist noch nicht kategorisiert.');
+      expect(apiErr.code).toBe('not_categorized');
+    }
+  });
+
   it('gibt undefined bei 204 zurück', async () => {
     server.use(
       http.delete('/api/v1/test', () => new HttpResponse(null, { status: 204 })),

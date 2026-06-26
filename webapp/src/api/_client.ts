@@ -77,9 +77,28 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 async function parseError(res: Response): Promise<ApiError> {
   let body: unknown;
   try { body = await res.json(); } catch { /* nothing */ }
-  const obj = body as { error?: { message?: string; code?: string; details?: unknown } } | undefined;
-  const msg = obj?.error?.message ?? res.statusText ?? `HTTP ${res.status}`;
-  return new ApiError(res.status, msg, obj?.error?.code, obj?.error?.details);
+  // Zwei Backend-Error-Shapes:
+  //  A) Standard (apiError): { error: { code, message, details } }
+  //  B) Legacy (z. B. M05-Export, m-webchat): { error: '<code>', message: '...' }
+  const obj = body as
+    | {
+        error?: { message?: string; code?: string; details?: unknown } | string;
+        message?: string;
+      }
+    | undefined;
+  let message: string | undefined;
+  let code: string | undefined;
+  let details: unknown;
+  if (obj && typeof obj.error === 'object') {
+    message = obj.error.message;
+    code = obj.error.code;
+    details = obj.error.details;
+  } else if (obj && typeof obj.error === 'string') {
+    code = obj.error;
+    message = obj.message;
+  }
+  message = message ?? obj?.message ?? res.statusText ?? `HTTP ${res.status}`;
+  return new ApiError(res.status, message, code, details);
 }
 
 function buildHeaders(opts: RequestOptions): Record<string, string> {

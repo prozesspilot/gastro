@@ -3,7 +3,7 @@
  * Spec: T014 — Empty-State, Tabelle, Pagination, Status-Filter, Row-Navigation
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -16,6 +16,16 @@ import type { Beleg } from '../api/belege';
 // Einzelne Tests können den noTenant-Pfad per mockReturnValueOnce(null) prüfen.
 const mockGetActiveTenantId = vi.fn<() => string | null>(() => 'tenant-001');
 vi.mock('../api', () => ({ getActiveTenantId: () => mockGetActiveTenantId() }));
+
+// useAuth-Rolle für das Batch-Export-Gating (gf-only). `mock`-Präfix wegen vi.mock-Hoisting.
+let mockAuthRole = 'geschaeftsfuehrer';
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1', role: mockAuthRole } }),
+}));
+
+beforeEach(() => {
+  mockAuthRole = 'geschaeftsfuehrer';
+});
 
 const BASE = '/api/v1';
 
@@ -285,5 +295,67 @@ describe('BelegeListPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Mandanten wählen/i)).toBeInTheDocument();
     });
+  });
+
+  // ── T076 — Batch-Export ──────────────────────────────────────────────────
+
+  it('T076: Batch-Export-Button sichtbar für Geschäftsführer', async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-batch-export')).toBeInTheDocument();
+    });
+  });
+
+  it('T076: Batch-Export-Button NICHT sichtbar für Mitarbeiter', async () => {
+    mockAuthRole = 'mitarbeiter';
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ beleg hochladen/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('btn-batch-export')).not.toBeInTheDocument();
+  });
+
+  it('T076: Batch-Export mit Bestätigung ruft Endpoint + zeigt Summary-Toast', async () => {
+    let called = false;
+    server.use(
+      http.post(`${BASE}/exports/lexware/batch`, () => {
+        called = true;
+        return HttpResponse.json({ pushed: 2, skipped: 1, failed: 0, results: [] });
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('btn-batch-export')).toBeInTheDocument());
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-batch-export'));
+    });
+    // Bestätigungs-Dialog → bestätigen
+    const confirmBtn = await screen.findByRole('button', { name: /jetzt exportieren/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
+    await waitFor(() => expect(called).toBe(true));
+    expect(await screen.findByText(/2 exportiert, 1 übersprungen, 0 fehlgeschlagen/i)).toBeInTheDocument();
+  });
+
+  it('T076: Batch-Export mit failed>0 zeigt Fehler-Summary-Toast', async () => {
+    server.use(
+      http.post(`${BASE}/exports/lexware/batch`, () =>
+        HttpResponse.json({ pushed: 1, skipped: 0, failed: 2, results: [] }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('btn-batch-export')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-batch-export'));
+    });
+    const confirmBtn = await screen.findByRole('button', { name: /jetzt exportieren/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+    expect(
+      await screen.findByText(/1 exportiert, 0 übersprungen, 2 fehlgeschlagen/i),
+    ).toBeInTheDocument();
   });
 });

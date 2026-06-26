@@ -33,14 +33,19 @@ try {
     allow(); // unparsbares JSON -> durchlassen
   }
 
-  const sessionId =
-    String(data.session_id || "").replace(/[^a-zA-Z0-9_-]/g, "") || "unknown";
+  const sessionId = String(data.session_id || "").replace(/[^a-zA-Z0-9_-]/g, "");
   const prompt = String(data.prompt || "");
+
+  // Ohne valide session_id: fail-open. Verhindert einen geteilten "unknown"-Marker,
+  // der sonst alle session-losen Laeufe gemeinsam entsperren wuerde.
+  if (!sessionId) allow();
 
   const lockDir = join(homedir(), ".claude", ".schicht-locks");
   const marker = join(lockDir, sessionId);
 
-  const ranSchicht = /\/schicht\b/i.test(prompt); // matcht den Slash-Command /schicht
+  // Nur den echten Slash-Command am Zeilenanfang werten (kein Fehl-Entsperren,
+  // falls "/schicht" beilaeufig irgendwo im Prompt-Text vorkommt).
+  const ranSchicht = /^\s*\/schicht\b/i.test(prompt);
   const escape = /schicht-skip/i.test(prompt); // Notausgang
 
   if (ranSchicht || escape) {

@@ -2,20 +2,22 @@
  * T074 — Integrationstest: Beleg-Statuswechsel pushen ein `beleg.status`-SSE-Event
  * an den Tenant-Kanal (damit der Wirt den Fortschritt im Web-Chat-Widget live sieht).
  *
- * Geprüft gegen echtes Postgres (Statuswechsel laufen in echten BEGIN/COMMIT-Tx):
+ * Geprüft gegen echtes Postgres (Statuswechsel laufen in echten BEGIN/COMMIT-Tx).
+ * Alle 6 Status-Writer sind abgedeckt — die 4 nullable-Writer (if-updated-Gate) plus
+ * die 2 unbedingt emittierenden (confirmBelegReview, markBelegExported mit rowCount-Gate):
  *   A) updateBelegStatus → 'extracting' pusht `beleg.status` mit EXAKT {beleg_id,status}.
  *   B) updateBelegOcrResult → 'extracted' pusht das Event und enthält KEINE PII
  *      (raw_text/Lieferant aus dem Payload tauchen im Stream NICHT auf).
  *   C) updateBelegCategorization → 'categorized' pusht das Event.
  *   D) markBelegOcrFailed → 'error' pusht das Event (terminaler Status).
- *   E) NEGATIV: ein nicht-existenter Beleg (Writer committed, gibt aber null zurück)
- *      pusht KEIN Event — der Emit ist über `if (updated)` an eine echte, committete
- *      Row gekoppelt. (Die Reihenfolge „Emit NACH COMMIT" ist zusätzlich durch die
- *      Code-Platzierung garantiert — emit steht hinter `await client.query('COMMIT')`.)
- *
- * NICHT hier abgedeckt (Code-symmetrisch, eigener Helper): der Exporter-Emit
- * 'exported' (markBelegExported) und confirmBelegReview — beide rufen denselben
- * getesteten emitBelegStatus; eine M05-SSE-Integration wäre ein Folge-Test.
+ *   E) confirmBelegReview → 'categorized' pusht das Event (Staff-Freigabe; unbedingter Emit).
+ *   F) markBelegExported → 'exported' pusht das Event (letzter Wirt-sichtbarer Schritt).
+ *   G) NEGATIV/updateBelegStatus: nicht-existenter Beleg → früher `return null` VOR dem
+ *      UPDATE → KEIN Event (zusätzlich vom `if (updated)`-Guard abgesichert).
+ *   H) NEGATIV/markBelegExported: nicht-existenter Beleg → rowCount 0 → KEIN Event
+ *      (beweist das rowCount-Gate gegen Phantom-Emit beim unbedingten Exporter-Pfad).
+ * Die Reihenfolge „Emit NACH COMMIT" ist zusätzlich durch die Code-Platzierung
+ * garantiert — jeder Emit steht hinter `await client.query('COMMIT')`.
  *
  * In CI ist die DB Pflicht; lokal ohne DB wird sauber übersprungen.
  * audit_log ist append-only (BEFORE-DELETE-Trigger) → Cleanup läuft als Superuser
@@ -27,12 +29,14 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sseManager } from '../../core/sse/sse.manager';
 import {
+  confirmBelegReview,
   insertBeleg,
   markBelegOcrFailed,
   updateBelegCategorization,
   updateBelegOcrResult,
   updateBelegStatus,
 } from '../../modules/m01-receipt-intake/services/beleg.repository';
+import { markBelegExported } from '../../modules/m05-lexoffice/services/belege-lexware-exporter';
 
 const DB_URL =
   process.env.DATABASE_URL ??
@@ -244,10 +248,92 @@ describe('T074 — beleg.status SSE-Emit', () => {
     expect(parseSseData(received[0])).toEqual({ beleg_id: belegId, status: 'error' });
   });
 
-  it('NEGATIV: nicht-existenter Beleg → null → KEIN Event (Emit an committete Row gekoppelt)', async () => {
+  it('confirmBelegReview → categorized pusht das Event (Staff-Freigabe)', async () => {
     if (!dbAvailable) return;
-    // Writer läuft, findet 0 Rows, committed die (leere) Tx und gibt null zurück.
-    // Das `if (updated)`-Gate verhindert jeden Phantom-Push.
+    const belegId = await freshBeleg('f'.repeat(64));
+    // Gate von confirmBelegReview: Beleg muss zuerst in requires_review sein.
+    // Dieser Statuswechsel emittiert selbst — passiert aber VOR dem subscribe.
+    await updateBelegStatus(pool, T, belegId, 'requires_review');
+
+    const received: string[] = [];
+    const sink = {
+      write: (chunk: string): boolean => {
+        received.push(chunk);
+        return true;
+      },
+    };
+    sseManager.subscribe(T, sink);
+    try {
+      const res = await confirmBelegReview(pool, T, belegId, {
+        actorType: 'staff',
+        actorId: 'module:M03-test',
+      });
+      expect(res).not.toBeNull();
+    } finally {
+      sseManager.unsubscribe(T, sink);
+    }
+
+    expect(received).toHaveLength(1);
+    expect(parseSseData(received[0])).toEqual({ beleg_id: belegId, status: 'categorized' });
+  });
+
+  it('markBelegExported → exported pusht das Event (letzter Wirt-sichtbarer Schritt)', async () => {
+    if (!dbAvailable) return;
+    const belegId = await freshBeleg('e'.repeat(64));
+
+    const received: string[] = [];
+    const sink = {
+      write: (chunk: string): boolean => {
+        received.push(chunk);
+        return true;
+      },
+    };
+    sseManager.subscribe(T, sink);
+    try {
+      await markBelegExported(
+        pool,
+        T,
+        belegId,
+        'lexware-ext-t074',
+        'https://app.lexoffice.de/voucher/t074',
+        'module:M05-test',
+      );
+    } finally {
+      sseManager.unsubscribe(T, sink);
+    }
+
+    expect(received).toHaveLength(1);
+    expect(parseSseData(received[0])).toEqual({ beleg_id: belegId, status: 'exported' });
+  });
+
+  it('NEGATIV/markBelegExported: nicht-existenter Beleg → rowCount 0 → KEIN Event', async () => {
+    if (!dbAvailable) return;
+    // markBelegExported emittiert UNBEDINGT (kein if-updated), aber gegated über
+    // rowCount === 1. Ein UPDATE auf eine nicht-existente id trifft 0 Rows → kein Emit.
+    const MISSING = '0c0c0c0c-0074-4074-8074-0000000eeeee';
+
+    const received: string[] = [];
+    const sink = {
+      write: (chunk: string): boolean => {
+        received.push(chunk);
+        return true;
+      },
+    };
+    sseManager.subscribe(T, sink);
+    try {
+      await markBelegExported(pool, T, MISSING, 'x', null, 'module:M05-test');
+    } finally {
+      sseManager.unsubscribe(T, sink);
+    }
+
+    expect(received).toHaveLength(0);
+  });
+
+  it('NEGATIV/updateBelegStatus: nicht-existenter Beleg → null → KEIN Event', async () => {
+    if (!dbAvailable) return;
+    // updateBelegStatus findet 0 Rows im Vorab-SELECT → früher `return null` VOR dem
+    // UPDATE, also gar kein Emit. (Der `if (updated)`-Guard fängt denselben Fall
+    // zusätzlich ab.) Beweist: ein nicht-committeter Statuswechsel pusht nie ein Event.
     const MISSING = '0c0c0c0c-0074-4074-8074-0000000fffff';
 
     const received: string[] = [];

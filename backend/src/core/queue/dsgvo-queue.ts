@@ -42,13 +42,22 @@ export async function getDsgvoQueue(): Promise<Queue<DsgvoJobData, DsgvoJobResul
   return cachedQueue;
 }
 
+/**
+ * Baut die BullMQ-jobId für einen DSGVO-ZIP-Job. KEIN ':' — BullMQ verbietet
+ * Doppelpunkte in Custom-Job-IDs (T079; vorher `dsgvo:<request_id>` → Enqueue
+ * scheiterte). Stabil pro request_id → dedup gegen Doppel-Enqueue.
+ */
+export function buildDsgvoJobId(data: DsgvoJobData): string {
+  return `dsgvo-${data.request_id}`;
+}
+
 export async function enqueueDsgvoZipJob(data: DsgvoJobData): Promise<void> {
   if (!config.DSGVO_QUEUE_ENABLED) {
     logger.debug({ request_id: data.request_id }, '[dsgvo-queue] disabled — skip enqueue');
     return;
   }
   const queue = await getDsgvoQueue();
-  const jobId = `dsgvo:${data.request_id}`;
+  const jobId = buildDsgvoJobId(data);
   await queue.add('build-zip', data, { jobId });
   logger.info(
     { jobId, request_id: data.request_id, tenant_id: data.tenant_id },

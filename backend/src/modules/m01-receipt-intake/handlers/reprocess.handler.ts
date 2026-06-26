@@ -9,8 +9,9 @@
  * Auth: m14StaffAuthHook + m14TenantContextHook (geerbt von belege.routes.ts).
  * Rolle: 'support' darf reprocessen (read-only-Equivalent für Operator).
  *
- * Idempotenz: jobId in der Queue ist `ocr:<belegId>` — paralleles Reprocess
- * für denselben Beleg führt nur zu einem Job.
+ * jobId-Strategie (T079, ohne `:`): reason='reprocess' → `ocr-<belegId>-reprocess-<ts>`
+ * (immer eindeutig, läuft auch wenn der vorherige Upload-Job noch gecached ist);
+ * der Upload-Pfad nutzt `ocr-<belegId>` (deduped). Siehe buildOcrJobId.
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';

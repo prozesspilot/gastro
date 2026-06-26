@@ -4,7 +4,7 @@
  * Backend-Spec: POST /api/v1/belege/upload, GET /api/v1/belege, GET /api/v1/belege/:id
  */
 
-import { apiRequest } from './_client';
+import { apiRequest, unwrap } from './_client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -206,5 +206,71 @@ export async function deleteBeleg(
   return apiRequest<{ beleg_id: string; deleted_at: string }>(`/belege/${id}`, {
     method: 'DELETE',
     body: reason ? { reason } : undefined,
+  });
+}
+
+// ── T076: Kategorisieren (M03) + Lexware-Export (M05) ────────────────────────
+
+/** Ergebnis von POST /belege/:id/categorize (entpackt aus `{ ok, data }`). */
+export interface CategorizeResult {
+  beleg_id: string;
+  status: BelegStatus;
+  categorization: {
+    category: string;
+    category_label: string;
+    skr_account: string | null;
+    confidence: number;
+    engine: string;
+    /** true → Status 'requires_review' (KI unsicher / Bewirtungs-Schutz). */
+    requires_review: boolean;
+    bewirtung_preserved: boolean;
+  };
+}
+
+/**
+ * Kategorisiert einen Beleg (Status muss 'extracted' sein → sonst ApiError 422).
+ * `support`-Rolle → 403.
+ */
+export async function categorizeBeleg(id: string): Promise<CategorizeResult> {
+  const res = await apiRequest<{ ok: boolean; data: CategorizeResult }>(
+    `/belege/${id}/categorize`,
+    { method: 'POST' },
+  );
+  return unwrap<CategorizeResult>(res);
+}
+
+/** Ergebnis eines Lexware-Single-Push (bare, kein `{ ok, data }`-Wrapper). */
+export interface ExportResult {
+  beleg_id: string;
+  status: 'pushed' | 'skipped' | 'failed';
+  external_id?: string;
+  error?: string;
+  attempts: number;
+}
+
+/**
+ * Exportiert einen Beleg nach Lexware Office (Status muss 'categorized' sein →
+ * sonst ApiError 422 `not_categorized`). `support`-Rolle → 403, externer Fehler → 502.
+ * Idempotent: bereits exportiert → status 'skipped'.
+ */
+export async function exportBelegLexware(id: string): Promise<ExportResult> {
+  return apiRequest<ExportResult>(`/belege/${id}/exports/lexware`, { method: 'POST' });
+}
+
+export interface BatchExportResult {
+  pushed: number;
+  skipped: number;
+  failed: number;
+  results: ExportResult[];
+}
+
+/**
+ * Batch-Export aller noch nicht exportierten Belege des Mandanten. Nur
+ * `geschaeftsfuehrer` (sonst 403). `limit` = max. Anzahl pro Lauf (Default Backend 50).
+ */
+export async function exportLexwareBatch(limit?: number): Promise<BatchExportResult> {
+  return apiRequest<BatchExportResult>('/exports/lexware/batch', {
+    method: 'POST',
+    body: limit !== undefined ? { limit } : {},
   });
 }

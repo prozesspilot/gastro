@@ -8,7 +8,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
-import { listBelege, type Beleg, type BelegStatus } from '../api/belege';
+import { type Beleg, type BelegStatus, exportLexwareBatch, listBelege } from '../api/belege';
+import { useAuth } from '../auth/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import NoTenantHint from '../components/NoTenantHint';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/ToastProvider';
@@ -89,11 +91,16 @@ function sourceBadge(channel: string): string {
 export default function BelegeListPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // Batch-Export ist eine Operator-Aktion → nur Geschäftsführer (Backend 403 sonst).
+  const isGf = user?.role === 'geschaeftsfuehrer';
 
   const [belege, setBelege] = useState<Beleg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noTenant, setNoTenant] = useState(false);
+  const [batchExporting, setBatchExporting] = useState(false);
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -141,6 +148,23 @@ export default function BelegeListPage() {
     setPage(1);
   }
 
+  // Batch-Export: alle noch nicht exportierten Belege an Lexware pushen (gf-only).
+  const handleBatchExport = async () => {
+    setShowBatchConfirm(false);
+    setBatchExporting(true);
+    try {
+      const res = await exportLexwareBatch();
+      const summary = `${res.pushed} exportiert, ${res.skipped} übersprungen, ${res.failed} fehlgeschlagen.`;
+      toast(res.failed > 0 ? 'error' : 'success', `Stapel-Export: ${summary}`);
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      toast('error', `Stapel-Export fehlgeschlagen: ${msg}`);
+    } finally {
+      setBatchExporting(false);
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -164,24 +188,47 @@ export default function BelegeListPage() {
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/belege/upload')}
-          style={{
-            padding: '9px 18px',
-            background: 'var(--color-brand)',
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
-          aria-label="Beleg hochladen"
-        >
-          + Beleg hochladen
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isGf && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setShowBatchConfirm(true)}
+              disabled={batchExporting}
+              style={{ padding: '9px 18px', fontSize: 14, fontWeight: 600 }}
+              data-testid="btn-batch-export"
+            >
+              {batchExporting ? 'Exportiere…' : 'Stapel-Export → Lexware'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate('/belege/upload')}
+            style={{
+              padding: '9px 18px',
+              background: 'var(--color-brand)',
+              border: 'none',
+              borderRadius: 'var(--radius)',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+            aria-label="Beleg hochladen"
+          >
+            + Beleg hochladen
+          </button>
+        </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showBatchConfirm}
+        title="Stapel-Export an Lexware"
+        message="Alle noch nicht exportierten Belege dieses Mandanten an Lexware Office übergeben?"
+        confirmLabel="Jetzt exportieren"
+        onConfirm={handleBatchExport}
+        onCancel={() => setShowBatchConfirm(false)}
+      />
 
       {/* Filter-Bar */}
       <div

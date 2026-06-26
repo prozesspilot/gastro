@@ -3,7 +3,7 @@
  * Spec: T014 — Beleg laden, Status-Badge, Image/PDF-Preview, Back-Button
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -14,6 +14,18 @@ import type { Beleg } from '../api/belege';
 
 // Aktiver Mandant vorausgesetzt (sonst greift der NoTenantHint-Guard).
 vi.mock('../api', () => ({ getActiveTenantId: () => 'tenant-001' }));
+
+// useAuth liefert die Rolle für das Button-Gating (categorize/export). `mockAuthRole`
+// ist mutable (über Re-Renders stabil; mockReturnValueOnce würde beim 2. Render auf den
+// Default zurückfallen). `mock`-Präfix nötig, weil vi.mock gehoisted wird. beforeEach setzt zurück.
+let mockAuthRole = 'geschaeftsfuehrer';
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1', role: mockAuthRole } }),
+}));
+
+beforeEach(() => {
+  mockAuthRole = 'geschaeftsfuehrer';
+});
 
 const BASE = '/api/v1';
 
@@ -561,5 +573,108 @@ describe('BelegeDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('status-badge')).toBeInTheDocument();
     }, { timeout: 5000 });
+  });
+
+  // ── T076 — Kategorisieren + Exportieren ──────────────────────────────────
+
+  function mockGet(beleg: Beleg) {
+    server.use(
+      http.get(`${BASE}/belege/:id`, () =>
+        HttpResponse.json({
+          beleg,
+          download_url: 'http://localhost/preview.jpg',
+          download_expires_at: '2026-05-18T11:00:00Z',
+        }),
+      ),
+    );
+  }
+
+  it('T076: Kategorisieren-Button nur bei Status extracted', async () => {
+    mockGet(makeBeleg({ status: 'received' }));
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-save')).toBeInTheDocument());
+    expect(screen.queryByTestId('btn-categorize')).not.toBeInTheDocument();
+  });
+
+  it('T076: Kategorisieren ruft POST /categorize + zeigt Toast', async () => {
+    let called = false;
+    mockGet(makeBeleg({ status: 'extracted' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/categorize`, () => {
+        called = true;
+        return HttpResponse.json({
+          ok: true,
+          data: {
+            beleg_id: 'b-detail-001',
+            status: 'categorized',
+            categorization: {
+              category: 'wareneinkauf_food',
+              category_label: 'Wareneinkauf Lebensmittel',
+              skr_account: '5400',
+              confidence: 0.95,
+              engine: 'claude',
+              requires_review: false,
+              bewirtung_preserved: false,
+            },
+          },
+        });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-categorize')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-categorize'));
+    });
+    await waitFor(() => expect(called).toBe(true));
+    expect(await screen.findByText(/Kategorisiert als/i)).toBeInTheDocument();
+  });
+
+  it('T076: Exportieren ruft POST /exports/lexware + zeigt Toast', async () => {
+    let called = false;
+    mockGet(makeBeleg({ status: 'categorized' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/exports/lexware`, () => {
+        called = true;
+        return HttpResponse.json({ beleg_id: 'b-detail-001', status: 'pushed', attempts: 1 });
+      }),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-export')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-export'));
+    });
+    await waitFor(() => expect(called).toBe(true));
+    expect(await screen.findByText(/An Lexware Office exportiert/i)).toBeInTheDocument();
+  });
+
+  it('T076: Export-Fehler (422 not_categorized) zeigt verständlichen Toast (Legacy-Error-Shape)', async () => {
+    mockGet(makeBeleg({ status: 'categorized' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/exports/lexware`, () =>
+        HttpResponse.json(
+          {
+            error: 'not_categorized',
+            beleg_id: 'b-detail-001',
+            message: 'Beleg ist noch nicht kategorisiert — erst /categorize, dann exportieren.',
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-export')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-export'));
+    });
+    expect(await screen.findByText(/noch nicht kategorisiert/i)).toBeInTheDocument();
+  });
+
+  it('T076: support-Rolle sieht keine Kategorisieren/Export-Buttons', async () => {
+    mockAuthRole = 'support';
+    mockGet(makeBeleg({ status: 'extracted' }));
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-save')).toBeInTheDocument());
+    expect(screen.queryByTestId('btn-categorize')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-export')).not.toBeInTheDocument();
   });
 });

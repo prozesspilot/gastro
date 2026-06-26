@@ -22,11 +22,14 @@ import { getActiveTenantId } from '../api';
 import {
   type Beleg,
   type BelegUpdatePatch,
+  categorizeBeleg,
   deleteBeleg,
+  exportBelegLexware,
   getBeleg,
   reprocessBeleg,
   updateBeleg,
 } from '../api/belege';
+import { useAuth } from '../auth/AuthContext';
 import NoTenantHint from '../components/NoTenantHint';
 import { useToast } from '../components/ToastProvider';
 
@@ -199,6 +202,9 @@ export default function BelegeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // categorize/export sind dem support verboten (Backend 403) → Buttons ausblenden.
+  const canWrite = user?.role !== 'support';
 
   const [beleg, setBeleg] = useState<Beleg | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -208,6 +214,8 @@ export default function BelegeDetailPage() {
   const [baseline, setBaseline] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showZoomModal, setShowZoomModal] = useState(false);
   const [noTenant, setNoTenant] = useState(false);
@@ -308,6 +316,64 @@ export default function BelegeDetailPage() {
       toast('error', `Re-OCR fehlgeschlagen: ${msg}`);
     } finally {
       setReprocessing(false);
+    }
+  };
+
+  /** Lädt den Beleg neu (nach Kategorisieren/Export) → Status + Felder aktualisieren. */
+  const refreshBeleg = async () => {
+    if (!id) return;
+    const res = await getBeleg(id);
+    setBeleg(res.beleg);
+    setDownloadUrl(res.download_url);
+    const f = belegToForm(res.beleg);
+    setForm(f);
+    setBaseline(f);
+  };
+
+  const handleCategorize = async () => {
+    if (!id || categorizing) return;
+    setCategorizing(true);
+    try {
+      const res = await categorizeBeleg(id);
+      await refreshBeleg();
+      const c = res.categorization;
+      if (c.requires_review) {
+        toast(
+          'info',
+          `Kategorisiert als „${c.category_label}" — bitte prüfen (Konfidenz ${Math.round(
+            c.confidence * 100,
+          )} %).`,
+        );
+      } else {
+        toast(
+          'success',
+          `Kategorisiert als „${c.category_label}"${c.skr_account ? ` (SKR ${c.skr_account})` : ''}.`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      toast('error', `Kategorisieren fehlgeschlagen: ${msg}`);
+    } finally {
+      setCategorizing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!id || exporting) return;
+    setExporting(true);
+    try {
+      const res = await exportBelegLexware(id);
+      await refreshBeleg();
+      if (res.status === 'skipped') {
+        toast('info', 'Beleg war bereits an Lexware exportiert.');
+      } else {
+        toast('success', 'An Lexware Office exportiert.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      toast('error', `Export fehlgeschlagen: ${msg}`);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -665,6 +731,26 @@ export default function BelegeDetailPage() {
               >
                 {reprocessing ? 'Startet…' : 'Re-OCR'}
               </button>
+              {canWrite && beleg.status === 'extracted' && (
+                <button
+                  type="button"
+                  onClick={handleCategorize}
+                  disabled={categorizing}
+                  data-testid="btn-categorize"
+                >
+                  {categorizing ? 'Kategorisiere…' : 'Kategorisieren'}
+                </button>
+              )}
+              {canWrite && beleg.status === 'categorized' && (
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={exporting}
+                  data-testid="btn-export"
+                >
+                  {exporting ? 'Exportiere…' : 'Nach Lexware exportieren'}
+                </button>
+              )}
             </div>
             <button
               type="button"

@@ -22,23 +22,23 @@ Backend-Endpoints (unverändert nutzen):
 ## Akzeptanz-Kriterien
 
 ### API-Client
-- [ ] `webapp/src/api/_client.ts`: `parseError` liest auch das Legacy-Shape `{ error: '<code>', message: '...' }` (Export-Endpoints) → `ApiError.message`/`.code` korrekt (bestehendes `{ error: { code, message } }`-Verhalten unverändert).
-- [ ] `webapp/src/api/belege.ts`: `categorizeBeleg(id)`, `exportBelegLexware(id)`, `exportLexwareBatch(limit?)` + Typen (`CategorizeResult`, `ExportResult`, `BatchExportResult`). `unwrap` für die `{ ok, data }`-categorize-Antwort.
+- [x] `webapp/src/api/_client.ts`: `parseError` liest auch das Legacy-Shape `{ error: '<code>', message: '...' }` (Export-Endpoints) → `ApiError.message`/`.code` korrekt (bestehendes `{ error: { code, message } }`-Verhalten unverändert).
+- [x] `webapp/src/api/belege.ts`: `categorizeBeleg(id)`, `exportBelegLexware(id)`, `exportLexwareBatch(limit?)` + Typen (`CategorizeResult`, `ExportResult`, `BatchExportResult`). `unwrap` für die `{ ok, data }`-categorize-Antwort.
 
 ### Beleg-Detailseite
-- [ ] **Kategorisieren**-Button — sichtbar nur bei `status='extracted'`, ausgeblendet für Rolle `support`. Klick → `categorizeBeleg` → Beleg neu laden → Toast (success „Kategorisiert als … (SKR …)" bzw. info „… bitte prüfen, Konfidenz X%" bei `requires_review`).
-- [ ] **Exportieren (Lexware)**-Button — sichtbar nur bei `status='categorized'`, ausgeblendet für `support`. Klick → `exportBelegLexware` → Beleg neu laden → Toast (success „An Lexware exportiert" / info „Bereits exportiert" bei `skipped`). Fehler (422 not_categorized / 502) → verständlicher Toast.
-- [ ] Busy-States (Spinner/disabled) je Aktion; bestehende Save/Reprocess/Delete-Buttons unverändert.
+- [x] **Kategorisieren**-Button — sichtbar nur bei `status='extracted'`, ausgeblendet für Rolle `support`. Klick → `categorizeBeleg` → Beleg neu laden → Toast (success „Kategorisiert als … (SKR …)" bzw. info „… bitte prüfen, Konfidenz X%" bei `requires_review`).
+- [x] **Exportieren (Lexware)**-Button — sichtbar nur bei `status='categorized'`, ausgeblendet für `support`. Klick → `exportBelegLexware` → Beleg neu laden → Toast (success „An Lexware exportiert" / info „Bereits exportiert" bei `skipped`). Fehler (422 not_categorized / 502) → verständlicher Toast.
+- [x] Busy-States (Spinner/disabled) je Aktion; bestehende Save/Reprocess/Delete-Buttons unverändert.
 
 ### Beleg-Liste
-- [ ] **Batch-Export**-Button — nur für `geschaeftsfuehrer`. Klick (mit Bestätigung) → `exportLexwareBatch` → Summary-Toast („X exportiert, Y übersprungen, Z fehlgeschlagen") → Liste neu laden.
+- [x] **Batch-Export**-Button — nur für `geschaeftsfuehrer`. Klick (mit Bestätigung) → `exportLexwareBatch` → Summary-Toast („X exportiert, Y übersprungen, Z fehlgeschlagen") → Liste neu laden.
 
 ### Tests + Gates
-- [ ] `belege.ts`: categorize/export/batch (Erfolg + Fehlerpfade 422/403).
-- [ ] `_client.ts`: parseError-Legacy-Shape (Message + Code).
-- [ ] `BelegeDetailPage`: Button-Sichtbarkeit je Status + Rolle; Klick ruft Endpoint + lädt neu + Toast.
-- [ ] `BelegeListPage`: Batch-Button nur für gf; Klick → Summary.
-- [ ] Lint/Typecheck/Build grün; Webapp-Tests grün (localStorage-Fälle = bekannte Node-26-lokal-Falle, CI=Node 20 grün).
+- [x] `belege.ts`: categorize/export/batch (Erfolg + Fehlerpfade 422/403).
+- [x] `_client.ts`: parseError-Legacy-Shape (Message + Code).
+- [x] `BelegeDetailPage`: Button-Sichtbarkeit je Status + Rolle; Klick ruft Endpoint + lädt neu + Toast.
+- [x] `BelegeListPage`: Batch-Button nur für gf; Klick → Summary.
+- [x] Lint/Typecheck/Build grün; Webapp-Tests grün (localStorage-Fälle = bekannte Node-26-lokal-Falle, CI=Node 20 grün).
 
 ---
 

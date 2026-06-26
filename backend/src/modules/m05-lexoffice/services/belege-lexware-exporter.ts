@@ -34,6 +34,7 @@ import {
 import { logAuditEvent } from '../../../core/audit/audit-log';
 import { config } from '../../../core/config';
 import { logger } from '../../../core/logger';
+import { emitBelegStatus } from '../../../core/sse/beleg-status';
 import { buildBelegVoucher } from './belege-voucher-builder';
 import {
   BookingCredentialNotConfiguredError,
@@ -175,8 +176,11 @@ async function loadBeleg(pool: Pool, tenantId: string, belegId: string): Promise
  * archiviert), und der Sprung 'extracted -> exported' wird zu
  * 'archived -> exported'. Backlog-Task: "T-?: FSM-Guard fuer Lexware-Export
  * nach M02-Archiv-Hook".
+ *
+ * T074: Als testbarer Status-Writer exportiert (analog zu den M01-Repository-Writern),
+ * damit der 'exported'-SSE-Emit direkt gegen die DB getestet werden kann.
  */
-async function markBelegExported(
+export async function markBelegExported(
   pool: Pool,
   tenantId: string,
   belegId: string,
@@ -195,7 +199,7 @@ async function markBelegExported(
       external_url: externalUrl,
       pushed_at: new Date().toISOString(),
     };
-    await client.query(
+    const updateResult = await client.query(
       `UPDATE belege
           SET status = 'exported',
               payload = jsonb_set(
@@ -204,7 +208,8 @@ async function markBelegExported(
                 $3::jsonb,
                 true
               )
-        WHERE id = $1 AND tenant_id = $2`,
+        WHERE id = $1 AND tenant_id = $2
+        RETURNING id`,
       [belegId, tenantId, JSON.stringify(exportEntry)],
     );
 
@@ -218,6 +223,10 @@ async function markBelegExported(
     });
 
     await client.query('COMMIT');
+    // T074: Live-Status 'exported' best-effort in den Web-Chat des Wirts (nach Commit).
+    // rowCount-Gate (wie die M01-Writer): nur emittieren, wenn wirklich eine Row
+    // committed wurde — kein Phantom-Emit, falls der Beleg zwischenzeitlich weg ist.
+    if (updateResult.rowCount === 1) emitBelegStatus(tenantId, belegId, 'exported');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

@@ -22,13 +22,20 @@ Web-Chat-Widget den Fortschritt seines hochgeladenen Belegs **live** sieht
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] `updateBelegStatus` / `updateBelegOcrResult` / `updateBelegCategorization` (oder der
+- [x] `updateBelegStatus` / `updateBelegOcrResult` / `updateBelegCategorization` (oder der
       OCR-Worker-Pfad) emittiert nach dem Commit `sseManager.emit(tenantId, 'beleg.status', …)`.
       **Nach** dem Commit (nicht in der Tx), best-effort (kein Fail bei Emit-Fehler).
-- [ ] Nur Status-Metadaten im Payload (`beleg_id`, `status`) — **keine** PII/Extraktionsfelder.
-- [ ] Tenant-scoped (wie T069); Wirt-`/:token/events` empfängt es bereits (gleicher Kanal).
-- [ ] Test: Subscriber-Sink empfängt `beleg.status` nach einem Status-Update.
-- [ ] CI grün, code-reviewer OK.
+      → `core/sse/beleg-status.ts` (`emitBelegStatus`), verdrahtet in allen 6 Status-Writern
+      (5× `beleg.repository.ts` + `markBelegExported` für `exported`).
+- [x] Nur Status-Metadaten im Payload (`beleg_id`, `status`) — **keine** PII/Extraktionsfelder.
+      → Test asserted `toEqual({beleg_id,status})` + PII-Guard (kein raw_text/Lieferant im Stream).
+- [x] Tenant-scoped (wie T069); Wirt-`/:token/events` empfängt es bereits (gleicher Kanal).
+- [x] Test: Subscriber-Sink empfängt `beleg.status` nach einem Status-Update.
+      → 5 Integrationstests (echtes Postgres): extracting/extracted/categorized/error +
+      Negativ-Fall (nicht-existenter Beleg → KEIN Emit).
+- [ ] CI grün, code-reviewer OK. *(läuft auf dem PR — lokal kein Node/npm-Toolchain auf
+      diesem Rechner, daher build/test/lint ausschließlich in CI; statisch + adversarial
+      3-Lens-reviewt: Biome-Import-Order-Blocker gefunden & gefixt.)*
 
 ---
 

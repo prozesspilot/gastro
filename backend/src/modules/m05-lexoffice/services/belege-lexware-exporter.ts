@@ -33,6 +33,7 @@ import {
 } from '../../../core/adapters/booking/lexoffice/lexoffice.client';
 import { logAuditEvent } from '../../../core/audit/audit-log';
 import { config } from '../../../core/config';
+import { emitBelegStatus } from '../../../core/sse/beleg-status';
 import { logger } from '../../../core/logger';
 import { buildBelegVoucher } from './belege-voucher-builder';
 import {
@@ -218,6 +219,8 @@ async function markBelegExported(
     });
 
     await client.query('COMMIT');
+    // T074: Live-Status 'exported' best-effort in den Web-Chat des Wirts (nach Commit).
+    emitBelegStatus(tenantId, belegId, 'exported');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

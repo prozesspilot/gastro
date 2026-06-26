@@ -21,6 +21,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { logAuditEvent } from '../../../core/audit/audit-log';
+import { emitBelegStatus } from '../../../core/sse/beleg-status';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -744,7 +745,10 @@ export async function updateBelegStatus(
     });
 
     await client.query('COMMIT');
-    return updateResult.rows[0] ?? null;
+    const updated = updateResult.rows[0] ?? null;
+    // T074: Live-Status best-effort in den Web-Chat des Wirts (nach Commit, außerhalb der Tx).
+    if (updated) emitBelegStatus(tenantId, updated.id, updated.status);
+    return updated;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;
@@ -840,6 +844,8 @@ export async function confirmBelegReview(
     });
 
     await client.query('COMMIT');
+    // T074: Live-Status best-effort in den Web-Chat des Wirts (nach Commit, außerhalb der Tx).
+    emitBelegStatus(tenantId, row.id, row.status);
     return row;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
@@ -936,7 +942,10 @@ export async function updateBelegCategorization(
     });
 
     await client.query('COMMIT');
-    return updateResult.rows[0] ?? null;
+    const updated = updateResult.rows[0] ?? null;
+    // T074: Live-Status best-effort in den Web-Chat des Wirts (nach Commit, außerhalb der Tx).
+    if (updated) emitBelegStatus(tenantId, updated.id, updated.status);
+    return updated;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;
@@ -1072,7 +1081,10 @@ export async function updateBelegOcrResult(
     });
 
     await client.query('COMMIT');
-    return updateResult.rows[0] ?? null;
+    const updated = updateResult.rows[0] ?? null;
+    // T074: Live-Status best-effort in den Web-Chat des Wirts (nach Commit, außerhalb der Tx).
+    if (updated) emitBelegStatus(tenantId, updated.id, updated.status);
+    return updated;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;
@@ -1137,7 +1149,10 @@ export async function markBelegOcrFailed(
     });
 
     await client.query('COMMIT');
-    return updateResult.rows[0] ?? null;
+    const updated = updateResult.rows[0] ?? null;
+    // T074: Live-Status best-effort in den Web-Chat des Wirts (nach Commit, außerhalb der Tx).
+    if (updated) emitBelegStatus(tenantId, updated.id, updated.status);
+    return updated;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw err;

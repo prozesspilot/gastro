@@ -735,7 +735,10 @@ export default function BelegeDetailPage() {
                 <button
                   type="button"
                   onClick={handleCategorize}
-                  disabled={categorizing}
+                  // Bei ungespeicherten Edits sperren: refreshBeleg nach der Aktion
+                  // würde die Formular-Eingaben sonst stillschweigend verwerfen.
+                  disabled={categorizing || isDirty}
+                  title={isDirty ? 'Bitte zuerst die Änderungen speichern.' : undefined}
                   data-testid="btn-categorize"
                 >
                   {categorizing ? 'Kategorisiere…' : 'Kategorisieren'}
@@ -745,7 +748,8 @@ export default function BelegeDetailPage() {
                 <button
                   type="button"
                   onClick={handleExport}
-                  disabled={exporting}
+                  disabled={exporting || isDirty}
+                  title={isDirty ? 'Bitte zuerst die Änderungen speichern.' : undefined}
                   data-testid="btn-export"
                 >
                   {exporting ? 'Exportiere…' : 'Nach Lexware exportieren'}

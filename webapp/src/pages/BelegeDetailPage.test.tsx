@@ -669,6 +669,68 @@ describe('BelegeDetailPage', () => {
     expect(await screen.findByText(/noch nicht kategorisiert/i)).toBeInTheDocument();
   });
 
+  it('T076: Kategorisieren mit requires_review zeigt Prüf-Toast inkl. Konfidenz', async () => {
+    mockGet(makeBeleg({ status: 'extracted' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/categorize`, () =>
+        HttpResponse.json({
+          ok: true,
+          data: {
+            beleg_id: 'b-detail-001',
+            status: 'requires_review',
+            categorization: {
+              category: 'sonstige_betriebsausgaben',
+              category_label: 'Sonstige Betriebsausgaben',
+              skr_account: '6300',
+              confidence: 0.5,
+              engine: 'claude',
+              requires_review: true,
+              bewirtung_preserved: false,
+            },
+          },
+        }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-categorize')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-categorize'));
+    });
+    expect(await screen.findByText(/bitte prüfen \(Konfidenz 50 %\)/i)).toBeInTheDocument();
+  });
+
+  it('T076: Export mit status skipped zeigt „Bereits exportiert"-Toast', async () => {
+    mockGet(makeBeleg({ status: 'categorized' }));
+    server.use(
+      http.post(`${BASE}/belege/:id/exports/lexware`, () =>
+        HttpResponse.json({
+          beleg_id: 'b-detail-001',
+          status: 'skipped',
+          external_id: 'lex-1',
+          attempts: 1,
+        }),
+      ),
+    );
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('btn-export')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-export'));
+    });
+    expect(await screen.findByText(/bereits an Lexware exportiert/i)).toBeInTheDocument();
+  });
+
+  it('T076: Kategorisieren ist bei ungespeicherten Änderungen gesperrt', async () => {
+    mockGet(makeBeleg({ status: 'extracted' }));
+    renderDetailPage();
+    const btn = (await screen.findByTestId('btn-categorize')) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    const supplierInput = screen.getByTestId('field-supplier_name') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(supplierInput, { target: { value: 'Geändert' } });
+    });
+    expect((screen.getByTestId('btn-categorize') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('T076: support-Rolle sieht keine Kategorisieren/Export-Buttons', async () => {
     mockAuthRole = 'support';
     mockGet(makeBeleg({ status: 'extracted' }));

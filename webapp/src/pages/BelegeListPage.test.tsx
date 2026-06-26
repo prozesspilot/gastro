@@ -338,4 +338,24 @@ describe('BelegeListPage', () => {
     await waitFor(() => expect(called).toBe(true));
     expect(await screen.findByText(/2 exportiert, 1 übersprungen, 0 fehlgeschlagen/i)).toBeInTheDocument();
   });
+
+  it('T076: Batch-Export mit failed>0 zeigt Fehler-Summary-Toast', async () => {
+    server.use(
+      http.post(`${BASE}/exports/lexware/batch`, () =>
+        HttpResponse.json({ pushed: 1, skipped: 0, failed: 2, results: [] }),
+      ),
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('btn-batch-export')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('btn-batch-export'));
+    });
+    const confirmBtn = await screen.findByRole('button', { name: /jetzt exportieren/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+    expect(
+      await screen.findByText(/1 exportiert, 0 übersprungen, 2 fehlgeschlagen/i),
+    ).toBeInTheDocument();
+  });
 });

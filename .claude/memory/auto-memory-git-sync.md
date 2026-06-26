@@ -15,6 +15,6 @@ Das file-basierte Claude-Code-Memory liegt seit PR #185 (2026-06-26) **im Repo**
 - **Aktivierung pro Rechner einmalig:** `git config core.hooksPath .githooks` (auf Mac UND Windows je einmal). Prüfen: `git config --get core.hooksPath` → `.githooks`.
 - **`autoMemoryDirectory` greift erst nach Session-Neustart + Workspace-Trust-Dialog.** Eine laufende Session, die vor PR #185 gestartet wurde, liest/schreibt noch den ALTEN user-lokalen Pfad → vor weiterem Memory-Schreiben Session neu starten, sonst divergieren Repo-Ordner und alter Ordner.
 - **Memory immer nur auf einem Rechner gleichzeitig ändern**, sonst Merge-Konflikte in den `.md`-Dateien. Vor Geräte-Wechsel erst pushen, dann drüben pullen.
-- **Nur-Memory-Sync (kein Code-Commit):** `git add .claude/memory && git commit -m "chore: Memory-Sync" && git push`.
+- **Nur-Memory-Sync (kein Code-Commit):** `git add .claude/memory && git commit -m "chore: Memory-Sync" && git push` — aber auf `main` scheitert der direkte Push an der Branch-Protection, also auf einem Branch machen + per PR mergen. Im Coding-Alltag bist du eh auf einem Feature-Branch, wo der Hook das Memory automatisch mitzieht.
 
 Siehe `.githooks/README.md`. Verwandt: [[git-push-via-gh-https]] (origin = HTTPS, push/pull gehen direkt).

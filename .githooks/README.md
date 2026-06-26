@@ -40,3 +40,16 @@ Windows-Git-Bash identisch):
 ```sh
 git add .claude/memory && git commit -m "chore: Memory-Sync" && git push
 ```
+
+> **Hinweis:** Auf `main` scheitert der direkte `git push` an der Branch-Protection
+> (siehe CLAUDE.md §9). Mach den Memory-Sync daher auf einem Branch und merge ihn
+> per PR — im Arbeitsalltag bist du beim Coden ohnehin auf einem Feature-Branch,
+> dort zieht der pre-commit Hook das Memory automatisch mit.
+
+## Bekannte Eigenheit: Pathspec-Commit
+
+Beim selten genutzten `git commit -- <datei>` (Commit nur eines Pfads) kann
+`git status` danach kurz einen Pseudo-`D`-Eintrag fürs Memory zeigen. Das ist
+harmlos (die Datei ist im Commit, kein Datenverlust) — der nächste normale
+Commit räumt den Zustand automatisch auf. Bei `git add` + `git commit` (Normalfall)
+tritt das nicht auf.

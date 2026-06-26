@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# Gastro pre-commit Hook — Auto-Memory-Sync
+#
+# Zweck: Das file-basierte Claude-Code-Memory (.claude/memory/) wird bei JEDEM
+# Commit automatisch mit-gestaged. So landet jede Memory-Aenderung zusammen mit
+# dem normalen Code-Commit im Push und synct via git pull/push zwischen
+# Mac, Windows, Andreas und IONOS. Vergiss-sicher — kein manuelles `git add` noetig.
+#
+# Aktivierung (einmalig pro Rechner):
+#   git config core.hooksPath .githooks
+# (siehe .githooks/README.md)
+#
+# Der Hook blockiert NIE einen Commit (exit 0) und ist idempotent.
+
+MEMORY_DIR=".claude/memory"
+
+# Nur handeln, wenn das Memory-Verzeichnis existiert (frischer Checkout vor pull -> skip).
+if [ -d "$MEMORY_DIR" ]; then
+  # Gibt es ueberhaupt ungestagte/neue Memory-Aenderungen? (status --porcelain ist leer = nichts zu tun)
+  if [ -n "$(git status --porcelain -- "$MEMORY_DIR")" ]; then
+    git add "$MEMORY_DIR"
+    echo "  [pre-commit] .claude/memory/ automatisch mit-committet (Auto-Memory-Sync)"
+  fi
+fi
+
+exit 0

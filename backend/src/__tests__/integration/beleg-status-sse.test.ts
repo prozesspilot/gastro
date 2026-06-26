@@ -7,16 +7,28 @@
  *   B) updateBelegOcrResult → 'extracted' pusht das Event und enthält KEINE PII
  *      (raw_text/Lieferant aus dem Payload tauchen im Stream NICHT auf).
  *   C) updateBelegCategorization → 'categorized' pusht das Event.
+ *   D) markBelegOcrFailed → 'error' pusht das Event (terminaler Status).
+ *   E) NEGATIV: ein nicht-existenter Beleg (Writer committed, gibt aber null zurück)
+ *      pusht KEIN Event — der Emit ist über `if (updated)` an eine echte, committete
+ *      Row gekoppelt. (Die Reihenfolge „Emit NACH COMMIT" ist zusätzlich durch die
+ *      Code-Platzierung garantiert — emit steht hinter `await client.query('COMMIT')`.)
+ *
+ * NICHT hier abgedeckt (Code-symmetrisch, eigener Helper): der Exporter-Emit
+ * 'exported' (markBelegExported) und confirmBelegReview — beide rufen denselben
+ * getesteten emitBelegStatus; eine M05-SSE-Integration wäre ein Folge-Test.
  *
  * In CI ist die DB Pflicht; lokal ohne DB wird sauber übersprungen.
- * Hinweis: audit_log ist append-only → frische prozesspilot_test-DB nötig
- * (CI ist ephemer = grün; lokal räumen before/afterAll auf).
+ * audit_log ist append-only (BEFORE-DELETE-Trigger) → Cleanup läuft als Superuser
+ * in einer Tx mit `SET LOCAL app.bypass_rls/app.audit_maintenance = 'on'`
+ * (kanonischer Pattern aus tests/migrations/schema.test.ts) → Test ist lokal
+ * RE-RUNNABLE, nicht nur in der ephemeren CI-DB grün.
  */
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sseManager } from '../../core/sse/sse.manager';
 import {
   insertBeleg,
+  markBelegOcrFailed,
   updateBelegCategorization,
   updateBelegOcrResult,
   updateBelegStatus,
@@ -55,6 +67,27 @@ async function freshBeleg(sha: string): Promise<string> {
   return beleg.id;
 }
 
+/**
+ * Räumt audit_log für den Test-Tenant. audit_log hat einen append-only
+ * BEFORE-DELETE-Trigger (060_audit_log.sql), der ohne Maintenance-Flag wirft.
+ * Daher als Superuser (pp) in einer Tx mit gesetzten GUCs löschen — exakt der
+ * Pattern aus tests/migrations/schema.test.ts. Best-effort.
+ */
+async function purgeAuditLog(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL app.bypass_rls = 'on'");
+    await client.query("SET LOCAL app.audit_maintenance = 'on'");
+    await client.query('DELETE FROM audit_log WHERE tenant_id = $1', [T]);
+    await client.query('COMMIT');
+  } catch {
+    await client.query('ROLLBACK').catch(() => undefined);
+  } finally {
+    client.release();
+  }
+}
+
 beforeAll(async () => {
   pool = new pg.Pool({ connectionString: DB_URL });
   try {
@@ -70,7 +103,7 @@ beforeAll(async () => {
 
   // Seed (fresh DB). FK: belege/audit_log → tenants. Reihenfolge: Kinder zuerst.
   await pool.query('DELETE FROM belege WHERE tenant_id = $1', [T]);
-  await pool.query('DELETE FROM audit_log WHERE tenant_id = $1', [T]);
+  await purgeAuditLog(); // append-only Trigger → Maintenance-Mode nötig
   await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
   await pool.query(
     'INSERT INTO tenants (id, slug, display_name, contact_email) VALUES ($1, $2, $3, $4)',
@@ -81,7 +114,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (dbAvailable) {
     await pool.query('DELETE FROM belege WHERE tenant_id = $1', [T]).catch(() => {});
-    await pool.query('DELETE FROM audit_log WHERE tenant_id = $1', [T]).catch(() => {});
+    await purgeAuditLog();
     await pool.query('DELETE FROM tenants WHERE id = $1', [T]).catch(() => {});
   }
   await pool?.end().catch(() => {});
@@ -187,5 +220,51 @@ describe('T074 — beleg.status SSE-Emit', () => {
 
     expect(received).toHaveLength(1);
     expect(parseSseData(received[0])).toEqual({ beleg_id: belegId, status: 'categorized' });
+  });
+
+  it('markBelegOcrFailed → error pusht das Event (terminaler Status)', async () => {
+    if (!dbAvailable) return;
+    const belegId = await freshBeleg('d'.repeat(64));
+
+    const received: string[] = [];
+    const sink = {
+      write: (chunk: string): boolean => {
+        received.push(chunk);
+        return true;
+      },
+    };
+    sseManager.subscribe(T, sink);
+    try {
+      await markBelegOcrFailed(pool, T, belegId, 'boom', 3);
+    } finally {
+      sseManager.unsubscribe(T, sink);
+    }
+
+    expect(received).toHaveLength(1);
+    expect(parseSseData(received[0])).toEqual({ beleg_id: belegId, status: 'error' });
+  });
+
+  it('NEGATIV: nicht-existenter Beleg → null → KEIN Event (Emit an committete Row gekoppelt)', async () => {
+    if (!dbAvailable) return;
+    // Writer läuft, findet 0 Rows, committed die (leere) Tx und gibt null zurück.
+    // Das `if (updated)`-Gate verhindert jeden Phantom-Push.
+    const MISSING = '0c0c0c0c-0074-4074-8074-0000000fffff';
+
+    const received: string[] = [];
+    const sink = {
+      write: (chunk: string): boolean => {
+        received.push(chunk);
+        return true;
+      },
+    };
+    sseManager.subscribe(T, sink);
+    try {
+      const res = await updateBelegStatus(pool, T, MISSING, 'extracting');
+      expect(res).toBeNull();
+    } finally {
+      sseManager.unsubscribe(T, sink);
+    }
+
+    expect(received).toHaveLength(0);
   });
 });

@@ -33,8 +33,8 @@ import {
 } from '../../../core/adapters/booking/lexoffice/lexoffice.client';
 import { logAuditEvent } from '../../../core/audit/audit-log';
 import { config } from '../../../core/config';
-import { emitBelegStatus } from '../../../core/sse/beleg-status';
 import { logger } from '../../../core/logger';
+import { emitBelegStatus } from '../../../core/sse/beleg-status';
 import { buildBelegVoucher } from './belege-voucher-builder';
 import {
   BookingCredentialNotConfiguredError,

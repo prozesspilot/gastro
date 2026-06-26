@@ -1,6 +1,9 @@
 {
   "_comment": "Geteilte Claude-Code-Konfiguration für ProzessPilot-Repo. Wird via Git an alle Instanzen verteilt (Steve-Mac, Andreas-Mac, IONOS-Server).",
 
+  "autoMemoryDirectory": ".claude/memory",
+  "_comment_memory": "Auto-Memory liegt im Repo (.claude/memory/) statt im user-lokalen ~/.claude/projects/<pfad-hash>/memory/. So teilen Mac + Windows + Andreas EIN Memory, das via git pull/push synct (der pfad-basierte Default-Ordner unterscheidet sich sonst zwischen /Users und C:\\Users). Greift erst nach Neustart der Session + Workspace-Trust-Dialog.",
+
   "modelDefaults": {
     "primary": "claude-sonnet-4-6",
     "review": "claude-opus-4-6",

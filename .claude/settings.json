@@ -31,5 +31,21 @@
   "discord": {
     "webhookEnvVar": "DISCORD_DEV_WEBHOOK_URL",
     "_comment": "Bei wichtigen Events (PR open, Merge, CI fail) wird via Webhook in #dev-coordination gepostet."
+  },
+
+  "_comment_hooks": "Harte /schicht-Sperre: Bevor in diesem Projekt gearbeitet wird, blockiert der UserPromptSubmit-Hook jeden Prompt, bis in der Session /schicht lief (markiert pro Session unter ~/.claude/.schicht-locks/). Logik + Sicherheit (fail-open, Notausgang 'schicht-skip') in .claude/hooks/require-schicht.mjs. Gilt geraeteunabhaengig fuer alle (eingecheckt). Greift erst nach Session-Neustart oder einmaligem Oeffnen von /hooks.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/require-schicht.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Pruefe /schicht-Sperre ..."
+          }
+        ]
+      }
+    ]
   }
 }

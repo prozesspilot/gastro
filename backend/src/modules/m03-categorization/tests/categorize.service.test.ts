@@ -123,4 +123,30 @@ describe('categorizeBelegById (T077)', () => {
       actorId: 'user-42',
     });
   });
+
+  it('T053-Bewirtungs-Schutz: unsichere KI verwirft die Detektor-Bewirtung NICHT', async () => {
+    // OCR-Detektor hat bereits category='bewirtung' gesetzt; KI ist unsicher und
+    // schlägt etwas anderes vor → der Schutz behält 'bewirtung' (sonst gingen
+    // anlass/teilnehmer + die M05-Memo/70%-Logik verloren).
+    getBelegById.mockResolvedValue({ status: 'extracted', category: 'bewirtung', payload: {} });
+    updateBelegCategorization.mockResolvedValue({ status: 'requires_review' });
+
+    const outcome = await categorizeBelegById(db, 'tenant-1', 'beleg-1', {
+      actor: { type: 'system', id: null },
+      deps: {
+        categorize: async () =>
+          result({ categoryId: 'sonstige_aufwand', confidence: 0.4, engine: 'claude' }),
+      },
+    });
+
+    expect(outcome).toMatchObject({ ok: true, status: 'requires_review' });
+    if (outcome.ok) {
+      expect(outcome.categorization.category).toBe('bewirtung');
+      expect(outcome.categorization.bewirtung_preserved).toBe(true);
+    }
+    // Persistierte Felder: bewirtung + dessen SKR03-Konto (nicht das KI-Konto).
+    const args = updateBelegCategorization.mock.calls[0][3];
+    expect(args.category).toBe('bewirtung');
+    expect(args.categorization.skr_account).toBe('4650');
+  });
 });

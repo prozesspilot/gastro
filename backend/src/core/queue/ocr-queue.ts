@@ -58,17 +58,31 @@ export async function getOcrQueue(): Promise<Queue<OcrJobData, OcrJobResult>> {
 }
 
 /**
+ * Baut die BullMQ-jobId für einen OCR-Job.
+ *
+ * WICHTIG (T079): KEIN ':' — BullMQ verbietet Doppelpunkte in Custom-Job-IDs
+ * ("Custom Id cannot contain :", reserviertes Key-Trennzeichen). Vorher war die
+ * jobId `ocr:<belegId>` → jedes Enqueue scheiterte auf Prod, Belege blieben für
+ * immer in status=received.
+ *
+ * Idempotenz / jobId-Strategie (Review-Fix M2):
+ *   reason='upload'    → `ocr-<belegId>` (deduped — paralleler Upload desselben
+ *                        SHA256 enqueued nicht doppelt).
+ *   reason='reprocess' → `ocr-<belegId>-reprocess-<ts>` (immer eindeutig — der
+ *                        Operator-Reprocess läuft auch, wenn der vorherige Job
+ *                        noch 24h removeOnComplete-cached ist).
+ */
+export function buildOcrJobId(data: OcrJobData, now: number = Date.now()): string {
+  return data.reason === 'reprocess'
+    ? `ocr-${data.belegId}-reprocess-${now}`
+    : `ocr-${data.belegId}`;
+}
+
+/**
  * Reicht einen OCR-Job in die Queue ein.
  *
  * Wenn OCR_QUEUE_ENABLED=0 (z. B. in Tests), wird der Aufruf zur No-op —
  * keine Redis-Verbindung wird geöffnet.
- *
- * Idempotenz / jobId-Strategie (Review-Fix M2):
- *   reason='upload'    → jobId = `ocr:<belegId>` (deduped — paralleler Upload
- *                        desselben SHA256 enqueued nicht doppelt).
- *   reason='reprocess' → jobId = `ocr:<belegId>:reprocess:<ts>` (immer eindeutig
- *                        — Operator-Reprocess wird auch ausgeführt wenn der
- *                        vorherige Job noch 24h removeOnComplete-cached ist).
  */
 export async function enqueueOcrJob(data: OcrJobData): Promise<void> {
   if (!config.OCR_QUEUE_ENABLED) {
@@ -76,10 +90,7 @@ export async function enqueueOcrJob(data: OcrJobData): Promise<void> {
     return;
   }
   const queue = await getOcrQueue();
-  const jobId =
-    data.reason === 'reprocess'
-      ? `ocr:${data.belegId}:reprocess:${Date.now()}`
-      : `ocr:${data.belegId}`;
+  const jobId = buildOcrJobId(data);
   await queue.add('process-beleg', data, { jobId });
   logger.info({ jobId, belegId: data.belegId, reason: data.reason }, '[ocr-queue] Job enqueued');
 }

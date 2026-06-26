@@ -20,11 +20,11 @@ Derselbe Bug steckt in `dsgvo-queue.ts` (`dsgvo:<request_id>`) → DSGVO-ZIPs w�
 
 ## Akzeptanz-Kriterien
 
-- [ ] `ocr-queue.ts`: jobId ohne `:` — `ocr-<belegId>` (upload, dedup-stabil) bzw. `ocr-<belegId>-reprocess-<ts>` (reprocess, eindeutig). jobId-Konstruktion in eine **pure Funktion** `buildOcrJobId(data)` extrahiert (testbar ohne Redis).
-- [ ] `dsgvo-queue.ts`: jobId `dsgvo-<request_id>` (ohne `:`); analog `buildDsgvoJobId(data)`.
-- [ ] Doku-Kommentare (jobId-Strategie in `ocr-queue.ts`, Referenz in `reprocess.handler.ts`) angeglichen.
-- [ ] Tests: `buildOcrJobId` (upload vs reprocess, **kein `:`**, dedup-stabil/eindeutig) + `buildDsgvoJobId` (kein `:`).
-- [ ] `npm run build` + `npm test` grün; nach Deploy Prod-Smoke: hochgeladener Beleg verlässt `received` (Enqueue-Log ohne Fehler).
+- [x] `ocr-queue.ts`: jobId ohne `:` — `ocr-<belegId>` (upload, dedup-stabil) bzw. `ocr-<belegId>-reprocess-<ts>` (reprocess, eindeutig). jobId-Konstruktion in eine **pure Funktion** `buildOcrJobId(data)` extrahiert (testbar ohne Redis).
+- [x] `dsgvo-queue.ts`: jobId `dsgvo-<request_id>` (ohne `:`); analog `buildDsgvoJobId(data)`.
+- [x] Doku-Kommentare (jobId-Strategie in `ocr-queue.ts`, Referenz in `reprocess.handler.ts`) angeglichen.
+- [x] Tests: `buildOcrJobId` (upload vs reprocess, **kein `:`**, dedup-stabil/eindeutig) + `buildDsgvoJobId` (kein `:`).
+- [x] `npm run build` + `npm test` grün; nach Deploy Prod-Smoke: hochgeladener Beleg verlässt `received` (Enqueue-Log ohne Fehler).
 
 ---
 

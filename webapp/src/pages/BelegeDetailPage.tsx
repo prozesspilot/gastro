@@ -23,6 +23,7 @@ import {
   type Beleg,
   type BelegUpdatePatch,
   categorizeBeleg,
+  confirmBelegReview,
   deleteBeleg,
   exportBelegLexware,
   getBeleg,
@@ -216,6 +217,7 @@ export default function BelegeDetailPage() {
   const [reprocessing, setReprocessing] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showZoomModal, setShowZoomModal] = useState(false);
   const [noTenant, setNoTenant] = useState(false);
@@ -374,6 +376,23 @@ export default function BelegeDetailPage() {
       toast('error', `Export fehlgeschlagen: ${msg}`);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleConfirmReview = async () => {
+    if (!id || confirming) return;
+    setConfirming(true);
+    try {
+      await confirmBelegReview(id);
+      await refreshBeleg();
+      toast('success', 'Als geprüft bestätigt — der Beleg ist jetzt kategorisiert und exportierbar.');
+    } catch (err) {
+      // 422 (Bewirtungs-/Kategorie-Pflichtfelder, falscher Status) → die
+      // Backend-Meldung ist handlungsleitend und wird direkt gezeigt.
+      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      toast('error', `Bestätigen fehlgeschlagen: ${msg}`);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -731,6 +750,19 @@ export default function BelegeDetailPage() {
               >
                 {reprocessing ? 'Startet…' : 'Re-OCR'}
               </button>
+              {canWrite && beleg.status === 'requires_review' && (
+                <button
+                  type="button"
+                  onClick={handleConfirmReview}
+                  // isDirty-Sperre: refreshBeleg nach der Bestätigung würde sonst
+                  // ungespeicherte Korrekturen verwerfen → erst speichern.
+                  disabled={confirming || isDirty}
+                  title={isDirty ? 'Bitte zuerst die Änderungen speichern.' : undefined}
+                  data-testid="btn-confirm-review"
+                >
+                  {confirming ? 'Bestätige…' : 'Als geprüft bestätigen'}
+                </button>
+              )}
               {canWrite && beleg.status === 'extracted' && (
                 <button
                   type="button"

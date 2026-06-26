@@ -17,4 +17,8 @@ Das file-basierte Claude-Code-Memory liegt seit PR #185 (2026-06-26) **im Repo**
 - **Memory immer nur auf einem Rechner gleichzeitig ändern**, sonst Merge-Konflikte in den `.md`-Dateien. Vor Geräte-Wechsel erst pushen, dann drüben pullen.
 - **Nur-Memory-Sync (kein Code-Commit):** `git add .claude/memory && git commit -m "chore: Memory-Sync" && git push` — aber auf `main` scheitert der direkte Push an der Branch-Protection, also auf einem Branch machen + per PR mergen. Im Coding-Alltag bist du eh auf einem Feature-Branch, wo der Hook das Memory automatisch mitzieht.
 
-Siehe `.githooks/README.md`. Verwandt: [[git-push-via-gh-https]] (origin = HTTPS, push/pull gehen direkt).
+**Komfort-Commands (seit 2026-06-26, im Repo `.claude/commands/`):**
+- **`/schicht`** (Schichtbeginn) — `git pull` main + Team-Memory in die Session spiegeln + kurze Orientierung. Stoppt sicher bei dirty tree.
+- **`/feierabend`** (Schichtende) — Session-Memory (Harness→Repo) einsammeln + sicher auf `main` bringen: Sync-Branch von `origin/main`, **kein** `git add -A` (nur Allowlist `.claude/memory`/`tasks`/`MANUELLE_AUFGABEN.md`), Diff-Allowlist-Gate vor dem Admin-Merge, MEMORY.md wird nie überschrieben (nur ergänzt). Code/Spec bleiben beim Review-PR-Flow. Adversarial reviewt (2 Lenses).
+
+Siehe `.githooks/README.md`. Verwandt: [[git-push-via-gh-https]] (origin = HTTPS, push/pull gehen direkt), [[review-merge-flow-solo]] (Admin-Merge-Autorisierung).

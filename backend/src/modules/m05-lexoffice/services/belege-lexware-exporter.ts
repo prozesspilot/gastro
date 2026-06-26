@@ -47,7 +47,15 @@ const MAX_ATTEMPTS = 3;
 // T078: Nur kategorisierte (oder spätere) Belege dürfen exportiert werden. Alles
 // davor — insb. 'requires_review' (hat payload.categorization, aber ungeprüft) —
 // wird abgewiesen.
-const EXPORTABLE_STATUS = new Set<string>([
+//
+// Bewusste Asymmetrie zum Batch-Selektor findBelegIdsPendingExport (export-log.
+// repository), der auf SQL-Ebene nur ('categorized','archived','exported') zieht:
+// diese Menge hier ist eine SUPERMENGE für den Einzel-Endpoint. Die zusätzlichen
+// transienten/Endstati (archiving/exporting/completed) sind unkritisch, weil der
+// Idempotenz-Skip (oben, vor diesem Gate) bereits gepushte Belege ohnehin als
+// 'skipped' abfängt; ausgeschlossen bleibt in BEIDEN Pfaden das Wesentliche:
+// requires_review/extracted/… werden nie exportiert.
+export const EXPORTABLE_STATUS = new Set<string>([
   'categorized',
   'archiving',
   'archived',

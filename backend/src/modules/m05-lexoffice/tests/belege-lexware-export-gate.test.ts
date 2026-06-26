@@ -10,7 +10,7 @@
 import type { S3Client } from '@aws-sdk/client-s3';
 import type { Pool, PoolClient } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
-import { exportBelegToLexware } from '../services/belege-lexware-exporter';
+import { EXPORTABLE_STATUS, exportBelegToLexware } from '../services/belege-lexware-exporter';
 
 function makeMockPool(belegRow: Record<string, unknown> | null) {
   const client = {
@@ -56,5 +56,17 @@ describe('exportBelegToLexware — T078 Status-Gate', () => {
     expect(res.error).toBe('not_categorized');
     // Gate greift VOR jeglichem Storage-/Lexware-Zugriff.
     expect(s3.send).not.toHaveBeenCalled();
+  });
+
+  it('EXPORTABLE_STATUS: kategorisierte/exportierte Status sind drin, Vor-Stati nicht', () => {
+    // Positiv: 'categorized' (+ spätere) passieren das Gate.
+    expect(EXPORTABLE_STATUS.has('categorized')).toBe(true);
+    expect(EXPORTABLE_STATUS.has('exported')).toBe(true);
+    expect(EXPORTABLE_STATUS.has('archived')).toBe(true);
+    // Negativ: alles vor 'categorized' wird abgewiesen.
+    expect(EXPORTABLE_STATUS.has('requires_review')).toBe(false);
+    expect(EXPORTABLE_STATUS.has('extracted')).toBe(false);
+    expect(EXPORTABLE_STATUS.has('received')).toBe(false);
+    expect(EXPORTABLE_STATUS.has('error')).toBe(false);
   });
 });

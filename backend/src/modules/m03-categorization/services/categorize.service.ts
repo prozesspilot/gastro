@@ -173,7 +173,9 @@ export type ConfirmReviewOutcome =
 
 /**
  * Liest die Bewirtungs-Pflichtfelder aus payload.extraction.fields (gleiche
- * Quelle + Regel wie update.handler.ts: der M05-Voucher liest sie ebendort).
+ * Quelle wie update.handler.ts / der M05-Voucher). Hier zusätzlich getrimmt:
+ * reines Whitespace ('   ') zählt als leer — bewusst STRENGER als der PATCH-Check
+ * (Truthiness ohne trim), weil das die letzte Hürde direkt vor dem Export ist.
  */
 function bewirtungFields(payload: Record<string, unknown>): {
   anlass: string | null;

@@ -23,17 +23,17 @@ Heute endet die Pipeline nach dem OCR bei Status `extracted` — Kategorisieren 
 ## Akzeptanz-Kriterien
 
 ### Refactor (DRY)
-- [ ] Kategorisier-Logik aus `belege-categorize.handler.ts` in einen geteilten Service `m03-categorization/services/categorize.service.ts` ziehen: `categorizeBelegById(db, tenantId, belegId, { actor, deps? })` → Outcome `{ ok, reason?, status?, categorization? }`. Enthält `extractOcrFields`, `CONFIDENCE_THRESHOLD`, T053-Bewirtungs-Schutz, `updateBelegCategorization`.
-- [ ] Handler nutzt den Service (Auth/Rolle/UUID-Checks + HTTP-Mapping bleiben): `not_found`→404, `invalid_status`→422, `ok`→200 (unveränderte Response-Shape). Categorizer bleibt injizierbar (Tests).
+- [x] Kategorisier-Logik aus `belege-categorize.handler.ts` in einen geteilten Service `m03-categorization/services/categorize.service.ts` ziehen: `categorizeBelegById(db, tenantId, belegId, { actor, deps? })` → Outcome `{ ok, reason?, status?, categorization? }`. Enthält `extractOcrFields`, `CONFIDENCE_THRESHOLD`, T053-Bewirtungs-Schutz, `updateBelegCategorization`.
+- [x] Handler nutzt den Service (Auth/Rolle/UUID-Checks + HTTP-Mapping bleiben): `not_found`→404, `invalid_status`→422, `ok`→200 (unveränderte Response-Shape). Categorizer bleibt injizierbar (Tests).
 
 ### Auto-Trigger
-- [ ] `ocr-worker.ts`: nach `processBeleg` mit `status==='extracted'` UND `config.CLAUDE_API_KEY` → `categorizeBelegById(..., actor={type:'system',id:null})` **best-effort** (try/catch, Log, kein Job-Fail). Ohne Key / anderer Status → übersprungen (Log).
+- [x] `ocr-worker.ts`: nach `processBeleg` mit `status==='extracted'` UND `config.CLAUDE_API_KEY` → `categorizeBelegById(..., actor={type:'system',id:null})` **best-effort** (try/catch, Log, kein Job-Fail). Ohne Key / anderer Status → übersprungen (Log).
 
 ### Tests + Gates
-- [ ] Service-Unit: `categorizeBelegById` (extracted→categorized bei sicherer KI, →requires_review bei Fallback, not_found, invalid_status, Bewirtungs-Schutz).
-- [ ] Worker: Auto-Kategorisieren wird nach `extracted` + Key getriggert; ohne Key/anderem Status NICHT; Categorize-Fehler bricht den OCR-Job NICHT ab.
-- [ ] Handler-Tests bleiben grün (Refactor verhaltensgleich).
-- [ ] `npm run build` + `npm test` (mit DB) + Lint grün.
+- [x] Service-Unit: `categorizeBelegById` (extracted→categorized bei sicherer KI, →requires_review bei Fallback, not_found, invalid_status, Bewirtungs-Schutz).
+- [x] Worker: Auto-Kategorisieren wird nach `extracted` + Key getriggert; ohne Key/anderem Status NICHT; Categorize-Fehler bricht den OCR-Job NICHT ab.
+- [x] Handler-Tests bleiben grün (Refactor verhaltensgleich).
+- [x] `npm run build` + `npm test` (mit DB) + Lint grün.
 
 ---
 

@@ -109,6 +109,35 @@ wäre ein dedizierter Staff-Context-Helper (`app.current_user_id` + Policy) der 
 
 ---
 
+## Review-Ergebnis (PR #194, mehrdimensionaler adversarialer Workflow, 2026-06-27)
+
+5 Review-Lenses (Security/RLS · SQL-Schema · Tests · Konventionen/Drift · Tragfähigkeit) →
+jede Finding adversarial verifiziert. **28 Findings, 19 bestätigt, 0 Blocker.**
+
+- **Architektur validiert:** Die No-RLS-Entscheidung wurde bestätigt und hat einen direkten
+  Repo-**Präzedenzfall**: `020_users_auth.sql` (users/auth_sessions sind ebenfalls cross-tenant,
+  bewusst ohne RLS). Kein Sonderweg. Drift-Check sauber (0 Geister-Tabellen-Referenzen).
+- **Adversarial herausgefiltert (9):** u.a. der „GRANT-AC-Divergenz"-Vorwurf (3×) — `ALTER
+  DEFAULT PRIVILEGES` ist korrekt; sowie „reference_id-IDOR" und „PII-in-JSONB" (kein Writer im PR).
+- **Eingearbeitet (PR #194):** collaborators-CASCADE + PK-Duplicate-Test, SET-NULL-Test,
+  gastro_app-Zugriffstest, Index-Existenz-Test, NOT-NULL/Default-Test (7→12 Tests);
+  Index `idx_task_collaborators_user`; Präzedenzfall-Zitat + priority-Sortier-Warnung in der Migration.
+
+### ⚠️ VERBINDLICHE Invarianten für T081 (aus dem Review — ohne RLS ist die App die einzige Grenze)
+
+1. **Jeder `tasks`-Endpoint hinter authentifizierter Staff-Session** (JWT `pp_auth`); kein anonymer/Magic-Link-Zugang.
+2. **Rollen-Gate auf allen Schreibaktionen** (create/assign/claim/complete/collaborator-add), analog T062.
+3. **„Meine"-/Sichtbarkeits-Filter IM SQL erzwingen** (`assigned_to`/collaborator), nie erst im Frontend.
+4. **`tasks` NIE innerhalb eines `withTenant()`-Blocks abfragen** — das setzt nur `app.current_tenant` ohne Policy-Wirkung → trügerisches Pseudo-Scoping (liefert trotzdem alle Tenants).
+5. **`payload` (JSONB) / `description` / `title`: keine Endkunden-PII/Secrets** — nur Meta (`{from,to,by}`). `task_activity_log` ist KEIN GoBD-/Accountability-Audit (das bleibt `audit_log`/060).
+6. **`priority` per CASE/array_position sortieren** (kritisch→hoch→normal→niedrig), nie naiv `ORDER BY priority`.
+7. **Test, der nachweist:** Mitarbeiter A kann Aufgabe von B nicht ohne Berechtigung mutieren.
+
+### Offene Folge-Notizen (nicht-blockierend)
+- **T083-Idempotenz:** MANUELLE_AUFGABEN-Sync braucht ein Dedup-Feld (z.B. `source`/`source_key` TEXT
+  + UNIQUE), sonst erzeugt ein erneuter `/schicht`-Sync Duplikate. Additiv per Migration in T083 lösbar.
+- **Spec §4.1** Status-Kommentar bei Gelegenheit an die tatsächliche FSM (`in_arbeit`/`pausiert`) angleichen.
+
 ## Lessons Learned (nach Abschluss)
 
 <nach Merge ausfüllen>

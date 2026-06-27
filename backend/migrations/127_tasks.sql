@@ -34,6 +34,12 @@
 -- Isolations-Scope; Steve + Andreas betreuen ohnehin alle Mandanten, das
 -- "Team"-Tab zeigt absichtlich fremde Aufgaben). `tenant_id` ist nur ein
 -- optionaler Verweis ("betrifft Mandant X"), keine Sicherheitsgrenze.
+--
+-- PRÄZEDENZFALL: Genau dieses Muster existiert im Repo bereits — users /
+-- auth_sessions (020_users_auth.sql) sind ebenfalls cross-tenant und bewusst
+-- OHNE RLS ("Kein RLS — Sichtbarkeit wird im Backend via Permission-Checks
+-- geregelt", 020_users_auth.sql; SCHEMA.md: "Mitarbeiter sind cross-tenant").
+-- tasks ist dieselbe Klasse Staff-Daten — das ist kein Sonderweg.
 -- Zugriffsschutz liegt in der App-Schicht (T081): nur authentifizierte
 -- Staff-Session (JWT pp_auth) erreicht die Endpoints; Schreibaktionen per
 -- Rollen-Gate; "Meine"-View via assigned_to-Filter.
@@ -68,6 +74,10 @@ CREATE TABLE tasks (
                   CHECK (status IN ('offen','in_arbeit','pausiert','erledigt','verworfen')),
   priority        VARCHAR(10)  NOT NULL DEFAULT 'normal'
                   CHECK (priority IN ('niedrig','normal','hoch','kritisch')),
+  -- ACHTUNG T081/T082: `ORDER BY priority` sortiert ALPHABETISCH
+  -- (hoch < kritisch < niedrig < normal), NICHT semantisch. Für die
+  -- Prioritäts-Sortierung im Dashboard CASE/array_position nutzen
+  -- (kritisch → hoch → normal → niedrig), nie naiv ORDER BY priority.
 
   assigned_to     UUID REFERENCES users(id) ON DELETE SET NULL,  -- wer ist dran (Mitarbeiter)
   created_by      UUID REFERENCES users(id) ON DELETE SET NULL,  -- wer hat angelegt (GF/Management/System)
@@ -102,6 +112,12 @@ CREATE TABLE task_collaborators (
   added_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (task_id, user_id)
 );
+
+-- Reverse-Lookup "Aufgaben, bei denen user X Helfer ist" (Team-/Meine-View in
+-- T082). Der zusammengesetzte PK (task_id, user_id) kann `WHERE user_id = $1`
+-- nicht per Seek bedienen (user_id ist die 2. PK-Spalte) — analog
+-- idx_tasks_assigned_open für tasks.assigned_to.
+CREATE INDEX idx_task_collaborators_user ON task_collaborators (user_id);
 
 -- ---------------------------------------------------------------------------
 -- task_activity_log (Aktivitäts-Historie pro Aufgabe)

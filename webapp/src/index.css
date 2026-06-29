@@ -97,6 +97,51 @@
   --sidebar-w:260px;
 }
 
+:root { color-scheme: light; }
+
+/* ============================================================================
+   DARK THEME (T085) — überschreibt die Tokens; Komponenten lesen nur var(),
+   daher rethemen sie automatisch. Wird via data-theme="dark" auf <html> aktiviert
+   (ThemeToggle + No-Flash-Inline-Script in index.html). Marke (Azure) bleibt.
+   ============================================================================ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Neutral-Flächen, die manche Komponenten-CSS direkt lesen (Hover/Sunken/Scrollbar) */
+  --pp-gray-50:#1C232E; --pp-gray-100:#222A36; --pp-gray-200:#2C3643; --pp-gray-300:#3A4452;
+
+  /* Flächen */
+  --surface-page:#0E131A; --surface-card:#161C25;
+  --surface-sunken:#222A36; --surface-brand-subtle:#0F2C44;
+  --color-brand-subtle:#12344C;
+
+  /* Text */
+  --text-strong:#F4F7FB; --text-body:#C9D3E0; --text-muted:#93A0B1; --text-subtle:#6E7B8C;
+  --text-brand:#5BBDF2; --text-on-brand:#FFFFFF;
+
+  /* Rahmen */
+  --border-subtle:#262F3B; --border-default:#333E4C; --border-strong:#46525F;
+
+  /* Status: gedämpfte dunkle Flächen mit heller Schrift */
+  --status-neutral-fg:#AEB9C7; --status-neutral-bg:#222A36; --status-neutral-dot:#6B7889;
+  --status-progress-fg:#6FC8F4; --status-progress-bg:#0F2C44; --status-progress-dot:#2EAFEC;
+  --status-success-fg:#5FD08A; --status-success-bg:#10271B; --status-success-dot:#22C55E;
+  --status-attention-fg:#F0A85C; --status-attention-bg:#2B1F11; --status-attention-dot:#F59E0B;
+  --status-error-fg:#F0888B; --status-error-bg:#2B1416; --status-error-dot:#EF4444;
+
+  /* Schatten tiefer (auf dunklem Grund) */
+  --shadow-xs:0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.40), 0 2px 6px rgba(0,0,0,.30);
+  --shadow-md:0 2px 4px rgba(0,0,0,.40), 0 6px 16px rgba(0,0,0,.35);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.30);
+  --shadow-xl:0 16px 48px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.40);
+}
+
+/* Hardcodierte Hell-Flächen ohne Token-Bezug → im Dark explizit umfärben. */
+:root[data-theme="dark"] .top-bar { background:rgba(22,28,37,.85); }
+:root[data-theme="dark"] .badge.purple { background:#241B3B; color:#C4B5FD; }
+:root[data-theme="dark"] .error-box { border-color:#532727; }
+
 /* ============================================================================
    BASE
    ============================================================================ */
@@ -190,6 +235,17 @@ code,.font-mono { font-family:var(--font-mono); }
   width:7px; height:7px; border-radius:50%; background:var(--status-success-dot); flex:none;
   box-shadow:0 0 0 3px rgba(22,163,74,.14);
 }
+
+/* Theme-Umschalter (T085) — unten links in der Sidebar-Fußzeile. */
+.theme-toggle {
+  display:flex; align-items:center; gap:10px; width:100%;
+  height:36px; padding:0 12px; margin-bottom:12px;
+  background:transparent; border:1px solid var(--border-subtle); border-radius:var(--radius);
+  color:var(--text-body); font-family:var(--font-body); font-size:.8125rem; font-weight:600;
+  text-align:left; transition:var(--transition);
+}
+.theme-toggle:hover { background:var(--pp-gray-50); border-color:var(--border-default); color:var(--text-strong); }
+.theme-toggle .theme-toggle-icon { display:inline-flex; width:18px; justify-content:center; font-size:15px; }
 
 .main-content { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
 

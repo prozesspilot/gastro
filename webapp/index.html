@@ -19,6 +19,22 @@
       rel="stylesheet"
     />
     <title>ProzessPilot</title>
+    <!-- T085: Theme früh setzen (vor dem ersten Paint), damit Dark-Mode nicht flackert.
+         Muss zur Logik in src/lib/theme.ts passen (Schlüssel pp_theme). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('pp_theme');
+          if (t !== 'light' && t !== 'dark') {
+            t =
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

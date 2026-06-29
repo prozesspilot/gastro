@@ -4,6 +4,7 @@ import { getActiveTenantId } from '../api';
 import { listBelege } from '../api/belege';
 import { listChats } from '../api/chats';
 import TenantSelector from './TenantSelector';
+import ThemeToggle from './ThemeToggle';
 import UserMenu from './UserMenu';
 
 /**
@@ -119,6 +120,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
+          <ThemeToggle />
           <div className="status-dot">
             <span className="status-dot-green" aria-hidden="true" />
             <span>System läuft · v0.1.0</span>

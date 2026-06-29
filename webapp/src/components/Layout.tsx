@@ -23,6 +23,7 @@ const NAV: NavSpec[] = [
   { to: '/belege', icon: '📋', label: 'Belege' },
   { to: '/belege/upload', icon: '📤', label: 'Beleg hochladen' },
   { to: '/chats', icon: '💬', label: 'Chats' },
+  { to: '/tasks', icon: '✓', label: 'Aufgaben' },
   { to: '/tenants', icon: '🏢', label: 'Mandanten' },
 ];
 
@@ -196,6 +197,7 @@ function buildBreadcrumb(path: string): ReactNode[] {
     belege: 'Belege',
     upload: 'Beleg hochladen',
     chats: 'Chats',
+    tasks: 'Aufgaben',
     tenants: 'Mandanten',
     settings: 'Einstellungen',
   };

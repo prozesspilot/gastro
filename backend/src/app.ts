@@ -16,6 +16,7 @@ import { startWorker as startWebhookWorker } from './core/webhooks/webhook.queue
 // Die tote /receipts+/customers-Welt (M02/M04/M06–M11, customers/receipts/profiles,
 // routing, plugin-system, users, alt-Pfade von M01/M05/M12) wurde entfernt.
 import { dsgvoV2Routes } from './modules/dsgvo/dsgvo-v2.routes';
+import { tasksRoutes } from './modules/m-tasks/tasks.routes';
 import { chatPublicRoutes, chatStaffRoutes } from './modules/m-webchat/webchat.routes';
 import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
 import { belegeCategorizeRoutes } from './modules/m03-categorization/belege-categorize.routes';
@@ -217,6 +218,11 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   // Beide unter /api/v1/chat; keine Route-Kollision (POST /sessions vs. GET /:token).
   await app.register(chatStaffRoutes, { prefix: '/api/v1/chat' });
   await app.register(chatPublicRoutes, { prefix: '/api/v1/chat' });
+  // T081/Phase C: Mitarbeiter-Aufgaben-Dashboard — VOR HMAC-Block.
+  //  - NUR m14StaffAuthHook (JWT-Cookie); BEWUSST OHNE m14TenantContextHook:
+  //    `tasks` ist eine cross-tenant Staff-Tabelle (kein x-pp-tenant-id-Scoping).
+  //    Zugriffsschutz komplett in den Handlern (Rollen-Gate + Mutations-Check).
+  await app.register(tasksRoutes, { prefix: '/api/v1/tasks' });
   // T010/M12: Neue DSGVO-Routen (JWT + Two-Step + Rate-Limit) — VOR HMAC-Block
   // /api/v1/dsgvo/auskunft, /api/v1/dsgvo/auskunft/:id,
   // /api/v1/dsgvo/loeschung, /api/v1/dsgvo/loeschung/confirm

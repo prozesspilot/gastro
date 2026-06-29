@@ -13,6 +13,7 @@ import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import SettingsPage from './pages/SettingsPage';
+import TasksPage from './pages/TasksPage';
 import TenantsPage from './pages/TenantsPage';
 
 /**
@@ -43,6 +44,7 @@ export default function App() {
                         <Route path="/belege/:id" element={<BelegeDetailPage />} />
                         <Route path="/chats" element={<ChatsPage />} />
                         <Route path="/chats/:id" element={<ChatDetailPage />} />
+                        <Route path="/tasks" element={<TasksPage />} />
                         <Route path="/tenants" element={<TenantsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="*" element={<NotFoundPage />} />

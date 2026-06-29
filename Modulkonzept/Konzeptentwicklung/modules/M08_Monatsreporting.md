@@ -2,6 +2,8 @@
 
 > ⚠️ **EINGEFROREN (Stand 2026-06-06)** — beschreibt ein ungebautes/totes Modul, das aktuell gegen nicht-existente (Geister-)Tabellen läuft (HTTP 500). Stand veraltet; diese Spec gilt erst nach Reaktivierung (Post-Pilot). Was wirklich läuft, steht in `.claude/CLAUDE.md` §3.
 
+> 📌 **PDF-Engine-Entscheidung (T086, 2026-06-29):** Die in §4/§9 genannten `puppeteer`/`playwright` + `chartjs-node-canvas` (HTML→PDF via Headless-Chromium) werden **NICHT** verwendet. Stattdessen läuft die PDF-Erzeugung über die generische `pdf-lib`-Engine in `backend/src/core/pdf/` (`PdfDocumentBuilder`) — rein in-process, ohne Browser. Grund: Der IONOS-Prod-Server ist RAM-/Swap-knapp (kein Chromium installiert; n8n musste wegen RAM deaktiviert werden). Diagramme kommen — falls nötig — später als vektorielle `pdf-lib`-Balken, nicht über Chart.js. Beim Bau von M08 (T087) diese Engine konsumieren, kein puppeteer einführen.
+
 > **Paket:** Standard, Pro
 > **Phase:** 2
 > **Verantwortlich:** Monatlicher Bericht an den Kunden (PDF + WhatsApp/Mail-Zusammenfassung)

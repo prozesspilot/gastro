@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { LexofficeClient } from './lexoffice.client';
+import { LexofficeApiError, LexofficeClient } from './lexoffice.client';
 
 function jsonResponse(body: unknown, status = 201): Response {
   return new Response(JSON.stringify(body), {
@@ -86,5 +86,56 @@ describe('LexofficeClient.createVoucher — Idempotency-Key', () => {
     for (const call of fetchImpl.mock.calls) {
       expect(headersOf(call)['Idempotency-Key']).toBe('stable-key');
     }
+  });
+});
+
+describe('LexofficeClient.getProfile + maxRetries (T084)', () => {
+  it('getProfile gibt das Firmenprofil zurück (1 Fetch)', async () => {
+    const fetchImpl = vi.fn<(...args: FetchArgs) => Promise<Response>>(async () =>
+      jsonResponse({ companyName: 'Pizzeria Bella GmbH', organizationId: 'org-1' }, 200),
+    );
+    const client = new LexofficeClient({
+      apiKey: 'gueltig',
+      customerId: 't-1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      redis: null,
+    });
+
+    const profile = await client.getProfile();
+    expect(profile.companyName).toBe('Pizzeria Bella GmbH');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect((fetchImpl.mock.calls[0][0] as string).endsWith('/v1/profile')).toBe(true);
+  });
+
+  it('maxRetries:0 macht KEINE Retries bei 5xx (fail-fast für den UI-Live-Check)', async () => {
+    const fetchImpl = vi.fn<(...args: FetchArgs) => Promise<Response>>(
+      async () => new Response('boom', { status: 503 }),
+    );
+    const client = new LexofficeClient({
+      apiKey: 'gueltig',
+      customerId: 't-1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      redis: null,
+      maxRetries: 0,
+    });
+
+    await expect(client.getProfile()).rejects.toBeInstanceOf(LexofficeApiError);
+    // Genau ein Versuch — kein 0.5/2/8 s-Backoff.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('401 wirft sofort LexofficeApiError(401) (kein Retry bei 4xx)', async () => {
+    const fetchImpl = vi.fn<(...args: FetchArgs) => Promise<Response>>(
+      async () => new Response('unauthorized', { status: 401 }),
+    );
+    const client = new LexofficeClient({
+      apiKey: 'falsch',
+      customerId: 't-1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      redis: null,
+    });
+
+    await expect(client.getProfile()).rejects.toMatchObject({ status: 401 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

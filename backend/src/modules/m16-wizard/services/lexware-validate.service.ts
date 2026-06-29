@@ -45,6 +45,11 @@ export async function validateLexwareToken(
       customerId: opts.customerId,
       redis: opts.redis ?? null,
       fetchImpl: opts.fetchImpl,
+      // UI-synchroner Aufruf: fail-fast statt Export-Robustheit. Ohne dies wartet
+      // der Wirt bei unreachable bis zu ~70 s (Backoff-Sleeps 0.5/2/8 s + 15 s Timeout
+      // je Versuch). Hier: ein Versuch, kurzer Timeout → schnelle „später erneut"-Antwort.
+      maxRetries: 0,
+      defaultTimeoutMs: 6000,
     });
 
   try {

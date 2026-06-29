@@ -32,7 +32,15 @@ export interface LexofficeClientOpts {
   redis?: Redis | null;
   fetchImpl?: typeof fetch;
   defaultTimeoutMs?: number;
+  /**
+   * Anzahl der Retries bei 5xx/429/Netzwerkfehler. Default 3 (Export-Pfad, robust).
+   * Für UI-synchrone Aufrufe (z. B. der Wizard-Live-Check) auf 0 setzen → fail-fast
+   * statt bis zu ~70 s Wartezeit durch Backoff-Sleeps.
+   */
+  maxRetries?: number;
 }
+
+const RETRY_DELAYS_MS = [500, 2000, 8000];
 
 export class LexofficeApiError extends Error {
   constructor(
@@ -52,6 +60,7 @@ export class LexofficeClient {
   private readonly redis: Redis | null;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly maxRetries: number;
 
   constructor(opts: LexofficeClientOpts) {
     this.apiKey = opts.apiKey;
@@ -61,6 +70,7 @@ export class LexofficeClient {
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.timeoutMs =
       opts.defaultTimeoutMs ?? Number(process.env.LEXOFFICE_DEFAULT_TIMEOUT_MS ?? '15000');
+    this.maxRetries = opts.maxRetries ?? RETRY_DELAYS_MS.length;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────
@@ -180,11 +190,12 @@ export class LexofficeClient {
       _initFinal = { method, headers: this.headers() };
     }
 
-    const RETRY_DELAYS_MS = [500, 2000, 8000];
+    const delayFor = (n: number): number =>
+      RETRY_DELAYS_MS[Math.min(n, RETRY_DELAYS_MS.length - 1)];
     let attempt = 0;
     let lastErr: unknown = null;
 
-    while (attempt <= RETRY_DELAYS_MS.length) {
+    while (attempt <= this.maxRetries) {
       await acquireToken(this.redis, this.customerId);
 
       const controller = new AbortController();
@@ -195,18 +206,16 @@ export class LexofficeClient {
       } catch (err) {
         clearTimeout(timer);
         lastErr = err;
-        if (attempt >= RETRY_DELAYS_MS.length) break;
-        await sleep(RETRY_DELAYS_MS[attempt]);
+        if (attempt >= this.maxRetries) break;
+        await sleep(delayFor(attempt));
         attempt += 1;
         continue;
       }
       clearTimeout(timer);
 
       if (res.status === 429) {
-        const wait =
-          parseRetryAfter(res.headers.get('retry-after')) ??
-          RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
-        if (attempt >= RETRY_DELAYS_MS.length) {
+        const wait = parseRetryAfter(res.headers.get('retry-after')) ?? delayFor(attempt);
+        if (attempt >= this.maxRetries) {
           const txt = await res.text().catch(() => '');
           throw new LexofficeApiError(429, `Lexoffice 429 (Rate-Limit) — ${txt}`);
         }
@@ -216,11 +225,11 @@ export class LexofficeClient {
       }
 
       if (res.status >= 500) {
-        if (attempt >= RETRY_DELAYS_MS.length) {
+        if (attempt >= this.maxRetries) {
           const txt = await res.text().catch(() => '');
           throw new LexofficeApiError(res.status, `Lexoffice 5xx — ${txt}`);
         }
-        await sleep(RETRY_DELAYS_MS[attempt]);
+        await sleep(delayFor(attempt));
         attempt += 1;
         continue;
       }

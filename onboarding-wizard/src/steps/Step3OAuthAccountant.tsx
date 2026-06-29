@@ -58,6 +58,7 @@ export function Step3OAuthAccountant({ token, onSaved, advisorSystem }: Step3Pro
       setServerError(
         err instanceof WizardApiError ? err.message : 'Speichern fehlgeschlagen. Bitte erneut versuchen.',
       );
+    } finally {
       setSubmitting(false);
     }
   }

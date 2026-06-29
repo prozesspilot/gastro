@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   validation: { ok: true, companyName: 'Pizzeria Bella GmbH' } as
     | { ok: true; companyName: string | null }
     | { ok: false; reason: 'rejected' | 'unreachable'; message: string },
-  upsertSpy: vi.fn(async () => ({ id: 'cred-1' })),
+  upsertSpy: vi.fn(async (..._args: unknown[]) => ({ id: 'cred-1' })),
 }));
 
 vi.mock('../services/lexware-validate.service', () => ({
@@ -120,6 +120,19 @@ describe('POST /api/v1/wizard/:token/connect/lexware', () => {
     const r = await currentApp.inject({ method: 'POST', url, payload: { api_token: 'kurz' } });
     expect(r.statusCode).toBe(422);
     expect(JSON.parse(r.body).error).toBe('validation_error');
+    expect(h.upsertSpy).not.toHaveBeenCalled();
+  });
+
+  it('422 wenn der Body ein tenant_id schmuggeln will (.strict — Isolation festgenagelt)', async () => {
+    currentApp = await buildTestApp();
+    const r = await currentApp.inject({
+      method: 'POST',
+      url,
+      payload: { api_token: 'tokenabcdef', tenant_id: '00000000-0000-0000-0000-000000000999' },
+    });
+    expect(r.statusCode).toBe(422);
+    expect(JSON.parse(r.body).error).toBe('validation_error');
+    // Der Tenant kommt AUSSCHLIESSLICH aus der Session, nie aus dem Body → nichts gespeichert.
     expect(h.upsertSpy).not.toHaveBeenCalled();
   });
 

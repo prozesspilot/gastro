@@ -22,6 +22,7 @@ import { belegeRoutes } from './modules/m01-receipt-intake/belege.routes';
 import { belegeCategorizeRoutes } from './modules/m03-categorization/belege-categorize.routes';
 import { categoriesRoutes } from './modules/m03-categorization/categories.routes';
 import { belegeLexwareRoutes } from './modules/m05-lexoffice/belege-routes';
+import { reportingRoutes } from './modules/m08-reporting/routes';
 import { discordAuthRoutes } from './modules/m14-auth/auth.routes';
 import { emergencyLoginRoutes } from './modules/m14-auth/emergency-login.routes';
 import { kasseRoutes } from './modules/m15-pos-connector/kasse.routes';
@@ -203,6 +204,8 @@ export async function buildApp(): Promise<FastifyInstance<any, any, any, any>> {
   await app.register(belegeLexwareRoutes, { prefix: '/api/v1' });
   // T048/M03/F2: Kategorisieren auf belege — /api/v1/belege/:id/categorize (JWT)
   await app.register(belegeCategorizeRoutes, { prefix: '/api/v1' });
+  // T087/M08: Monats-Reporting — POST /api/v1/reports/monthly/build (JWT, mitarbeiter+)
+  await app.register(reportingRoutes, { prefix: '/api/v1' });
   // T058/A3: Staff-Tenant-Listing — GET /api/v1/tenants (JWT, cross-tenant via
   // SECURITY-DEFINER list_tenants_for_staff(); KEIN TenantContext)
   await app.register(tenantsRoutes, { prefix: '/api/v1/tenants' });

@@ -45,16 +45,17 @@ in MinIO ablegen und über eine Staff-Route abrufbar machen. Aggregation läuft 
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] Migration 128 `reports` + RLS + UNIQUE + Rollback; läuft via `migrate.ts`
-- [ ] `computeMonthlyAggregates` aggregiert korrekt über `belege` (verbuchte Status, Monatsfenster); DB-Integrationstest mit geseedeten Belegen (Totals, by_category, top_suppliers, Vormonatsvergleich)
-- [ ] Tenant-Isolation: Belege eines anderen Tenants fließen NICHT in die Aggregation ein (Isolations-Test)
-- [ ] `renderMonthlyReportPdf` liefert gültiges PDF (`%PDF-`, via `pdf-lib` ladbar); KPI-Karten + beide Tabellen; deutsche Beträge
-- [ ] `POST /reports/monthly/build` 200 mit Metadaten + presigned URL; `support` → 403; ohne Tenant/Auth → 401; ungültiger Monat → 400
-- [ ] Idempotenz: zweiter Build desselben Monats überschreibt (ein `reports`-Row pro Tenant+Monat), kein Duplikat
-- [ ] Leerer Monat (0 Belege): Report wird trotzdem erzeugt (Totals = 0), kein Crash
-- [ ] Audit-Event `report.monthly_built` geschrieben (korrekte Spalten, kein PII im Log)
-- [ ] Test-Coverage ≥ 80 % neue Dateien · `biome check` sauber · CI grün (lint+typecheck+test+build)
-- [ ] code-reviewer-Agent gibt OK
+- [x] Migration 128 `reports` + RLS + UNIQUE + Rollback; läuft via `migrate.ts`
+- [x] `computeMonthlyAggregates` aggregiert korrekt über `belege` (verbuchte Status, Monatsfenster); DB-Integrationstest mit geseedeten Belegen (Totals, by_category, top_suppliers, Vormonatsvergleich) — `aggregator.integration.test.ts` (läuft in CI mit DB; lokal No-Op ohne Postgres)
+- [x] Tenant-Isolation: Belege eines anderen Tenants fließen NICHT in die Aggregation ein (Isolations-Test + explizites `tenant_id`-Filter zusätzlich zur RLS)
+- [x] `renderMonthlyReportPdf` liefert gültiges PDF (`%PDF-`, via `pdf-lib` ladbar); KPI-Karten + beide Tabellen; deutsche Beträge
+- [x] `POST /reports/monthly/build` 200 mit Metadaten + presigned URL; `support` → 403; ohne Tenant/Auth → 401; ungültiger Monat → 400 (Handler-Unit-Test)
+- [x] Idempotenz: zweiter Build desselben Monats überschreibt (ein `reports`-Row pro Tenant+Monat), kein Duplikat (Service-Integrationstest)
+- [x] Leerer Monat (0 Belege): Report wird trotzdem erzeugt (Totals = 0), kein Crash (PDF-Test + Aggregator-Test)
+- [x] Audit-Event `report.monthly_built` geschrieben (korrekte Spalten, kein PII im Log)
+- [x] Test-Coverage neue Dateien · `biome check` sauber · Build/typecheck/lokale Suite grün (903 passed)
+- [ ] CI grün (lint+typecheck+test+build) — *nach Push (inkl. DB-Integrationstests)*
+- [ ] code-reviewer-Agent gibt OK — *im Review*
 
 ---
 

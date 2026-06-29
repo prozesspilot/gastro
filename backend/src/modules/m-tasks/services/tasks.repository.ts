@@ -278,10 +278,13 @@ export async function changeStatus(
     await client.query('BEGIN');
     const done = input.newStatus === 'erledigt' || input.newStatus === 'verworfen';
     const updated = await client.query(
+      // $2 wird zweifach genutzt (Spalten-Zuweisung + Literal-Vergleich). Ohne
+      // expliziten Cast leitet Postgres widersprüchliche Typen ab (varchar vs.
+      // text → 42P08). Daher $2::text konsistent erzwingen.
       `UPDATE tasks
-       SET status = $2,
+       SET status = $2::text,
            assigned_to = CASE WHEN $3::boolean AND assigned_to IS NULL THEN $4::uuid ELSE assigned_to END,
-           claimed_at = CASE WHEN $2 = 'in_arbeit' AND claimed_at IS NULL THEN now() ELSE claimed_at END,
+           claimed_at = CASE WHEN $2::text = 'in_arbeit' AND claimed_at IS NULL THEN now() ELSE claimed_at END,
            completed_at = CASE WHEN $5::boolean THEN now() ELSE NULL END
        WHERE id = $1
        RETURNING id`,

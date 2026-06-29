@@ -200,12 +200,10 @@ code,.font-mono { font-family:var(--font-mono); }
   padding:20px 20px 16px;
 }
 .sidebar-logo-icon {
-  width:36px; height:36px; flex-shrink:0;
-  background:var(--grad-brand);
-  border-radius:var(--radius);
-  display:flex; align-items:center; justify-content:center;
-  font-family:var(--font-display); font-size:18px; font-weight:700; color:#fff;
-  box-shadow:var(--shadow-sm);
+  width:40px; height:40px; flex-shrink:0;
+  object-fit:contain;
+  /* logo_icon.png hat transparenten Glow-Rand → leicht überskalieren, damit der Kreis groß genug wirkt */
+  transform:scale(1.25);
 }
 .sidebar-logo-text { font-family:var(--font-display); font-weight:700; font-size:1rem; color:var(--text-strong); letter-spacing:-.02em; }
 .sidebar-logo-sub { font-size:.75rem; color:var(--text-muted); margin-top:1px; }

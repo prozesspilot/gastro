@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { completeWizard, getSession, saveStep, WizardApiError } from './api';
+import { completeWizard, connectLexware, getSession, saveStep, WizardApiError } from './api';
 
 function mockFetchOnce(opts: { ok: boolean; status?: number; body: unknown; statusText?: string }) {
   const fn = vi.fn().mockResolvedValue({
@@ -61,5 +61,24 @@ describe('wizard api client', () => {
     const e = new WizardApiError(404, 'x');
     expect(e).toBeInstanceOf(Error);
     expect(e.status).toBe(404);
+  });
+
+  it('connectLexware POSTet api_token an /connect/lexware und gibt { ok, company_name } zurück', async () => {
+    const fetchFn = mockFetchOnce({ ok: true, body: { ok: true, company_name: 'Bella GmbH' } });
+    const res = await connectLexware('tok123', 'apikey1234567', 'Kanzlei');
+    expect(res).toEqual({ ok: true, company_name: 'Bella GmbH' });
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('/api/v1/wizard/tok123/connect/lexware');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ api_token: 'apikey1234567', display_name: 'Kanzlei' });
+  });
+
+  it('connectLexware wirft WizardApiError mit Code bei abgelehntem Token (422)', async () => {
+    mockFetchOnce({ ok: false, status: 422, body: { error: 'token_rejected', message: 'abgelehnt' } });
+    await expect(connectLexware('tok', 'apikey1234567')).rejects.toMatchObject({
+      name: 'WizardApiError',
+      status: 422,
+      code: 'token_rejected',
+    });
   });
 });

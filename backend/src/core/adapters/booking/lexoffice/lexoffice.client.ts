@@ -95,6 +95,18 @@ export class LexofficeClient {
     await this.requestRaw('POST', url, formData);
   }
 
+  /**
+   * GET /v1/profile — leichter Authentifizierungs-Check. Ein gültiger API-Key
+   * liefert das Firmenprofil; ein ungültiger Key wirft LexofficeApiError(401).
+   * Genutzt für den Live-Token-Check im Onboarding-Wizard (T084).
+   */
+  async getProfile(): Promise<{ companyName?: string; organizationId?: string }> {
+    return this.requestJson<{ companyName?: string; organizationId?: string }>(
+      'GET',
+      '/v1/profile',
+    );
+  }
+
   async listCategories(): Promise<LexofficeCategory[]> {
     const res = await this.requestJson<{ content?: LexofficeCategory[] } | LexofficeCategory[]>(
       'GET',

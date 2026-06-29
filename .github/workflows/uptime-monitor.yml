@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Vorherigen Status aus Cache laden
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: uptime-state.txt
           key: uptime-state-${{ github.run_id }}
@@ -112,7 +112,7 @@ jobs:
 
       - name: Neuen Status in Cache schreiben
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: uptime-state.txt
           key: uptime-state-${{ github.run_id }}

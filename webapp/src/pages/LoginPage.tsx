@@ -127,12 +127,24 @@ export default function LoginPage() {
           padding: '40px 36px',
         }}
       >
-        {/* Heading */}
+        {/* Heading — Wortmarke auf dunklem Panel (Logo ist für dunkle Hintergründe mit Glow gestaltet) */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🧭</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
-            ProzessPilot
-          </h1>
+          <div
+            style={{
+              background: '#0B1726',
+              borderRadius: 14,
+              padding: '24px 20px',
+              marginBottom: 16,
+            }}
+          >
+            <h1 style={{ margin: 0 }}>
+              <img
+                src="/logo_prozesspilot.png"
+                alt="ProzessPilot"
+                style={{ display: 'block', width: '100%', maxWidth: 260, height: 'auto', margin: '0 auto' }}
+              />
+            </h1>
+          </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 6 }}>
             Mitarbeiter-Anmeldung
           </p>

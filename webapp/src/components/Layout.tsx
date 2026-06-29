@@ -85,9 +85,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* ── Sidebar ── */}
       <aside className="sidebar" aria-label="Hauptnavigation">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" aria-hidden="true">
-            P
-          </div>
+          <img className="sidebar-logo-icon" src="/logo_icon.png" alt="" aria-hidden="true" />
           <div>
             <div className="sidebar-logo-text">ProzessPilot</div>
             <div className="sidebar-logo-sub">Mitarbeiter-Tool</div>

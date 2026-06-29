@@ -334,6 +334,21 @@ describe('POST /api/v1/tasks/:id/status', () => {
     });
     expect(r.statusCode).toBe(403);
   });
+
+  it('403 Self-Claim auf ERLEDIGTE (unzugewiesene) Aufgabe durch Nicht-Beteiligten', async () => {
+    // Quell-Status nicht aktiv → kein Self-Claim → fällt auf Mutations-Check (403).
+    currentApp = await buildTestApp({
+      taskRaw: { id: TASK_ID, assigned_to: null, created_by: STAFF_B, status: 'erledigt' },
+      isCollaborator: false,
+    });
+    const r = await currentApp.inject({
+      method: 'POST',
+      url: `/api/v1/tasks/${TASK_ID}/status`,
+      cookies: { pp_auth: makeToken('mitarbeiter', STAFF_A) },
+      payload: { status: 'in_arbeit' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
 });
 
 // ── PATCH /tasks/:id ─────────────────────────────────────────────────────────
@@ -364,6 +379,53 @@ describe('PATCH /api/v1/tasks/:id', () => {
     });
     expect(r.statusCode).toBe(403);
   });
+
+  it('403 Reassign-Hijack: Helfer A darf B-zugewiesene Aufgabe NICHT an sich reißen', async () => {
+    // A ist Helfer (darf mutieren), versucht aber assigned_to=self auf eine bereits
+    // an B zugewiesene Aufgabe — das ist Umzuweisung (Management-Aktion) → 403.
+    currentApp = await buildTestApp({
+      taskRaw: { id: TASK_ID, assigned_to: STAFF_B, created_by: STAFF_B, status: 'in_arbeit' },
+      isCollaborator: true,
+      isActiveUser: true,
+    });
+    const r = await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${TASK_ID}`,
+      cookies: { pp_auth: makeToken('mitarbeiter', STAFF_A) },
+      payload: { assigned_to: STAFF_A },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('403 PATCH bietet keinen Self-Claim-Pfad (canMutateTask greift vor dem Reassign-Gate)', async () => {
+    currentApp = await buildTestApp({
+      taskRaw: { id: TASK_ID, assigned_to: null, created_by: STAFF_B, status: 'offen' },
+      isCollaborator: false,
+      isActiveUser: true,
+    });
+    const r = await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${TASK_ID}`,
+      cookies: { pp_auth: makeToken('mitarbeiter', STAFF_A) },
+      payload: { assigned_to: STAFF_A },
+    });
+    // A ist nicht zugewiesen/Helfer/Ersteller → canMutateTask schlägt fehl → 403.
+    // (Self-Claim einer unzugewiesenen Aufgabe läuft über POST /status, nicht PATCH.)
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('403 support darf nicht patchen', async () => {
+    currentApp = await buildTestApp({
+      taskRaw: { id: TASK_ID, assigned_to: STAFF_A, created_by: STAFF_A, status: 'offen' },
+    });
+    const r = await currentApp.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${TASK_ID}`,
+      cookies: { pp_auth: makeToken('support', STAFF_A) },
+      payload: { title: 'X' },
+    });
+    expect(r.statusCode).toBe(403);
+  });
 });
 
 // ── POST /tasks/:id/collaborators ────────────────────────────────────────────
@@ -381,6 +443,19 @@ describe('POST /api/v1/tasks/:id/collaborators', () => {
     });
     expect(r.statusCode).toBe(201);
     expect(JSON.parse(r.body).already_member).toBe(false);
+  });
+
+  it('403 support darf keine Helfer einladen', async () => {
+    currentApp = await buildTestApp({
+      taskRaw: { id: TASK_ID, assigned_to: STAFF_A, created_by: STAFF_A, status: 'in_arbeit' },
+    });
+    const r = await currentApp.inject({
+      method: 'POST',
+      url: `/api/v1/tasks/${TASK_ID}/collaborators`,
+      cookies: { pp_auth: makeToken('support', STAFF_A) },
+      payload: { user_id: STAFF_B },
+    });
+    expect(r.statusCode).toBe(403);
   });
 
   it('200 already_member bei doppeltem Einladen (idempotent)', async () => {

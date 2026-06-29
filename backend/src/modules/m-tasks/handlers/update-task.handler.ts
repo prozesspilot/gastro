@@ -56,16 +56,22 @@ export async function updateTaskHandler(
       .send({ error: 'forbidden', message: 'Keine Berechtigung, diese Aufgabe zu ändern.' });
   }
 
-  // Neu-Zuweisung an einen ANDEREN ist Management-Aktion.
+  // (Um-)Zuweisung ist eine Management-Aktion. Einzige Ausnahme: ein
+  // Schreibberechtigter zieht eine NOCH UNZUGEWIESENE Aufgabe an sich (Self-Claim).
+  // Sonst (Ziel = anderer User, ODER Umzuweisung einer bereits zugewiesenen Aufgabe,
+  // ODER Entzug per null) braucht es canManageTasks. Schließt den Reassign-Hijack:
+  // ein Helfer darf eine fremd-zugewiesene Aufgabe nicht via assigned_to=self stehlen.
   const fields = b.data;
-  if (fields.assigned_to !== undefined && fields.assigned_to !== null) {
-    if (fields.assigned_to !== staff.userId && !canManageTasks(staff)) {
+  if (fields.assigned_to !== undefined) {
+    const target = fields.assigned_to; // string (User) | null (Entzug)
+    const isSelfClaimUnassigned = task.assigned_to === null && target === staff.userId;
+    if (!isSelfClaimUnassigned && !canManageTasks(staff)) {
       return reply.code(403).send({
         error: 'forbidden',
-        message: 'Nur die Geschäftsführung darf Aufgaben anderen Mitarbeitern zuweisen.',
+        message: 'Nur die Geschäftsführung darf Aufgaben (um-)zuweisen.',
       });
     }
-    if (!(await isActiveUser(req.server.db, fields.assigned_to))) {
+    if (target !== null && !(await isActiveUser(req.server.db, target))) {
       return reply
         .code(422)
         .send({ error: 'invalid_assignee', message: 'Zugewiesener Mitarbeiter existiert nicht.' });

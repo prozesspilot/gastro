@@ -14,6 +14,7 @@ import { z } from 'zod';
 import type { M14Staff } from '../../../core/auth/m14-staff-auth';
 import { changeStatus, getTaskRaw, isCollaborator } from '../services/tasks.repository';
 import { canMutateTask, canWriteTasks } from '../tasks.permissions';
+import { ACTIVE_STATUSES } from '../tasks.types';
 
 const paramsSchema = z.object({ id: z.string().uuid() });
 const bodySchema = z
@@ -46,9 +47,14 @@ export async function changeStatusHandler(
     return reply.code(404).send({ error: 'not_found', message: 'Aufgabe nicht gefunden.' });
   }
 
-  // Self-Claim auf eine unzugewiesene Aufgabe: jeder Schreibberechtigte darf
-  // sie an sich ziehen. Jede andere Mutation braucht die Mutations-Berechtigung.
-  const isSelfClaim = b.data.status === 'in_arbeit' && task.assigned_to === null;
+  // Self-Claim auf eine unzugewiesene, NOCH AKTIVE Aufgabe: jeder Schreibberechtigte
+  // darf sie an sich ziehen. Quell-Status muss aktiv sein, sonst könnte man eine
+  // erledigte/verworfene (unzugewiesene) Aufgabe per Self-Claim reaktivieren und so
+  // canMutateTask umgehen. Jede andere Mutation braucht die Mutations-Berechtigung.
+  const isSelfClaim =
+    b.data.status === 'in_arbeit' &&
+    task.assigned_to === null &&
+    ACTIVE_STATUSES.includes(task.status);
   if (!isSelfClaim) {
     const collab = await isCollaborator(req.server.db, task.id, staff.userId);
     if (!canMutateTask(staff, task, { isCollaborator: collab })) {

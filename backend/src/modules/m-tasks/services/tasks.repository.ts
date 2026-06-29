@@ -236,8 +236,9 @@ export async function createTask(pool: Pool, input: CreateTaskInput): Promise<Ta
       ],
     );
     const id = inserted.rows[0].id as string;
+    // Invariante 5: payload nur Meta (kein title/description — die stehen in der
+    // Aufgabe selbst; task_activity_log soll kein Freitext-/PII-Kanal sein).
     await insertActivity(client, id, input.createdBy, 'created', {
-      title: input.title,
       assigned_to: input.assignedTo,
       priority: input.priority,
     });

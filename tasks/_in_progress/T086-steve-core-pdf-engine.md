@@ -54,19 +54,19 @@ Embedded-TrueType-Fonts (`@pdf-lib/fontkit`) · MinIO-Upload (macht der Caller).
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] `backend/src/core/pdf/` mit den 6 Dateien; `npm run build` + `npm test` grün
-- [ ] `build()` liefert einen Buffer, der mit `%PDF-` beginnt und mit `pdf-lib` wieder ladbar ist (`PDFDocument.load`)
-- [ ] Eine Tabelle mit 200 Zeilen erzeugt **mehrere Seiten**; Kopfzeile wird auf jeder Seite wiederholt (Seitenzahl > 1)
-- [ ] Fußzeile auf **jeder** Seite: „Seite X / Y" + Erstellungsdatum; `Y` = tatsächliche Gesamtseitenzahl
-- [ ] Deutsche Umlaute + `€` (`ä ö ü ß €`) rendern ohne Exception; ein Emoji/CJK-Zeichen wird durch `toWinAnsiSafe` zu `?` und wirft NICHT
-- [ ] GoBD-Metadata gesetzt: `Producer='ProzessPilot'`, `Title` = `opts.title`, `CreationDate` vorhanden
-- [ ] `kpiCards` mit 4 Karten → Umbruch auf 2. Reihe (max. 3/Reihe); kein Überlauf über Seitenrand
-- [ ] Bestehender `image-to-pdf.ts`-Pfad unverändert nutzbar (M02-Import bricht nicht); `index.ts` re-exportiert beides
-- [ ] Test-Coverage ≥ 80 % für die neuen Dateien
-- [ ] `biome check` auf allen geänderten Files sauber
-- [ ] M08-Spec (`modules/M08_Monatsreporting.md`) um Notiz „PDF-Engine = pdf-lib (core/pdf), kein puppeteer — Infra-Entscheidung T086" ergänzt
-- [ ] CI grün (lint + typecheck + tests + build)
-- [ ] code-reviewer-Agent gibt OK
+- [x] `backend/src/core/pdf/` mit den 6 Dateien; `npm run build` + `npm test` grün
+- [x] `build()` liefert einen Buffer, der mit `%PDF-` beginnt und mit `pdf-lib` wieder ladbar ist (`PDFDocument.load`)
+- [x] Eine Tabelle mit 200 Zeilen erzeugt **mehrere Seiten**; Kopfzeile wird auf jeder Seite wiederholt (Seitenzahl > 1)
+- [x] Fußzeile auf **jeder** Seite: „Seite X / Y" + Erstellungsdatum; `Y` = tatsächliche Gesamtseitenzahl (Zwei-Pass über `getPages()`)
+- [x] Deutsche Umlaute + `€` (`ä ö ü ß €`) rendern ohne Exception; ein Emoji/CJK-Zeichen wird durch `toWinAnsiSafe` zu `?` und wirft NICHT
+- [x] GoBD-Metadata gesetzt: `Producer='ProzessPilot'`, `Title` = `opts.title`, `CreationDate` vorhanden
+- [x] `kpiCards` mit 4 Karten → Umbruch auf 2. Reihe (max. 3/Reihe); kein Überlauf über Seitenrand
+- [x] Bestehender `image-to-pdf.ts`-Pfad unverändert nutzbar (M02-Import bricht nicht); `index.ts` re-exportiert beides
+- [x] Test-Coverage ≥ 80 % für die neuen Dateien (14 Tests decken alle Element-Typen + Branches; Coverage-Tool nur in CI)
+- [x] `biome check` auf allen geänderten Files sauber
+- [x] M08-Spec (`modules/M08_Monatsreporting.md`) um Notiz „PDF-Engine = pdf-lib (core/pdf), kein puppeteer — Infra-Entscheidung T086" ergänzt
+- [ ] CI grün (lint + typecheck + tests + build) — *nach Push*
+- [ ] code-reviewer-Agent gibt OK — *im Review*
 
 ---
 
@@ -93,3 +93,20 @@ Embedded-TrueType-Fonts (`@pdf-lib/fontkit`) · MinIO-Upload (macht der Caller).
 ## Offene Fragen (während der Bearbeitung)
 
 <keine — Scope ist eng>
+
+---
+
+## Lessons Learned (nach Abschluss)
+
+- **pdf-lib `getProducer()` + `load()`-Falle:** Der Producer wird im **XMP-Metadata-Stream**
+  gespeichert (nicht als `/Producer (...)` im Info-Dict). `PDFDocument.load(bytes)` ruft
+  per Default `updateMetadata: true` und **überschreibt** dabei den Producer mit dem
+  pdf-lib-Default. Die von uns **gespeicherten** Bytes sind korrekt — nur ein Round-Trip-Test
+  muss mit `PDFDocument.load(bytes, { updateMetadata: false })` laden, sonst schlägt die
+  Producer-Assertion fälschlich fehl. Der Kommentar in `image-to-pdf.ts` („überschreibt
+  Producer beim Save nicht") beschreibt nur die Save-, nicht die Load-Seite.
+- **WinAnsi-Schutz ist Pflicht, nicht optional:** Helvetica (WinAnsi) wirft bei Emoji/CJK.
+  Da OCR-Lieferantennamen beliebigen Unicode liefern, läuft **jeder** Text-Draw durch
+  `toWinAnsiSafe` — sonst crasht ein einziges exotisches Zeichen den ganzen Monatsreport.
+- **Deklaratives Element-Modell** (sammeln → in `build()` rendern) macht die Zwei-Pass-Fußzeile
+  („Seite X / Y") trivial, weil die Gesamtseitenzahl erst nach dem Layout feststeht.

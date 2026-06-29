@@ -56,8 +56,11 @@ beforeAll(async () => {
     if (REQUIRE_DB) throw new Error(`[T087] DB nicht erreichbar — in CI Pflicht. ${String(err)}`);
     return;
   }
+  // audit_log ist append-only (Trigger) → NICHT löschen (würde werfen). Die
+  // Audit-Assertion filtert stattdessen auf die konkrete reportId, damit
+  // Bestandszeilen aus früheren Läufen sie nicht verfälschen (Memory
+  // backend-db-test-fresh-db: lokal frische DB; CI ist ohnehin ephemer).
   await pool.query('DELETE FROM reports WHERE tenant_id = $1', [T]);
-  await pool.query('DELETE FROM audit_log WHERE tenant_id = $1', [T]);
   await pool.query('DELETE FROM belege WHERE tenant_id = $1', [T]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
   await pool.query(
@@ -70,8 +73,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (dbAvailable) {
+    // audit_log bleibt (append-only) — bewusst kein Cleanup-Versuch.
     await pool.query('DELETE FROM reports WHERE tenant_id = $1', [T]).catch(() => {});
-    await pool.query('DELETE FROM audit_log WHERE tenant_id = $1', [T]).catch(() => {});
     await pool.query('DELETE FROM belege WHERE tenant_id = $1', [T]).catch(() => {});
     await pool.query('DELETE FROM tenants WHERE id = $1', [T]).catch(() => {});
   }
@@ -93,12 +96,14 @@ describe('T087 — buildMonthlyReport (Integration)', () => {
     expect(row.rowCount).toBe(1);
     expect(row.rows[0].period_month).toBe(5);
 
+    // Filter auf die konkrete reportId → robust gegen Audit-Bestandszeilen aus
+    // früheren Läufen (append-only, kein Cleanup) und unabhängig von der
+    // Ausführungsreihenfolge der it-Blöcke.
     const audit = await pool.query(
-      "SELECT * FROM audit_log WHERE tenant_id = $1 AND event_type = 'report.monthly_built'",
-      [T],
+      "SELECT * FROM audit_log WHERE tenant_id = $1 AND event_type = 'report.monthly_built' AND entity_id = $2",
+      [T, res.reportId],
     );
     expect(audit.rowCount).toBe(1);
-    expect(audit.rows[0].entity_id).toBe(res.reportId);
   });
 
   it('ist idempotent: zweiter Build desselben Monats überschreibt, kein Duplikat', async () => {

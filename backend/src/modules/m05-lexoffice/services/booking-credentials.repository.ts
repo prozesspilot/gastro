@@ -7,7 +7,7 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import { logAuditEvent } from '../../../core/audit/audit-log';
+import { type AuditActor, logAuditEvent } from '../../../core/audit/audit-log';
 import { config } from '../../../core/config';
 
 export type BookingProvider = 'lexware_office' | 'sevdesk' | 'datev_online';
@@ -44,9 +44,15 @@ export async function upsertBookingCredential(
     apiTokenPlaintext: string;
     displayName?: string | null;
     autoPush?: boolean;
-    actorUserId: string;
+    /** Staff-User-ID (Bootstrap/Settings-Route). Ergibt actor={type:'staff',id}. */
+    actorUserId?: string;
+    /** Alternativ direkt der Audit-Actor (z. B. {type:'customer',id:null} im Wizard). */
+    actor?: AuditActor;
   },
 ): Promise<BookingCredential> {
+  // Wizard-Flow (T084) hat keinen Staff-User → Customer-Actor. Bestehende Aufrufer
+  // (Bootstrap-Skript/Staff-Route) übergeben actorUserId → Staff-Actor (rückwärtskompatibel).
+  const actor: AuditActor = input.actor ?? { type: 'staff', id: input.actorUserId ?? null };
   if (!config.PP_PGCRYPTO_KEY) {
     throw new Error(
       'PP_PGCRYPTO_KEY ist leer — Booking-Token kann nicht verschluesselt gespeichert werden.',
@@ -88,7 +94,7 @@ export async function upsertBookingCredential(
       entityType: 'tenant_settings',
       entityId: result.rows[0].id,
       eventType: 'booking_credentials.upserted',
-      actor: { type: 'staff', id: input.actorUserId },
+      actor,
       payloadAfter: {
         provider: input.provider,
         auto_push: input.autoPush ?? false,

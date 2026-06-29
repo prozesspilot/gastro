@@ -104,6 +104,38 @@ export async function startSumupConnect(token: string): Promise<{ redirect_url: 
   return (await res.json()) as { redirect_url: string };
 }
 
+/**
+ * T084 — Hinterlegt den Lexware-Office-API-Schlüssel (Wizard-Schritt 3). Lexware
+ * hat KEIN OAuth → direkter API-Key-Eintrag. Antwort ist KEIN `{ session }`,
+ * sondern `{ ok, company_name }` (Backend live-validiert den Key vor dem Speichern).
+ * Wirft WizardApiError bei abgelehntem Token (422) oder nicht erreichbarer API (502).
+ */
+export async function connectLexware(
+  token: string,
+  apiToken: string,
+  displayName?: string,
+): Promise<{ ok: boolean; company_name: string | null }> {
+  const res = await fetch(`${BASE}/${enc(token)}/connect/lexware`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_token: apiToken, display_name: displayName }),
+  });
+  if (!res.ok) {
+    let payload: { error?: string; message?: string } | undefined;
+    try {
+      payload = await res.json();
+    } catch {
+      /* kein JSON-Body */
+    }
+    throw new WizardApiError(
+      res.status,
+      payload?.message ?? res.statusText ?? `HTTP ${res.status}`,
+      payload?.error,
+    );
+  }
+  return (await res.json()) as { ok: boolean; company_name: string | null };
+}
+
 /** Gemeinsame Props aller Schritt-Komponenten. Navigation (Zurück/Skip) liegt im WizardFlow. */
 export interface StepProps {
   token: string;

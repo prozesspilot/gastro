@@ -33,9 +33,18 @@ export function getInitialTheme(): Theme {
   return 'light';
 }
 
-/** Setzt `data-theme` auf <html> und persistiert die Wahl. */
+/**
+ * Spiegelt das Theme in den DOM (`data-theme` auf <html>). Persistiert BEWUSST
+ * NICHT — sonst würde schon das erste Mount eine system-abgeleitete Wahl
+ * einfrieren (Nutzer folgt dann nie wieder dem System). Zum Persistieren bei
+ * expliziter Nutzer-Aktion `storeTheme` aufrufen.
+ */
 export function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', theme);
+}
+
+/** Persistiert die Wahl (nur bei expliziter Nutzer-Aktion aufrufen). */
+export function storeTheme(theme: Theme): void {
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {

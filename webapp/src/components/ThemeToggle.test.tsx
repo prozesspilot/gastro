@@ -44,6 +44,13 @@ describe('ThemeToggle', () => {
     expect(localStorage.getItem(THEME_KEY)).toBe('light');
   });
 
+  it('persistiert NICHT beim ersten Mount (system-abgeleitet bleibt frei wählbar)', () => {
+    render(<ThemeToggle />);
+    // Attribut gesetzt, aber localStorage bleibt leer bis zur expliziten Wahl.
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(localStorage.getItem(THEME_KEY)).toBeNull();
+  });
+
   it('stellt eine gespeicherte Dark-Wahl beim Mount wieder her', () => {
     localStorage.setItem(THEME_KEY, 'dark');
     render(<ThemeToggle />);

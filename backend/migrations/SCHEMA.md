@@ -1,8 +1,8 @@
 # Gastro — Datenbank-Schema
 
-> Stand: 2026-05-18 (T011 — Postgres-Migrations-Audit + Bootstrap-Reset)
+> Stand: 2026-06-30 (T044 — Grant-Modell-Härtung + Migrations-/Owner-Doku aktualisiert)
 > Datenbank-Engine: **PostgreSQL 16**
-> Migrations-Tool: `backend/src/core/db/migrate.ts` (sortiert alphabetisch, läuft transaktional)
+> Migrations-Tool: `backend/src/core/db/migrate.ts` (sortiert alphabetisch, läuft transaktional, Rolle aus `DATABASE_URL_MIGRATE`)
 
 ---
 
@@ -13,11 +13,29 @@
 | 001 | `001_extensions.sql` | `pgcrypto`, `citext`, `uuid-ossp` | — |
 | 002 | `002_helpers.sql` | `set_updated_at()`, `current_tenant_id()`, `is_rls_bypassed()` | — |
 | 010 | `010_tenants.sql` | `tenants`, `tenant_settings` | ✓ |
-| 020 | `020_users_auth.sql` | `users`, `auth_sessions`, `auth_audit_log` | — (Mitarbeiter sind cross-tenant) |
+| 020 | `020_users_auth.sql` | `users`, `auth_sessions`, `auth_audit_log` | — Mitarbeiter cross-tenant (`auth_audit_log` ✓) |
+| 021 | `021_encrypt_totp_secret.sql` | TOTP-Secret verschlüsseln (`users`-Alter) | — |
+| 022 | `022_pos_credentials.sql` | `pos_credentials` | ✗ **keine RLS** — App-WHERE-Filter; Härtung → T020 |
 | 030 | `030_belege.sql` | `belege` | ✓ |
 | 040 | `040_kasse.sql` | `kasse_integrations`, `kasse_transactions` | ✓ |
 | 050 | `050_export_log.sql` | `export_log` | ✓ |
 | 060 | `060_audit_log.sql` | `audit_log` (immutable, append-only) | ✓ (read), bypass-only (write/update/delete) |
+| 061 | `061_auth_audit_log_insert_fn.sql` | SECURITY-DEFINER Insert-Fn (`auth_audit_log`) | — (Fn-Grant) |
+| 070 | `070_ocr_cost_log.sql` | `ocr_cost_log` | ✓ |
+| 080 | `080_dsgvo_requests.sql` | `dsgvo_requests` | ✓ |
+| 090 | `090_belege_soft_delete.sql` | Soft-Delete für `belege` (Alter) | ✓ (via `belege`) |
+| 100 | `100_booking_credentials.sql` | `booking_credentials` | ✓ |
+| 110 | `110_kasse_transactions_fk_relax.sql` | FK-Lockerung `kasse_transactions` (Alter) | ✓ (via Tabelle) |
+| 120 | `120_lexoffice_category_map.sql` | `lexoffice_category_map` | ✓ |
+| 121 | `121_list_tenants_fn.sql` | SECURITY-DEFINER `list_tenants_for_staff()` | — (Fn-Grant) |
+| 122 | `122_onboarding_sessions.sql` | `onboarding_sessions` (+ Token-Lookup-Fn) | ✓ |
+| 123 | `123_tenant_stammdaten_activation.sql` | Wizard-Stammdaten-Spalten (`tenants`-Alter) | ✓ (via `tenants`) |
+| 124 | `124_chat_sessions.sql` | `chat_sessions` (+ Token-Lookup-Fn) | ✓ |
+| 125 | `125_chat_messages.sql` | `chat_messages` | ✓ |
+| 126 | `126_chat_close_rating.sql` | Chat schließen + Bewertung (`chat_sessions`-Alter) | ✓ (via Tabelle) |
+| 127 | `127_tasks.sql` | `tasks`, `task_collaborators`, `task_activity_log` | ✗ **keine RLS** — interne cross-tenant Staff-Tabelle, Schutz in App-Schicht (T081) |
+| 128 | `128_reports.sql` | `reports` | ✓ |
+| 129 | `129_report_deliveries.sql` | `report_deliveries` | ✓ |
 
 Migrationen sind **rückwärts-kompatibel** und **idempotent durch den Runner** (`schema_migrations` Tabelle trackt angewandte Versionen). Jede Migration läuft in einer eigenen Transaktion — Fehler → Rollback.
 
@@ -287,9 +305,11 @@ Datenbank existiert (siehe Task T011 Rollback-Plan im Backlog).
 
 ## 7. App-User-Rolle (Production-Setup) — ERZWUNGEN
 
-Die Migrations werden als Postgres-Superuser ausgeführt (CREATE EXTENSION,
-CREATE TABLE). Der Backend-App-Runtime muss aber mit einer Rolle laufen, die
-**KEIN** Superuser ist und **KEIN** BYPASSRLS-Attribut hat — sonst greifen die
+Die Migrations laufen unter der **Owner-/Migrations-Rolle** aus `DATABASE_URL_MIGRATE`
+(`backend/src/core/db/migrate.ts` → Fallback `DATABASE_URL`). In Prod ist das
+`gastro_owner` (besitzt das Schema, darf `CREATE EXTENSION`/`CREATE TABLE`); in Dev/CI
+darf es bequem ein Superuser sein. Der Backend-App-Runtime muss dagegen mit einer Rolle
+laufen, die **KEIN** Superuser ist und **KEIN** BYPASSRLS-Attribut hat — sonst greifen die
 RLS-Policies nicht.
 
 **Erzwungen durch:** `backend/src/core/db/role-check.ts`. Beim Backend-Start
@@ -297,28 +317,48 @@ in Production wird `pg_roles.rolsuper` + `rolbypassrls` für den aktuellen User
 geprüft. Ist die Rolle privilegiert → der Prozess crasht mit klarer
 Fehlermeldung. In Dev wird nur gewarnt.
 
-**Setup-Skript** (idempotent, einmal pro Umgebung als Superuser/`gastro_owner`):
+**Setup-Skript** (idempotent, einmal pro Umgebung; mit DERSELBEN Owner-/Migrations-Rolle
+wie die Migrationen, d.h. `DATABASE_URL_MIGRATE`):
 
 ```bash
-psql "$DATABASE_URL_OWNER" \
+psql "$DATABASE_URL_MIGRATE" \
   -v app_password="'<starkes-passwort>'" \
   -f backend/scripts/setup-app-role.sql
 ```
 
 Das Skript legt die Rolle an, vergibt Privileges auf bestehende Objekte und
-konfiguriert `ALTER DEFAULT PRIVILEGES`, damit künftige Migrations-Tabellen
-automatisch read+write für `gastro_app` haben.
+konfiguriert `ALTER DEFAULT PRIVILEGES` **`FOR ROLE gastro_owner`** (T044), damit
+künftige Migrations-Tabellen automatisch read+write für `gastro_app` haben —
+**unabhängig davon, welche Rolle das Setup-Skript ausgeführt hat**. (Ohne `FOR ROLE`
+greifen Default-Privileges nur für Objekte der ausführenden Rolle; lief das Setup als
+Superuser, die Migrationen aber als `gastro_owner`, fehlten neue Grants → „permission
+denied" erst in Prod. Deshalb MUSS Setup mit derselben Rolle wie der Migrate-Lauf
+laufen, und das Skript koppelt die Default-Privileges zusätzlich explizit an `gastro_owner`.)
 
 In `.env` des Backends:
 
 ```
 DATABASE_URL=postgres://gastro_app:<passwort>@db-host:5432/gastro_prod
-DATABASE_URL_OWNER=postgres://gastro_owner:<passwort>@db-host:5432/gastro_prod
+DATABASE_URL_MIGRATE=postgres://gastro_owner:<passwort>@db-host:5432/gastro_prod
 ```
 
-`DATABASE_URL_OWNER` ist nur für Migrations + DBA-Wartung, NIEMALS fürs
-laufende Backend. In Dev/CI darf die Bequemlichkeit gewinnen (Backend läuft
-mit dem Owner-Account) — der Startup-Check warnt dann, blockt aber nicht.
+`DATABASE_URL_MIGRATE` ist nur für Migrations + DBA-Wartung + das Setup-Skript,
+NIEMALS fürs laufende Backend. In Dev/CI darf die Bequemlichkeit gewinnen (Backend
+läuft mit dem Owner-Account, `DATABASE_URL_MIGRATE` ungesetzt → Fallback auf
+`DATABASE_URL`) — der Startup-Check warnt dann, blockt aber nicht.
+
+**Konvention für neue Tabellen-Migrationen (Defense-in-depth, T044):** Neue Tabellen
+verlassen sich auf die `FOR ROLE gastro_owner`-Default-Privileges oben. Wer zusätzlich
+abgesichert sein will, kann am Ende einer Tabellen-Migration einen rollen-gegateten
+expliziten Grant ergänzen (CI-sicher, da `gastro_app` dort nicht existiert):
+
+```sql
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gastro_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON <tabelle> TO gastro_app;
+  END IF;
+END $$;
+```
 
 ---
 

@@ -39,3 +39,26 @@ Setup-Rezept für lokale Test-DB: siehe `webapp-test-stack`-Memory bzw.
 ## Akzeptanz
 - Tests laufen in CI (`Backend — Lint, Build, Migrate, Test`) grün.
 - Coverage der drei Kern-Funktionen ≥ 80%.
+
+---
+
+## Umsetzung (2026-06-30, Steve)
+
+Ist-Stand-Abgleich vor dem Schreiben (Anti-Drift) — die eingefrorene Spec ist pre-reboot:
+
+- **M05 `exportBelegToLexware`** → `src/__tests__/integration/m05-lexware-export.test.ts` (7 Tests):
+  Happy-Path (status=exported + export_log), Idempotenz-Skip (kein Doppel-Push), Status-Gate
+  (`not_categorized`), 4xx→kein Retry, 5xx→Retry-dann-Erfolg, Final-Fail (attempts=3),
+  Anhang-Best-Effort. DI-Hooks `lexofficeClient`/`s3`/`fetchImpl`. **Backoff mit ECHTEN
+  Wartezeiten** (1 s / 1 s+4 s) statt `vi.useFakeTimers()` — Fake-Timer kollidieren mit der
+  echten DB-I/O des Exporters und können in CI hängen; Tests mit 20 s-Timeout.
+- **M15 `purgeInactivePosCredentials`** → `src/__tests__/integration/m15-pos-cleanup.test.ts`:
+  active-Gate + Retention-Grenze (718 h innen / 722 h außen, race-frei via Stunden-Margin) +
+  tenant-isolierte audit_log-Inserts über 2 Tenants. `updated_at` per INSERT gesetzt
+  (`set_updated_at`-Trigger ist BEFORE UPDATE). Fixtures respektieren UNIQUE(tenant_id, pos_system).
+- **M15 SumUp-RLS (`listActiveSumUpTenants`)** — **bewusst weggelassen**: Die in der Spec genannte
+  Funktion existiert nach dem Reboot NICHT mehr (nur `syncDay`). RLS-Tenant-Listing ist zudem
+  bereits durch `tenants-list-rls.test.ts` abgedeckt.
+
+**Verifikation:** Lokal keine Postgres → DB-Integrationstests skippen (Repo-Norm, `dbAvailable`-Guard).
+Beweis läuft in CI (postgres:16 + `CI=true` ⇒ REQUIRE_DB). Lint (299) + build lokal grün.

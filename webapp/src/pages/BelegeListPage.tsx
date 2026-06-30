@@ -14,6 +14,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import NoTenantHint from '../components/NoTenantHint';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/ToastProvider';
+import { type BelegStatusEvent, useBelegStatusStream } from '../hooks/useBelegStatusStream';
 
 // ── Konstanten ────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,15 @@ export default function BelegeListPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // T074 — Live-Status via SSE: eingehende beleg.status-Events patchen den Status
+  // der betroffenen Zeile in-place (nur Belege, die aktuell auf der Seite sind).
+  const handleStatusEvent = useCallback((e: BelegStatusEvent) => {
+    setBelege((prev) =>
+      prev.map((b) => (b.id === e.beleg_id ? { ...b, status: e.status as BelegStatus } : b)),
+    );
+  }, []);
+  useBelegStatusStream(handleStatusEvent);
 
   // Filter-Änderung → zurück auf Seite 1
   function handleStatusChange(value: string) {

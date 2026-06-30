@@ -3,14 +3,45 @@
  * Spec: T014 — Empty-State, Tabelle, Pagination, Status-Filter, Row-Navigation
  */
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '../tests/msw/server';
 import BelegeListPage from './BelegeListPage';
 import { ToastProvider } from '../components/ToastProvider';
 import type { Beleg } from '../api/belege';
+
+// ── Fake EventSource (jsdom hat keins → Hook wäre sonst no-op) ──────────────────
+type SseListener = (ev: MessageEvent) => void;
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  url: string;
+  withCredentials: boolean;
+  private listeners: Record<string, SseListener[]> = {};
+  constructor(url: string, init?: { withCredentials?: boolean }) {
+    this.url = url;
+    this.withCredentials = init?.withCredentials ?? false;
+    FakeEventSource.instances.push(this);
+  }
+  addEventListener(type: string, cb: SseListener): void {
+    (this.listeners[type] ??= []).push(cb);
+  }
+  removeEventListener(type: string, cb: SseListener): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== cb);
+  }
+  close(): void {}
+  emit(type: string, data: unknown): void {
+    for (const cb of this.listeners[type] ?? []) {
+      cb({ data: JSON.stringify(data) } as MessageEvent);
+    }
+  }
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  FakeEventSource.instances = [];
+});
 
 // Default: aktiver Mandant vorhanden (sonst greift der NoTenantHint-Guard).
 // Einzelne Tests können den noTenant-Pfad per mockReturnValueOnce(null) prüfen.
@@ -337,6 +368,63 @@ describe('BelegeListPage', () => {
 
     await waitFor(() => expect(called).toBe(true));
     expect(await screen.findByText(/2 exportiert, 1 übersprungen, 0 fehlgeschlagen/i)).toBeInTheDocument();
+  });
+
+  // ── T074 — Live-Status via SSE ─────────────────────────────────────────────
+
+  it('T074: aktualisiert den Beleg-Status live bei eingehendem SSE-Event', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    server.use(
+      http.get(`${BASE}/belege`, () =>
+        HttpResponse.json({
+          belege: [{ ...MOCK_BELEG, id: 'b-001', status: 'extracting' }],
+          pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+        }),
+      ),
+    );
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('beleg-row')).toBeInTheDocument());
+
+    // Initial: Status "extracting" → Label "Extrahiert (läuft)" in der Zeile.
+    const row = screen.getByTestId('beleg-row');
+    expect(within(row).getByText('Extrahiert (läuft)')).toBeInTheDocument();
+
+    // SSE-Stream wurde mit Tenant-Query + Credentials geöffnet.
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+    expect(es?.url).toBe('/api/v1/events?tenant=tenant-001');
+    expect(es?.withCredentials).toBe(true);
+
+    // Event eintreffen lassen → Status der Zeile wechselt zu "Kategorisiert".
+    await act(async () => {
+      es?.emit('beleg.status', { beleg_id: 'b-001', status: 'categorized' });
+    });
+    await waitFor(() => {
+      expect(within(screen.getByTestId('beleg-row')).getByText('Kategorisiert')).toBeInTheDocument();
+    });
+  });
+
+  it('T074: ignoriert SSE-Events für nicht angezeigte Belege', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    server.use(
+      http.get(`${BASE}/belege`, () =>
+        HttpResponse.json({
+          belege: [{ ...MOCK_BELEG, id: 'b-001', status: 'extracting' }],
+          pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+        }),
+      ),
+    );
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('beleg-row')).toBeInTheDocument());
+
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+    await act(async () => {
+      es?.emit('beleg.status', { beleg_id: 'fremder-beleg', status: 'categorized' });
+    });
+
+    // Status der angezeigten Zeile bleibt unverändert.
+    expect(within(screen.getByTestId('beleg-row')).getByText('Extrahiert (läuft)')).toBeInTheDocument();
   });
 
   it('T076: Batch-Export mit failed>0 zeigt Fehler-Summary-Toast', async () => {

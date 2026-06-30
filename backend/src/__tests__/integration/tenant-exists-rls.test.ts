@@ -72,6 +72,13 @@ beforeAll(async () => {
      END $$;`,
   );
   await pool.query('GRANT EXECUTE ON FUNCTION tenant_exists(uuid) TO gastro_app');
+  // GRANT SELECT auf tenants ist Voraussetzung für die „bare query"-Tests: ohne das
+  // Tabellen-Privileg wirft der nackte SELECT „permission denied" (42501) BEVOR RLS
+  // greift — der Test will aber die RLS-Wirkung (0 Zeilen) zeigen. In Prod hat
+  // gastro_app dieses Grant ohnehin (setup-app-role.sql: GRANT … ON ALL TABLES).
+  // Ohne dieses explizite Grant ist der Test test-reihenfolge-abhängig (flaky):
+  // er ging nur grün, wenn ein anderer Test das Grant zufällig vorher gesetzt hatte.
+  await pool.query('GRANT SELECT ON tenants TO gastro_app');
 
   await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [[TENANT, DELETED]]);
   await pool.query(

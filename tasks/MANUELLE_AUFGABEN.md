@@ -117,6 +117,16 @@
   4. 30-Tage-Geld-zurück-Garantie + monatliche Kündigung dokumentieren
 - **Ort:** `legal/`-Ordner im Repo
 
+### ⏳ Steuerberater-Mail pro Pilot-Mandant hinterlegen (T089)
+- **Priorität:** P1 (ohne die Adresse liefert die Übergabe-Route 422 — kein Versand)
+- **Was:** Die E-Mail-Adresse der Steuerberaterin in der Spalte `tenants.advisor_email` des Pilot-Mandanten setzen, damit die Monats-Übergabe-Mail (`POST /api/v1/reports/:id/deliver`) einen Empfänger hat.
+- **Schritte:**
+  1. Mail-Adresse der Steuerberaterin erfragen (gleicher Kontakt wie Lexware-Token T009 / SKR-Frage).
+  2. In der Mitarbeiter-Webapp am Mandanten als Stammdatum eintragen — **oder** bis das UI-Feld existiert per DB: `UPDATE tenants SET advisor_email = '<mail>' WHERE id = '<pilot-tenant-id>';`.
+  3. Voraussetzung für echten Versand zusätzlich: SMTP konfiguriert (eigener Eintrag „SMTP-Account"). Ohne SMTP läuft die Übergabe im Dry-Run (Status `sent`, keine echte Mail).
+- **Output:** Befüllte `advisor_email` → Übergabe-Mail an Steuerberaterin möglich.
+- **Dependencies:** SMTP-Account (T010-Eintrag), Migration 129 (läuft beim Deploy automatisch).
+
 ---
 
 ## 🔧 Andreas — Backend / Infrastructure / DB

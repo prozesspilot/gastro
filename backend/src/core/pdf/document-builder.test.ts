@@ -196,6 +196,28 @@ describe('PdfDocumentBuilder.build', () => {
     expect(bodyBelowLimit).toEqual([]);
   });
 
+  it('Grenzfall: Zeile knapp höher als eine Seite (53 Lines) paginiert ohne Überlauf (T088)', async () => {
+    // Genau der schmale Höhenbereich zwischen den anderen beiden Tests: die Zeile
+    // passt rechnerisch in pageContentHeight (~717 pt), aber NICHT mehr, sobald die
+    // wiederholte Kopfzeile (21,2 pt) abgezogen ist. Der erste Fix-Stand zog die
+    // Kopfzeile in der Branch-Schwelle nicht ab → eine Baseline landete bei y ≈ 68.
+    // \n erzwingt exakt 53 (nicht-umgebrochene) Lines.
+    const exact53 = Array.from({ length: 53 }, (_, i) => `Zeile ${i}`).join('\n');
+    const bytes = await new PdfDocumentBuilder({ title: 'Grenzfall 53', now: FIXED_NOW })
+      .table({
+        columns: [{ header: 'Freitext', width: 1 }],
+        rows: [[exact53]],
+      })
+      .build();
+
+    const doc = await loadBack(bytes);
+    expect(doc.getPageCount()).toBeGreaterThan(1);
+
+    const baselines = extractTextBaselines(bytes);
+    const bodyBelowLimit = baselines.filter((y) => y < BOTTOM_LIMIT && Math.abs(y - FOOTER_Y) > 2);
+    expect(bodyBelowLimit).toEqual([]);
+  });
+
   it('mehrzeilige Zelle, die auf eine Seite passt, bleibt einseitig und korrekt (Regression)', async () => {
     // ~6 umgebrochene Zeilen — maxLines > 1, aber rowHeight < Seiten-Nutzhöhe.
     const multiLine = Array.from({ length: 90 }, (_, i) => `Wort${i % 9}`).join(' ');

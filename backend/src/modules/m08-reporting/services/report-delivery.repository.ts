@@ -40,6 +40,25 @@ export async function upsertPendingDelivery(
   return res.rows[0].id as string;
 }
 
+/**
+ * Liest Status + ID eines vorhandenen Delivery-Rows für (report, channel,
+ * recipient). null, wenn noch nie versendet. Für den Re-Run-Schutz des Crons
+ * (T090): bereits `sent` → nicht erneut senden.
+ */
+export async function findDeliveryStatus(
+  client: PoolClient,
+  input: UpsertDeliveryInput,
+): Promise<{ id: string; status: DeliveryStatus } | null> {
+  const res = await client.query(
+    `SELECT id, status
+       FROM report_deliveries
+      WHERE report_id = $1 AND channel = $2 AND recipient_hash = $3`,
+    [input.reportId, input.channel, input.recipientHash],
+  );
+  const row = res.rows[0] as { id: string; status: DeliveryStatus } | undefined;
+  return row ?? null;
+}
+
 export interface DeliveryResultInput {
   id: string;
   status: Extract<DeliveryStatus, 'sent' | 'failed'>;

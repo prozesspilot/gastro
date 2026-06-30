@@ -63,7 +63,21 @@ Stellt einen bereits gebauten Report per Mail (PDF-Anhang) an `tenants.advisor_e
 - **SMTP-I/O außerhalb der Tx:** Delivery-Pending (Tx1) → senden → Ergebnis+Audit (Tx2), damit keine
   offene Transaktion über den SMTP-Call gehalten wird.
 
-## Folge-Tasks (NICHT in T087/T089)
+## Monats-Cron (T090)
 
-DATEV-CSV-Anhang (M04) · Original-Belege-ZIP · Z-Bon-PDFs (M15) · Cron-Trigger (`0 8 1 * *`) ·
-Spar-Bericht für Wirt (§18) · Quartals-USt (§19) · Mehrsatz-Belege per-Position-USt-Split.
+`backend/src/cron/monthly-report.ts` — `runMonthlyReportCron()` baut + versendet den
+Vormonats-Report für **alle aktiven Tenants** (System-Actor `cron:monthly-accountant-handover`).
+Externer Trigger (IONOS systemd-Timer `0 6 1 * *` → `docker compose exec -T backend node
+dist/cron/monthly-report.js`), KEIN In-Process-Scheduler — Muster wie `sumup-daily.ts`.
+
+- **Fehler-Isolation:** ein Tenant-Fehler bricht den Lauf nicht ab.
+- **Leer-Skip:** Monate ohne verbuchte Belege werden nicht versendet (kein „0 Belege"-Spam).
+- **Re-Run-Schutz:** `deliverReport(..., { skipIfAlreadySent: true })` — systemd-Retry sendet
+  nicht doppelt (die Einzeltenant-Route bleibt at-least-once).
+- **Exit-Codes:** 0 (alle ok) · 1 (≥1 Tenant failed) · 2 (Crash).
+
+## Folge-Tasks (NICHT in T087/T089/T090)
+
+DATEV-CSV-Anhang (M04) · Original-Belege-ZIP · Z-Bon-PDFs (M15) · Discord-`#dev-log`-Notification
+nach Cron-Lauf · Spar-Bericht für Wirt (§18) · Quartals-USt (§19) · Mehrsatz-Belege
+per-Position-USt-Split.

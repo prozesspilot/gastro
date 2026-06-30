@@ -131,7 +131,9 @@ describe('M07 — fetchBelegeForMonth (echte DB)', () => {
     const first = rows[0];
     expect(first.document_date?.slice(0, 10)).toBe('2026-05-03');
     expect(first.category).toBe('wareneinkauf_food');
-    expect(first.category_label).toBe('Wareneinkauf Food');
+    // category_label kommt aus dem kanonischen System-Kategorien-Namen
+    // (findCategory), NICHT aus dem im Payload gespeicherten Label.
+    expect(first.category_label).toBe('Wareneinkauf Lebensmittel');
     expect(first.skr_account).toBe('5100');
     expect(first.total_gross).toBe(119);
     expect(first.status).toBe('categorized');

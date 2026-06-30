@@ -76,3 +76,25 @@ Aktuelle T008-Implementation funktioniert für Pilot (1 Tenant, M03 immer enable
 - Wir mehrere Tenants haben mit unterschiedlicher Module-Konfig
 - M03 in der Verarbeitung asynchron werden soll (Claude-Calls in Phase-2 sind teuer)
 - Andere Module M01-Events konsumieren wollen (z.B. M02 Archivierung)
+
+---
+
+## ⚠️ KRITISCHER BEFUND (2026-06-30) — Spec-Ansatz so NICHT umsetzbar
+
+Bei einer Anti-Drift-Analyse festgestellt: Die oben skizzierte **asynchrone** Event-Entkopplung
+(M01 emit → M03-Worker konsumiert unabhängig) **bricht eine Reihenfolge-Invariante** und würde
+falsche Kategorien erzeugen:
+
+- Der Bewirtungs-Detector schreibt `payload.bewirtung`.
+- Die **Auto-Kategorisierung (T077)** läuft **direkt nach dem OCR im selben ocr-worker** und
+  **liest** `payload.bewirtung` (`m03-categorization/services/categorize.service.ts`, `extractOcrFields`).
+- Würde die Detection in einen unabhängigen async-Consumer ausgelagert, liefe categorize davor →
+  `payload.bewirtung` = `undefined` → der Bewirtungs-Sonderfall (T053-Schutz) greift nicht.
+
+**Korrekter Ansatz (für die Neuauflage):** KEIN unabhängiger Parallel-Consumer, sondern die Pipeline
+**umhängen**: `OCR → (Event) → bewirtung-detector-worker → schreibt payload.bewirtung → triggert
+categorize`. D.h. der T077-Auto-Categorize-Trigger müsste vom ocr-worker in den (neuen) bewirtung-
+Worker wandern. Das ist eine echte Pipeline-/Ordering-Design-Entscheidung, kein mechanisches Refactoring.
+
+Bis dahin ist der direkte Import (`ocr.service.ts` → `m03/bewirtungs-detector`) bewusst belassen und
+in beiden Dateien mit einem Reihenfolge-Invarianten-Kommentar abgesichert. Priorität bleibt P2.

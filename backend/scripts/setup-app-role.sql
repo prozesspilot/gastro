@@ -11,8 +11,15 @@
 --     -f backend/scripts/setup-app-role.sql
 --
 -- WICHTIG:
+--   - Die ausführende Rolle muss Superuser ODER Member von `gastro_owner` sein
+--     (sonst schlägt `ALTER DEFAULT PRIVILEGES FOR ROLE gastro_owner` fehl).
 --   - Das Passwort als ':app_password' MUSS in einfachen Quotes übergeben
 --     werden (siehe Beispiel oben).
+--   - CAVEAT (pre-existing, nicht T044): Der Rotations-Pfad (ALTER ROLE bei bereits
+--     existierender Rolle, unten) quotet `:'app_password'` zusätzlich via %L — bei
+--     Re-Run kann das Passwort literale Quotes erhalten. Bis zur Vereinheitlichung
+--     beider Zweige: für eine saubere Rotation die Rolle vorher droppen oder das
+--     Passwort direkt per `ALTER ROLE gastro_app PASSWORD '…'` setzen.
 --   - Niemals das echte Passwort in dieses File einchecken.
 --   - In Dev/Lokal kann das Backend mit dem Owner-Account laufen
 --     (Bequemlichkeit) — der Startup-Check (`role-check.ts`) warnt nur.

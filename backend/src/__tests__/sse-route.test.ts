@@ -17,7 +17,7 @@ import { resolveSseSubscription } from '../routes/sse';
 
 function fakeReq(opts: {
   cookie?: string;
-  query?: Record<string, string>;
+  query?: Record<string, string | string[]>;
   headers?: Record<string, string | string[]>;
 }): FastifyRequest {
   return {
@@ -92,6 +92,14 @@ describe('resolveSseSubscription', () => {
   it('array-wertiger x-pp-tenant-id-Header nimmt den ersten Wert', () => {
     const r = resolveSseSubscription(
       fakeReq({ cookie: validToken(), headers: { 'x-pp-tenant-id': [TENANT, 'zweiter'] } }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.tenantId).toBe(TENANT);
+  });
+
+  it('array-wertiger ?tenant=-Query nimmt den ersten Wert (Symmetrie zum Header)', () => {
+    const r = resolveSseSubscription(
+      fakeReq({ cookie: validToken(), query: { tenant: [TENANT, 'zweiter'] } }),
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.tenantId).toBe(TENANT);

@@ -44,7 +44,10 @@ export function resolveSseSubscription(req: FastifyRequest): SseResolution {
     };
   }
 
-  const queryTenant = (req.query as { tenant?: string } | undefined)?.tenant;
+  // Query-Param und Header können beide array-wertig ankommen (?tenant=a&tenant=b
+  // bzw. doppelter Header) — symmetrisch auf den ersten Wert reduzieren.
+  const rawQuery = (req.query as { tenant?: string | string[] } | undefined)?.tenant;
+  const queryTenant = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
   const rawHeader = req.headers['x-pp-tenant-id'];
   const headerTenant = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
   const tenantId = queryTenant || headerTenant;

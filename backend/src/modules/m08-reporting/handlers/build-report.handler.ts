@@ -72,6 +72,7 @@ export async function buildReportHandler(
     totals: result.totals.totals,
     by_category: result.totals.by_category,
     top_suppliers: result.totals.top_suppliers,
+    ust_split: result.totals.ust_split,
     comparison_prev_month: result.totals.comparison_prev_month,
     pdf_object_key: result.pdfObjectKey,
     download_url: downloadUrl,

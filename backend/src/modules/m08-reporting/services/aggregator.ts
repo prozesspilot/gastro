@@ -18,6 +18,7 @@
 import type { Pool } from 'pg';
 import { withTenant } from '../../../core/db/tenant';
 import { findCategory } from '../../m03-categorization/system-categories';
+import { type UstSplit, computeUstSplit } from './ust-split';
 
 /** Status, ab dem ein Beleg als verbucht gilt und in die Monatszahlen einfließt. */
 export const BOOKED_STATUS = [
@@ -51,6 +52,8 @@ export interface MonthlyAggregates {
   };
   by_category: CategoryAggregate[];
   top_suppliers: SupplierAggregate[];
+  /** USt-Split (19/7/0 + nicht zuordenbar) — für die Steuerberater-Übergabe (T089). */
+  ust_split: UstSplit;
   comparison_prev_month: {
     gross_sum: number;
     /** Prozentuale Veränderung ggü. Vormonat; null, wenn Vormonat 0 war (Division undefiniert). */
@@ -166,6 +169,26 @@ export async function computeMonthlyAggregates(
       [tenantId, statusList],
     );
 
+    // USt-Split: braucht den `payload` je Beleg (Satz aus extraction.fields).
+    // Eigene Query (nicht in den Aggregat-Queries oben, die nur denormalisierte
+    // Spalten lesen) — selber Monats-/Status-Filter wie `gross_sum`, damit
+    // Σ(Split) == gross_sum reconciled.
+    const ustRowsRes = await client.query(
+      `SELECT total_gross, payload
+         FROM belege
+        WHERE tenant_id = $1
+          AND status = ANY($2)
+          AND document_date >= $3::date
+          AND document_date <  $4::date`,
+      [tenantId, statusList, start, end],
+    );
+    const ustSplit = computeUstSplit(
+      ustRowsRes.rows.map((r) => ({
+        total_gross: r.total_gross,
+        payload: (r.payload as Record<string, unknown> | null) ?? {},
+      })),
+    );
+
     const grossSum = coerceNum(totalsRes.rows[0].gross_sum);
     const prevGross = coerceNum(prevRes.rows[0].gross_sum);
     const deltaPercent =
@@ -187,6 +210,7 @@ export async function computeMonthlyAggregates(
         count: coerceNum(r.count),
         gross_sum: coerceNum(r.gross_sum),
       })),
+      ust_split: ustSplit,
       comparison_prev_month: { gross_sum: prevGross, delta_percent: deltaPercent },
       receipts_without_date: coerceNum(noDateRes.rows[0].n),
     };

@@ -36,12 +36,40 @@ DATEV-CSV-Anhang (braucht M04) · ZIP der Original-Belege · Z-Bon-PDFs (M15) ·
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] USt-Split (19/7/0) korrekt aus den Beleg-Tax-Lines aggregiert; im Report-PDF sichtbar
-- [ ] Übergabe-Mail an `steuerberater_email` mit PDF-Anhang; Dry-Run ohne SMTP (kein Crash)
-- [ ] `report_deliveries` (Migration 129 + RLS + Rollback); Delivery-Status persistiert
-- [ ] `POST /reports/:id/deliver` mitarbeiter+ (support→403); Report-not-found → 404
-- [ ] Audit-Event `report.delivered`/`report.delivery_failed`; kein PII im Log (nur Empfänger-Hash)
-- [ ] Tests grün · biome · CI grün · code-reviewer OK
+- [x] USt-Split (19/7/0) korrekt aus den Beleg-Tax-Lines aggregiert; im Report-PDF sichtbar
+- [x] Übergabe-Mail an `advisor_email` mit PDF-Anhang; Dry-Run ohne SMTP (kein Crash)
+- [x] `report_deliveries` (Migration 129 + RLS + Rollback); Delivery-Status persistiert
+- [x] `POST /reports/:id/deliver` mitarbeiter+ (support→403); Report-not-found → 404
+- [x] Audit-Event `report.delivered`/`report.delivery_failed`; kein PII im Log (nur Empfänger-Hash)
+- [x] Tests grün (51 m08 / 931 gesamt, 0 fail) · biome grün · build grün · CI/code-reviewer ausstehend
+
+---
+
+## Umsetzungs-Notizen + Entscheidungen (§7.4)
+
+- **Spalten-Name `advisor_email` statt `steuerberater_email`:** Die Codebasis nutzt für den
+  Steuerberater bereits **English snake_case** (`advisor_cost_monthly`, Migration 123, Konvention §6.2).
+  Eine zweite Sprachwelt (`steuerberater_email`) hätte Drift erzeugt → Spalte heißt `advisor_email`
+  (CITEXT, Kommentar `-- steuerberater_email`). Migration 129.
+- **USt-Split-Logik:** je Beleg EIN Satz (`tax_rate`, sonst dominanter `tax_lines`-Satz, wie
+  M05-Voucher-Builder) auf das volle `total_gross` → Σ(Split) == `gross_sum` (reconciled). Anders als
+  der Voucher-Builder wird ohne Satz-Info **nicht** auf 19 % geraten — solche Belege landen im
+  Sammelposten „nicht zuordenbar" (GoBD: transparent statt falsch). Exotische Sätze (z. B. 16 %)
+  ebenfalls „nicht zuordenbar". Per-Position-Mehrsatz-Split = spätere Verfeinerung.
+- **Anrede generisch** („Sehr geehrte Damen und Herren") — kein Steuerberater-Name im Datenmodell.
+- **Idempotenz:** UNIQUE `(report_id, channel, recipient_hash)`; erneuter Versand = Status-Update
+  desselben Rows. `recipient_hash` = voller SHA256 (PII-frei) in der DB; Audit/Log nur Kurz-Hash.
+- **SMTP-I/O außerhalb der DB-Tx** (Pending → senden → Ergebnis+Audit), keine offene Tx über SMTP.
+- **Delivery rendert NICHT neu** — versendet das beim Build erzeugte PDF; USt-Sektion erscheint in
+  Reports, die NACH T089 gebaut wurden (Alt-Snapshots ohne `ust_split` rendert das PDF defensiv).
+- **Build/Test-Gate grün**; DB-Integrationstests skippen lokal ohne Postgres → laufen in CI.
+
+### Geänderte/neue Dateien
+- Migration `129_report_deliveries.sql` (+ Rollback): `advisor_email` + `report_deliveries` + RLS
+- Neu: `services/ust-split.ts`, `services/handover-mail.builder.ts`, `services/handover-mail.service.ts`,
+  `services/report-delivery.repository.ts`, `handlers/deliver-report.handler.ts` (+ je Tests)
+- Geändert: `services/aggregator.ts`, `services/report-pdf.ts`, `services/report.repository.ts`,
+  `handlers/build-report.handler.ts`, `routes.ts`, `core/storage/storage.service.ts` (`downloadObject`)
 
 ---
 

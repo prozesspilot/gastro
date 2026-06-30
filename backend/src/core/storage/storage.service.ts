@@ -18,6 +18,7 @@
  *   headObject(client, key)
  */
 
+import type { Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -106,6 +107,38 @@ export async function getPresignedDownloadUrl(
     Key: key,
   });
   return getSignedUrl(client, command, { expiresIn });
+}
+
+// ── Download (Buffer) ─────────────────────────────────────────────────────────
+
+/**
+ * Lädt ein Objekt vollständig als Buffer aus dem Bucket.
+ *
+ * Für den serverseitigen Re-Gebrauch eines Objekts (z. B. PDF-Report als
+ * Mail-Anhang in der Steuerberater-Übergabe, T089) — im Gegensatz zur
+ * presigned URL, die der Client direkt zieht.
+ *
+ * Wirft, wenn das Objekt nicht existiert (S3 `NoSuchKey`). Der Caller behandelt
+ * den Fehler (z. B. 404, wenn der Report-PDF-Key fehlt).
+ */
+export async function downloadObject(client: S3Client, key: string): Promise<Buffer> {
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: config.MINIO_BUCKET,
+      Key: key,
+    }),
+  );
+
+  const body = res.Body as Readable | undefined;
+  if (!body) {
+    throw new Error(`Objekt ${key} hat keinen Body`);
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

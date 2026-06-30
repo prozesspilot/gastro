@@ -20,6 +20,14 @@ function sampleData(overrides: Partial<MonthlyAggregates> = {}): MonthlyAggregat
       { supplier: 'Metro AG', count: 12, gross_sum: 2890.45 },
       { supplier: 'Edeka Großmarkt', count: 8, gross_sum: 743.1 },
     ],
+    ust_split: {
+      by_rate: [
+        { rate: 19, gross: 1190.0, net: 1000.0, tax: 190.0, count: 20 },
+        { rate: 7, gross: 107.0, net: 100.0, tax: 7.0, count: 5 },
+        { rate: 0, gross: 0, net: 0, tax: 0, count: 0 },
+      ],
+      unassignable: { gross: 0, count: 0 },
+    },
     comparison_prev_month: { gross_sum: 3780.0, delta_percent: 12.0 },
     receipts_without_date: 0,
     ...overrides,
@@ -64,10 +72,33 @@ describe('renderMonthlyReportPdf', () => {
       totals: { receipts_count: 0, gross_sum: 0, largest_single: 0 },
       by_category: [],
       top_suppliers: [],
+      ust_split: {
+        by_rate: [
+          { rate: 19, gross: 0, net: 0, tax: 0, count: 0 },
+          { rate: 7, gross: 0, net: 0, tax: 0, count: 0 },
+          { rate: 0, gross: 0, net: 0, tax: 0, count: 0 },
+        ],
+        unassignable: { gross: 0, count: 0 },
+      },
       comparison_prev_month: { gross_sum: 0, delta_percent: null },
     });
     const bytes = await renderMonthlyReportPdf(empty, { tenantName: 'Leer-GmbH', now: FIXED_NOW });
     expect(bytes).toBeInstanceOf(Buffer);
+    expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('rendert die USt-Übersicht inkl. „nicht zuordenbar"-Zeile ohne Crash', async () => {
+    const data = sampleData({
+      ust_split: {
+        by_rate: [
+          { rate: 19, gross: 1190.0, net: 1000.0, tax: 190.0, count: 20 },
+          { rate: 7, gross: 107.0, net: 100.0, tax: 7.0, count: 5 },
+          { rate: 0, gross: 0, net: 0, tax: 0, count: 0 },
+        ],
+        unassignable: { gross: 50.0, count: 2 },
+      },
+    });
+    const bytes = await renderMonthlyReportPdf(data, { tenantName: 'USt-GmbH', now: FIXED_NOW });
     expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 

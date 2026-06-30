@@ -64,11 +64,14 @@ export async function getReportById(
   reportId: string,
 ): Promise<ReportRow | null> {
   return withTenant(db, tenantId, async (client) => {
+    // `tenant_id = $2` ist Defense-in-depth ZUSÄTZLICH zur RLS (wie in aggregator.ts):
+    // der Report-Zugriff hängt nicht allein vom Session-GUC ab und ist auch unter
+    // einer RLS-bypassenden Rolle (Superuser im Test) tenant-isoliert.
     const res = await client.query(
       `SELECT id, tenant_id, period_year, period_month, totals, pdf_object_key, created_at
          FROM reports
-        WHERE id = $1`,
-      [reportId],
+        WHERE id = $1 AND tenant_id = $2`,
+      [reportId, tenantId],
     );
     return (res.rows[0] as ReportRow | undefined) ?? null;
   });
@@ -80,5 +83,39 @@ export async function getTenantName(db: Pool, tenantId: string): Promise<string>
     const res = await client.query('SELECT legal_name FROM tenants WHERE id = $1', [tenantId]);
     const name = res.rows[0]?.legal_name;
     return typeof name === 'string' && name.trim() ? name : 'Mandant';
+  });
+}
+
+export interface TenantHandoverInfo {
+  /** Anzeige-/Firmenname für Betreff + Anrede (legal_name, sonst display_name, sonst „Mandant"). */
+  tenantName: string;
+  /** Steuerberater-Mail (Spalte advisor_email); null, wenn nicht hinterlegt. */
+  advisorEmail: string | null;
+}
+
+/**
+ * Liest die für die Steuerberater-Übergabe (T089) nötigen Tenant-Stammdaten:
+ * Empfänger-Mail + Anzeige-Name. Tenant-scoped (RLS).
+ */
+export async function getTenantHandoverInfo(
+  db: Pool,
+  tenantId: string,
+): Promise<TenantHandoverInfo> {
+  return withTenant(db, tenantId, async (client) => {
+    const res = await client.query(
+      'SELECT legal_name, display_name, advisor_email FROM tenants WHERE id = $1',
+      [tenantId],
+    );
+    const row = res.rows[0];
+    const legal =
+      typeof row?.legal_name === 'string' && row.legal_name.trim() ? row.legal_name : '';
+    const display =
+      typeof row?.display_name === 'string' && row.display_name.trim() ? row.display_name : '';
+    const advisor =
+      typeof row?.advisor_email === 'string' && row.advisor_email.trim() ? row.advisor_email : null;
+    return {
+      tenantName: legal || display || 'Mandant',
+      advisorEmail: advisor,
+    };
   });
 }

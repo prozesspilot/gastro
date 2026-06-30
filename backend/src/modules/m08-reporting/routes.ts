@@ -6,6 +6,7 @@
  *
  * Endpoints:
  *   POST /api/v1/reports/monthly/build  — Monats-Report bauen (mitarbeiter+, support→403)
+ *   POST /api/v1/reports/:id/deliver    — Report an Steuerberater senden (mitarbeiter+, support→403)
  *
  * Auth: M14-JWT-Cookie (pp_auth) + X-PP-Tenant-ID-Header.
  */
@@ -14,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { m14StaffAuthHook } from '../../core/auth/m14-staff-auth';
 import { m14TenantContextHook } from '../../core/auth/m14-tenant-context';
 import { buildReportHandler } from './handlers/build-report.handler';
+import { deliverReportHandler } from './handlers/deliver-report.handler';
 
 // Explizites Per-Route-Rate-Limiting (zusätzlich zum globalen Limit aus app.ts).
 // Greift nur mit @fastify/rate-limit (Prod; im Test ignoriert) und verhindert den
@@ -26,4 +28,5 @@ export async function reportingRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', m14TenantContextHook);
 
   app.post('/reports/monthly/build', RL, buildReportHandler);
+  app.post('/reports/:id/deliver', RL, deliverReportHandler);
 }

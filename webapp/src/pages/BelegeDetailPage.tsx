@@ -16,7 +16,7 @@
  * bei API-Fehler rollen wir zurück auf den letzten erfolgreichen Snapshot.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getActiveTenantId } from '../api';
 import {
@@ -33,6 +33,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import NoTenantHint from '../components/NoTenantHint';
 import { useToast } from '../components/ToastProvider';
+import { type BelegStatusEvent, useBelegStatusStream } from '../hooks/useBelegStatusStream';
 
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
@@ -257,6 +258,11 @@ export default function BelegeDetailPage() {
     return JSON.stringify(form) !== JSON.stringify(baseline);
   }, [form, baseline]);
 
+  // Ref, damit der SSE-Handler den aktuellen isDirty-Wert liest, ohne bei jedem
+  // Dirty-Wechsel neu zu subscriben (Stream-Churn vermeiden).
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
   const confidence = beleg?.payload?.extraction?.fields?.fields_confidence ?? {};
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -331,6 +337,25 @@ export default function BelegeDetailPage() {
     setForm(f);
     setBaseline(f);
   };
+
+  // T074 — Live-Status via SSE: trifft ein beleg.status-Event für DIESEN Beleg ein,
+  // wird bei ungespeicherten Edits nur das Status-Badge gepatcht (Form unangetastet),
+  // sonst der Beleg komplett neu geladen (Status + Felder). `refreshBeleg` wird per
+  // Closure erfasst — innerhalb einer id-Generation verhält es sich identisch.
+  const handleStatusEvent = useCallback(
+    (e: BelegStatusEvent) => {
+      if (e.beleg_id !== id) return;
+      if (isDirtyRef.current) {
+        setBeleg((prev) => (prev ? { ...prev, status: e.status as Beleg['status'] } : prev));
+      } else {
+        void refreshBeleg();
+      }
+    },
+    // refreshBeleg bewusst nicht in den Deps (würde pro Render neu erzeugt → Resubscribe).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id],
+  );
+  useBelegStatusStream(handleStatusEvent);
 
   const handleCategorize = async () => {
     if (!id || categorizing) return;

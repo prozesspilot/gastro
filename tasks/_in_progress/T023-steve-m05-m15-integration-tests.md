@@ -56,9 +56,13 @@ Ist-Stand-Abgleich vor dem Schreiben (Anti-Drift) — die eingefrorene Spec ist 
   active-Gate + Retention-Grenze (718 h innen / 722 h außen, race-frei via Stunden-Margin) +
   tenant-isolierte audit_log-Inserts über 2 Tenants. `updated_at` per INSERT gesetzt
   (`set_updated_at`-Trigger ist BEFORE UPDATE). Fixtures respektieren UNIQUE(tenant_id, pos_system).
-- **M15 SumUp-RLS (`listActiveSumUpTenants`)** — **bewusst weggelassen**: Die in der Spec genannte
-  Funktion existiert nach dem Reboot NICHT mehr (nur `syncDay`). RLS-Tenant-Listing ist zudem
-  bereits durch `tenants-list-rls.test.ts` abgedeckt.
+- **M15 SumUp-RLS (`listActiveSumUpTenants`)** — **bewusst verschoben** (korrigiert nach
+  code-reviewer-Befund PR #222): Die Funktion existiert weiterhin
+  (`kasse-transactions.repository.ts:220`, live genutzt von `cron/sumup-daily.ts:43`). Der von der
+  Spec gewünschte RLS-Beweis ist aber **noch nicht möglich**: `pos_credentials` hat **keine RLS**
+  (Migration 022, Z. 9–10 — RLS-Härtung explizit auf **T020** vertagt); das `bypass_rls` im
+  Listing ist auf einer RLS-freien Tabelle ein No-Op. Die Query-Logik ist bereits per Mock-Test
+  (`kasse-transactions.repository.test.ts`) abgedeckt. → Real-DB-RLS-Test auf **T020/T022** verschoben.
 
 **Verifikation:** Lokal keine Postgres → DB-Integrationstests skippen (Repo-Norm, `dbAvailable`-Guard).
 Beweis läuft in CI (postgres:16 + `CI=true` ⇒ REQUIRE_DB). Lint (299) + build lokal grün.

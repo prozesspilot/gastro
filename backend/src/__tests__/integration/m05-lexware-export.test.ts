@@ -125,6 +125,9 @@ async function countExportLog(belegId: string, status?: string): Promise<number>
   return (res.rows[0] as { n: number }).n;
 }
 
+// Setzt Superuser/Owner als DB-Rolle voraus (CI: pp). Unter `gastro_app` würde der
+// audit_log-DELETE mangels is_audit_maintenance()-Recht still fehlschlagen (Fehler
+// geschluckt) → Re-Run auf persistenter DB könnte Audit-Reste sehen. Repo-Norm = Superuser-DB.
 async function purgeAuditLog(): Promise<void> {
   const client = await pool.connect();
   try {

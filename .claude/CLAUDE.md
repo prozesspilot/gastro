@@ -98,9 +98,10 @@ Folge-Punkte erledigt (2026-06-15): **T052** SKR-Konto-Divergenz (SSoT + Status-
 
 Der frühere „tote Hülle"-Code wurde im Pilot-Pfad (T047/T051) **größtenteils gelöscht**, statt nur eingefroren. Der aktuelle Stand:
 
-- **Noch nicht gebaut — existiert nur als Spec/Tasks (Stand 2026-06-15: im Build-out, nicht mehr „eingefroren bis Zahlung"):** M02 (Archiv) · M04 (DATEV) · M06 (sevDesk) · M07 (Excel/Sheets) · M08 (Reporting) · M09 (Lieferanten-Komm.) · M10 (WhatsApp) · M11 (E-Mail/IMAP) · M13 (Steuerberater-Portal). Diese Module haben **keinen** Ordner unter `backend/src/modules/` mehr — sie leben in `Modulkonzept/Konzeptentwicklung/modules/`, `tasks/_eingefroren/` und `n8n/workflows/_eingefroren/`. Sie werden auf der **belege-Welt neu gebaut** (NICHT die alten Specs 1:1, die zielen auf die toten Geister-Tabellen). Reihenfolge: siehe `00_Buildout_Roadmap.md`. Web-Chat (Eingang+Support) und Onboarding-Wizard sind der priorisierte kritische Pfad; M02/M04/M06/M07/M13 = Phase E (später).
+- **⚠️ AKTUALISIERT 2026-06-30:** Seit 2026-06-15 ist deutlich mehr gebaut als unten ursprünglich vermerkt. **Bereits gebaut + LIVE (registriert in `app.ts`):** Fundament (`core/mail`, `core/pdf`, Task-System `m-tasks`), **M08 Reporting** (inkl. Monats-Cron), **Onboarding-Wizard (M16)**, **Web-Chat-Widget (`m-webchat`)** sowie der Live-Kern M01/M03/M05/M12/M14/M15. (Verifiziert per Discovery 2026-06-30; vgl. Memory `buildout-phase-status`.)
+- **Wirklich noch nicht gebaut — nur Spec/Tasks (Stand 2026-06-30):** M02 (Archiv) · M04 (DATEV) · M06 (sevDesk) · M07 (Excel/Sheets) · M09 (Lieferanten-Komm.) · M10 (WhatsApp) · M11 (E-Mail/IMAP) · M13 (Steuerberater-Portal). Diese haben **keinen** Ordner unter `backend/src/modules/` — sie leben in `Modulkonzept/Konzeptentwicklung/modules/` + `tasks/_eingefroren/`. Werden auf der **belege-Welt neu gebaut** (NICHT die alten Specs 1:1 — die zielen auf tote Geister-Tabellen). Reihenfolge: `00_Buildout_Roadmap.md`. M10 (WhatsApp) gated (Meta-Verifizierung); M02/M04/M06/M07/M13 = Phase E.
 - **Code entfernt (T047/T051):** `customers` · `profiles` · `receipts` · `_shared/receipts` · `_shared/customers` · `plugin-system` · `routing` · `core/hooks/hook-runner` (+ `hook.repository`/`hook.types`) · das **`users`-Modul** (Email+Passwort) · der Alt-`m03-categorization`-receipts-Pfad · `core/adapters/booking/lexoffice/auth.ts` (`customer_credentials`) · der tote `apiApp`-Block in `app.ts`. Reversibel über die Git-Historie (Branches/Tags der jeweiligen PRs).
-- **Letzter isoliert-toter Rest (nicht registriert, harmlos):** `backend/src/modules/tenants/` (`tenant.routes.ts`/`tenant.repository.ts`) — **nicht in `app.ts` registriert**, Spalten-Drift `name`/`active` gegen die echte `tenants`-Tabelle (vgl. Memory `legacy-welt-schema-drift`). Nicht erreichbar → kein Laufzeit-Risiko. Abbau optional, Post-Pilot.
+- **Legacy-`customer`-Welt-Drift ✅ abgebaut (2026-06-30):** `backend/src/modules/tenants/` toter `tenant.routes.ts` + Falsch-Spalten-CRUD entfernt (T043, PR #227); übrig nur die live `tenantExists` (RLS-sicher über SECURITY-DEFINER `tenant_exists()`, Migration 130). Ebenso entfernt: totes `core/audit/audit.service.ts` (#226) + toter Legacy-Schema-Cluster `core/schemas/{customer,document,routing-job,tenant,profile}.ts` (#230). Memory `legacy-welt-schema-drift` = vollständig gelöst.
 - **Module mit lebendem Kern (Alt-Routen bereits entfernt):** M01 (kein `/extract` mehr) · M05 (nur belege-Export) · M12 (nur DSGVO v2).
 
 ### 3.5 Restliche Bestandsaufnahme
@@ -109,10 +110,10 @@ Der frühere „tote Hülle"-Code wurde im Pilot-Pfad (T047/T051) **größtentei
 |---|---|
 | **Konzept** | Ziel-Zustand, dokumentiert in `Modulkonzept/Konzeptentwicklung/` |
 | **Code-Repo / Firma** | Repo `gastro`; Firma ProzessPilot (Einzelunternehmen Steve Bernhardt, Schneverdingen) |
-| **Webapp** | Legacy-Kunden-App mit toten Routes (`/receipts`, `/customers`, `/plugins`, `/communications` gegen Geister-Tabellen). **Reboot zur internen Staff-Admin-App nötig** (Fundament-Posten A3 der Roadmap) |
-| **Onboarding-Wizard / Web-Chat-Widget** | Noch nicht gebaut — **im Build-out** (kritischer Pfad). Web-Chat = gewählter Eingangskanal **+** Support |
-| **Discord-Integration** | Nur Auth-OAuth (M14) gebaut; Bot/Bridge im Build-out (Phase E) |
-| **Fundament-Lücken (Querschnitt)** | Kein generischer **Mail-Service**, kein **PDF-Generator**, kein **Task-System** — Phase A der Roadmap |
+| **Webapp** | ✅ Reboot zur internen Staff-Admin-App erledigt (T058/T059/T065); saubere Multi-Tenant-App (TenantSelector, Belege-Liste/Detail mit Live-SSE, Chats, Tasks, Mandanten). Geister-Routes entfernt. |
+| **Onboarding-Wizard / Web-Chat-Widget** | ✅ Beide gebaut + live (M16 `setup.*`, `m-webchat` `chat.*`). Web-Chat = Eingangskanal **+** Support. Offene Wizard-Folge-PRs: echtes Lexware/Drive/Dropbox-OAuth, Live-Test-Beleg (GF-entschieden ausgelassen). |
+| **Discord-Integration** | Nur Auth-OAuth (M14) gebaut; Bot/Bridge offen (Phase E). Customer-Bridge GESTRICHEN (Support nur über Web-Chat, Memory `support-via-webchat-no-discord-bridge`). |
+| **Fundament (Querschnitt)** | ✅ Alle gebaut + genutzt: **Mail-Service** (`core/mail`, T057), **PDF-Engine** (`core/pdf`, T086/T088), **Task-System** (`m-tasks`, T080-T082). |
 | **CI/CD** | Aktiv (`.github/workflows/ci-backend.yml`). ⚠️ DB-Tests **skippen still** ohne `PP_E2E=1` → „grün" verbirgt toten Code |
 | **Pilot-Wirt** | Lexware-Office-Steuerberaterin, SumUp Lite Kasse |
 
@@ -128,15 +129,16 @@ Der frühere „tote Hülle"-Code wurde im Pilot-Pfad (T047/T051) **größtentei
   → Lexware-Export (M05, POST /api/v1/exports/lexware/batch → Lexware Office)      ✅ LIVE
 ```
 
-**Der Ziel-Flow „Testkunde spielt alles selbst durch" — was fehlt (kritischer Pfad):**
+**Der Ziel-Flow „Testkunde spielt alles selbst durch" — Stand 2026-06-30 (weitgehend gebaut):**
 
 ```
-Onboarding (Wizard, setup.prozesspilot.net)   → NOCH ZU BAUEN   (Phase B)
-  → Eingangskanal: Web-Chat-Widget            → NOCH ZU BAUEN   (Kanal + Support, Phase C)
-  → [ LIVE-Mitte: OCR → Kategorisieren → Export ]                ✅
-  → Support-Chat (dasselbe Web-Chat-Widget)   → NOCH ZU BAUEN   (Phase C)
-  → Staff-Betreuung (Mitarbeiter-Webapp + Task-System)          → NOCH ZU BAUEN (Phase A3/C)
+Onboarding (Wizard, setup.prozesspilot.net)   → ✅ GEBAUT (M16)
+  → Eingangskanal: Web-Chat-Widget            → ✅ GEBAUT (m-webchat, Beleg-Upload)
+  → [ LIVE-Mitte: OCR → Kategorisieren → Export ]                ✅ (+ Live-Status-SSE T074)
+  → Support-Chat (dasselbe Web-Chat-Widget)   → ✅ GEBAUT
+  → Staff-Betreuung (Mitarbeiter-Webapp + Task-System)          → ✅ GEBAUT (Webapp-Reboot + m-tasks)
 ```
+Offen für den vollständigen Selbst-Durchlauf: echtes Lexware/Drive/Dropbox-OAuth im Wizard + die externen Prod-Credentials (Vision/Claude/SMTP/Lexware/MinIO/Discord — alle in `tasks/MANUELLE_AUFGABEN.md`, gated). Der Code-Pfad steht.
 
 - **Eingangskanal-Entscheidung:** Web-Chat-Widget ist Eingang **und** Support in einem (Wirt schickt Belege übers Widget, bekommt dort auch Hilfe). E-Mail/WhatsApp = spätere Kanal-Breite (Phase D).
 - **Fundament zuerst (Phase A):** generischer Mail-Service · PDF-Engine · Webapp-Reboot (Legacy-Kunden-App → internes Staff-Tool). Diese drei entriegeln Wizard/Web-Chat/Reporting.

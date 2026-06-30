@@ -348,7 +348,10 @@ export default function BelegeDetailPage() {
       if (isDirtyRef.current) {
         setBeleg((prev) => (prev ? { ...prev, status: e.status as Beleg['status'] } : prev));
       } else {
-        void refreshBeleg();
+        // Hintergrund-Refresh: Fehler schlucken (kein await-Kontext, kein
+        // Datenverlust). Der nächste Statuswechsel bzw. ein manuelles Neuladen
+        // korrigiert eine vorübergehend fehlgeschlagene Aktualisierung.
+        void refreshBeleg().catch(() => undefined);
       }
     },
     // refreshBeleg bewusst nicht in den Deps (würde pro Render neu erzeugt → Resubscribe).

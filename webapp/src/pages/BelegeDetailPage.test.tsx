@@ -845,7 +845,7 @@ describe('BelegeDetailPage', () => {
 
   // ── T074 — Live-Status via SSE ─────────────────────────────────────────────
 
-  it('T074: lädt den Beleg bei beleg.status-Event neu (keine ungespeicherten Edits)', async () => {
+  it('T091: lädt den Beleg bei beleg.status-Event neu (keine ungespeicherten Edits)', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     let calls = 0;
     server.use(
@@ -876,7 +876,7 @@ describe('BelegeDetailPage', () => {
     );
   });
 
-  it('T074: bei ungespeicherten Edits nur Status-Badge, Formular bleibt erhalten', async () => {
+  it('T091: bei ungespeicherten Edits nur Status-Badge, Formular bleibt erhalten', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     let calls = 0;
     server.use(
@@ -917,7 +917,7 @@ describe('BelegeDetailPage', () => {
     );
   });
 
-  it('T074: ignoriert beleg.status-Events für einen anderen Beleg', async () => {
+  it('T091: ignoriert beleg.status-Events für einen anderen Beleg', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     mockGet(makeBeleg({ status: 'extracting' }));
 

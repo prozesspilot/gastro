@@ -1,8 +1,11 @@
 /**
- * D4 — Unit-Tests für Zod-Schemas
+ * D4 — Unit-Tests für die Zod-Kern-Schemas (`core/schemas/common`).
  *
- * Prüft gültige und ungültige Eingaben für alle Kern-Schemas.
- * Kein laufender Server oder Infra-Service notwendig.
+ * Prüft gültige und ungültige Eingaben. Kein laufender Server/Infra nötig.
+ *
+ * Hinweis (2026-06-30): Die Legacy-`customer`-Welt-Schemas (customer/document/
+ * routing-job/tenant/profile) wurden entfernt — nach dem belege-Reboot in Live-`src`
+ * ungenutzt. Die zugehörigen Tests entfielen mit.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -11,19 +14,10 @@ import {
   apiOk,
   apiOkPaged,
   buildPaginationMeta,
-  createCustomerSchema,
-  createDocumentSchema,
-  createRoutingJobSchema,
-  createTenantSchema,
-  listCustomersQuerySchema,
   paginationQuerySchema,
   slugSchema,
-  updateCustomerSchema,
-  updateTenantSchema,
   uuidSchema,
 } from '../../src/core/schemas';
-
-// ── common ─────────────────────────────────────────────────────────────────
 
 describe('uuidSchema', () => {
   it('akzeptiert eine gültige UUID', () => {
@@ -94,135 +88,5 @@ describe('API-Response-Wrapper', () => {
     const res = apiError('NOT_FOUND', 'Nicht gefunden');
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe('NOT_FOUND');
-  });
-});
-
-// ── tenant ─────────────────────────────────────────────────────────────────
-
-describe('createTenantSchema', () => {
-  it('akzeptiert gültige Eingaben', () => {
-    const result = createTenantSchema.safeParse({
-      slug: 'mustermann-gmbh',
-      name: 'Mustermann GmbH',
-    });
-    expect(result.success).toBe(true);
-  });
-  it('lehnt fehlenden Slug ab', () => {
-    expect(createTenantSchema.safeParse({ name: 'Test' }).success).toBe(false);
-  });
-  it('lehnt leeren Namen ab', () => {
-    expect(createTenantSchema.safeParse({ slug: 'test', name: '' }).success).toBe(false);
-  });
-});
-
-describe('updateTenantSchema', () => {
-  it('akzeptiert Teilaktualisierungen', () => {
-    expect(updateTenantSchema.safeParse({ name: 'Neuer Name' }).success).toBe(true);
-    expect(updateTenantSchema.safeParse({ active: false }).success).toBe(true);
-  });
-  it('lehnt leeres Objekt ab', () => {
-    expect(updateTenantSchema.safeParse({}).success).toBe(false);
-  });
-});
-
-// ── customer ───────────────────────────────────────────────────────────────
-
-describe('createCustomerSchema', () => {
-  it('akzeptiert minimale Eingaben (nur name)', () => {
-    const result = createCustomerSchema.safeParse({ name: 'Max Mustermann' });
-    expect(result.success).toBe(true);
-  });
-  it('akzeptiert vollständige Eingaben', () => {
-    const result = createCustomerSchema.safeParse({
-      name: 'Max Mustermann',
-      email: 'max@example.com',
-      tax_number: 'DE123456789',
-      external_id: 'DATEV-001',
-    });
-    expect(result.success).toBe(true);
-  });
-  it('lehnt ungültige E-Mail ab', () => {
-    expect(createCustomerSchema.safeParse({ name: 'Test', email: 'keine-email' }).success).toBe(
-      false,
-    );
-  });
-  it('lehnt leeren Namen ab', () => {
-    expect(createCustomerSchema.safeParse({ name: '' }).success).toBe(false);
-  });
-  it('lehnt zu langen Namen ab', () => {
-    expect(createCustomerSchema.safeParse({ name: 'a'.repeat(201) }).success).toBe(false);
-  });
-});
-
-describe('updateCustomerSchema', () => {
-  it('akzeptiert einzelne Felder', () => {
-    expect(updateCustomerSchema.safeParse({ name: 'Neuer Name' }).success).toBe(true);
-    expect(updateCustomerSchema.safeParse({ active: false }).success).toBe(true);
-  });
-  it('lehnt leeres Objekt ab', () => {
-    expect(updateCustomerSchema.safeParse({}).success).toBe(false);
-  });
-});
-
-describe('listCustomersQuerySchema', () => {
-  it('setzt Standardwerte', () => {
-    const result = listCustomersQuerySchema.parse({});
-    expect(result.page).toBe(1);
-    expect(result.sort_by).toBe('created_at');
-    expect(result.sort_order).toBe('desc');
-  });
-  it('erlaubt Filterung nach active', () => {
-    const result = listCustomersQuerySchema.parse({ active: 'true' });
-    expect(result.active).toBe(true);
-  });
-});
-
-// ── document ───────────────────────────────────────────────────────────────
-
-describe('createDocumentSchema', () => {
-  const valid = {
-    storage_key: 'tenants/abc/docs/invoice.pdf',
-    original_name: 'Rechnung_2024.pdf',
-    content_type: 'application/pdf',
-    size_bytes: 102400,
-  };
-
-  it('akzeptiert gültige Dokument-Metadaten', () => {
-    expect(createDocumentSchema.safeParse(valid).success).toBe(true);
-  });
-  it('lehnt unerlaubte MIME-Types ab', () => {
-    expect(createDocumentSchema.safeParse({ ...valid, content_type: 'text/html' }).success).toBe(
-      false,
-    );
-  });
-  it('lehnt size_bytes = 0 ab', () => {
-    expect(createDocumentSchema.safeParse({ ...valid, size_bytes: 0 }).success).toBe(false);
-  });
-  it('lehnt Dateien > 100 MB ab', () => {
-    expect(
-      createDocumentSchema.safeParse({ ...valid, size_bytes: 101 * 1024 * 1024 }).success,
-    ).toBe(false);
-  });
-});
-
-// ── routing-job ────────────────────────────────────────────────────────────
-
-describe('createRoutingJobSchema', () => {
-  it('akzeptiert leeres Objekt (alle Felder optional)', () => {
-    const result = createRoutingJobSchema.safeParse({});
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.max_attempts).toBe(3);
-      expect(result.data.payload).toEqual({});
-    }
-  });
-  it('lehnt max_attempts > 10 ab', () => {
-    expect(createRoutingJobSchema.safeParse({ max_attempts: 11 }).success).toBe(false);
-  });
-  it('akzeptiert eine beliebige JSON-Nutzlast', () => {
-    const result = createRoutingJobSchema.safeParse({
-      payload: { workflow: 'invoice', priority: 1 },
-    });
-    expect(result.success).toBe(true);
   });
 });

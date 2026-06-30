@@ -189,7 +189,7 @@ describe('POST /api/v1/belege/upload', () => {
     // M3: Tenant-Check via pool.query → mock muss rows zurückgeben
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -238,7 +238,7 @@ describe('POST /api/v1/belege/upload', () => {
   it('B3: gibt 415 zurück bei Magic-Bytes-Mismatch (HTML mit image/jpeg Content-Type)', async () => {
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -263,7 +263,7 @@ describe('POST /api/v1/belege/upload', () => {
   it('gibt 415 zurück bei text/plain Content-Type', async () => {
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -297,7 +297,7 @@ describe('POST /api/v1/belege/upload', () => {
 
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -325,7 +325,7 @@ describe('POST /api/v1/belege/upload', () => {
   it('M6: Empty body (0 Bytes) → 400 empty_file', async () => {
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -349,7 +349,7 @@ describe('POST /api/v1/belege/upload', () => {
   it('Minor: support-Rolle wird mit 403 abgelehnt für Upload', async () => {
     const pool = {
       connect: vi.fn(),
-      query: vi.fn().mockResolvedValue({ rows: [{ '1': 1 }] }),
+      query: vi.fn().mockResolvedValue({ rows: [{ exists: true }] }),
     } as unknown as Pool;
 
     const { app } = await buildTestApp(pool);
@@ -396,7 +396,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M3/M11: Tenant-Check via pool.query (tenantExists nutzt pool.query direkt)
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] }; // Tenant existiert
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] }; // Tenant existiert
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -447,7 +447,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -504,7 +504,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -546,7 +546,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -600,7 +600,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] };
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -660,7 +660,7 @@ describe('POST /api/v1/belege/upload', () => {
       connect: vi.fn(async () => mockClient),
       // M11: tenantExists nutzt pool.query direkt
       query: vi.fn(async (sql: string) => {
-        if (/FROM tenants/i.test(sql)) return { rows: [{ '1': 1 }] };
+        if (/tenant_exists/i.test(sql)) return { rows: [{ exists: true }] };
         return { rows: [] };
       }),
     } as unknown as Pool;

@@ -35,10 +35,12 @@ Option A ist kleiner und lokal; bevorzugt.
 
 ## Akzeptanz-Kriterien
 
-- [ ] Ein als Nicht-Bewirtung gebuchter Beleg trägt KEINE `Anlass:`/`Teilnehmer:`-Memo-Zeilen
-- [ ] Bewirtungs-Belege tragen sie weiterhin
-- [ ] Test für beide Fälle
-- [ ] CI grün
+- [x] Ein als Nicht-Bewirtung gebuchter Beleg trägt KEINE `Anlass:`/`Teilnehmer:`-Memo-Zeilen
+      (Option A: category-Gate `beleg.category === 'bewirtung'` im Voucher-Builder, Zeilen 99–104)
+- [x] Bewirtungs-Belege tragen sie weiterhin (bestehender Test unverändert grün)
+- [x] Test für beide Fälle (2 neue Tests: Nicht-Bewirtung mit stale-Feldern + category=null; beide
+      reproduzieren den Bug gegen den alten Code, grün mit Fix)
+- [x] Build (tsc) + `biome check` (296 Dateien) + 109 M05-Tests grün
 
 ---
 

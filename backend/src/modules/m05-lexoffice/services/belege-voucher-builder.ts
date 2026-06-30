@@ -96,8 +96,15 @@ export function buildBelegVoucher(input: BuildVoucherInput): LexofficeVoucher {
 
   const memoParts = [`ProzessPilot ${beleg.id}`];
   if (beleg.category) memoParts.push(`Kategorie: ${beleg.category}`);
-  if (fields.bewirtung_anlass) memoParts.push(`Anlass: ${fields.bewirtung_anlass}`);
-  if (fields.bewirtung_teilnehmer) memoParts.push(`Teilnehmer: ${fields.bewirtung_teilnehmer}`);
+  // T055 — category-Gate: Anlass/Teilnehmer NUR bei echter Bewirtung ans Memo.
+  // Die Felder bleiben sonst stale im payload (Szenario: T008-Detektor setzt
+  // category='bewirtung' + Felder, danach überschreibt eine sichere KI die
+  // Kategorie auf z. B. 'wareneinkauf_food' (T053). Ohne dieses Gate trüge der
+  // gebuchte Nicht-Bewirtungs-Beleg irreführend "Anlass/Teilnehmer" im Memo).
+  if (beleg.category === 'bewirtung') {
+    if (fields.bewirtung_anlass) memoParts.push(`Anlass: ${fields.bewirtung_anlass}`);
+    if (fields.bewirtung_teilnehmer) memoParts.push(`Teilnehmer: ${fields.bewirtung_teilnehmer}`);
+  }
 
   // T009-Review-Fix #7: Lexoffice-API hat ein Memo-Length-Limit (~250 Zeichen
   // laut OpenAPI-Spec). Bei langen Teilnehmer-Listen sonst HTTP 400. Wir

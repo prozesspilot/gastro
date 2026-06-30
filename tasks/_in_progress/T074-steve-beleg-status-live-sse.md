@@ -44,12 +44,18 @@ Der **Backend-/Worker-Teil ist bereits erledigt und getestet**:
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] `/api/v1/events` ohne gültiges `pp_auth`-Cookie → 401
-- [ ] mit Cookie + `?tenant=<id>` → subscribe auf den Tenant-Kanal; Header-Fallback bleibt funktionsfähig
-- [ ] mit Cookie, aber ohne Tenant (weder Query noch Header) → 400
-- [ ] Webapp-Belege-Liste aktualisiert den Status einer Zeile live, wenn ein `beleg.status`-Event eintrifft (Test mit gemocktem `EventSource`)
-- [ ] Hook ist robust: kein `EventSource` (jsdom) → no-op; kein aktiver Tenant → no-op; fehlerhaftes Event → ignoriert
-- [ ] Backend `npm run lint` + build + Tests grün; Webapp tsc + Tests grün; CodeQL grün
+- [x] `/api/v1/events` ohne gültiges `pp_auth`-Cookie → 401 (`resolveSseSubscription`, getestet)
+- [x] mit Cookie + `?tenant=<id>` → subscribe auf den Tenant-Kanal; Header-Fallback bleibt funktionsfähig (Query hat Vorrang, getestet)
+- [x] mit Cookie, aber ohne Tenant (weder Query noch Header) → 400 (getestet)
+- [x] Webapp-Belege-Liste aktualisiert den Status einer Zeile live bei `beleg.status`-Event (Test mit gemocktem `EventSource`, prüft auch URL `?tenant=` + `withCredentials`)
+- [x] Hook robust: kein `EventSource` (jsdom) → no-op; kein aktiver Tenant → no-op; fehlerhaftes/fremdes Event → ignoriert (Test: Event für nicht angezeigten Beleg ändert nichts)
+- [x] Backend `npm run lint` (297) + build (tsc) + 952 Tests grün; Webapp tsc + 244 Tests + vite build grün
+- [ ] CodeQL grün (CI) + code-reviewer OK
+
+## Umgesetzt
+- Backend `routes/sse.ts`: reine `resolveSseSubscription(req)` (Auth via `getM14Staff`/`pp_auth`-Cookie + Tenant aus `?tenant=` mit Header-Fallback), Per-Route-Rate-Limit (CodeQL). Test unter `src/__tests__/sse-route.test.ts` (nicht `src/routes/`, da vitest-include das nicht erfasst).
+- Webapp `hooks/useBelegStatusStream.ts` (EventSource-Consumer, Muster aus web-chat-widget) + Einbindung in `BelegeListPage.tsx` (in-place Status-Patch via `useCallback`).
+- Hinweis: Webapp wird NICHT mit biome gelintet (CI = tsc + vitest + vite build) → Webapp-Dateien im Codebase-Stil (Spaces/Single-Quotes), kein biome darauf.
 
 ---
 

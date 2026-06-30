@@ -11,6 +11,7 @@ import { Readable } from 'node:stream';
 import type { S3Client } from '@aws-sdk/client-s3';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { config } from '../../../core/config';
 import type { MailTransport } from '../../../core/mail/mail.types';
 import { buildMonthlyReport } from './build-report.service';
 import { deliverReport } from './handover-mail.service';
@@ -27,6 +28,14 @@ const STAFF = '0c0c0c0c-0089-4089-8089-000000005a40';
 
 let pool: pg.Pool;
 let dbAvailable = false;
+
+// `sendMail` läuft im Dry-Run (ignoriert den injizierten Transport), solange
+// SMTP_HOST/SMTP_USER leer sind — in CI ist beides leer. Für den Real-Send-Pfad
+// (Transport wird aufgerufen, external_id wird gesetzt) erzwingen wir hier eine
+// SMTP-Config und stellen sie nach dem Lauf wieder her. Vitest isoliert pro
+// Testdatei → kein Leak in andere Suites.
+const ORIG_SMTP_HOST = config.SMTP_HOST;
+const ORIG_SMTP_USER = config.SMTP_USER;
 
 const uploaded = new Map<string, Buffer>();
 /** Fake-S3: PutObject speichert den Body, GetObject liefert ihn als Stream zurück. */
@@ -75,6 +84,10 @@ async function seedBeleg(tenant: string, gross: number, taxRate: number): Promis
 }
 
 beforeAll(async () => {
+  // Real-Send-Pfad erzwingen (sonst Dry-Run, Transport wird nie aufgerufen).
+  config.SMTP_HOST = 'smtp.test.local';
+  config.SMTP_USER = 'ci-test';
+
   pool = new pg.Pool({ connectionString: DB_URL });
   try {
     await pool.query('SELECT 1');
@@ -114,6 +127,8 @@ afterAll(async () => {
     }
   }
   await pool?.end().catch(() => {});
+  config.SMTP_HOST = ORIG_SMTP_HOST;
+  config.SMTP_USER = ORIG_SMTP_USER;
 });
 
 const ACTOR = { type: 'staff', id: STAFF } as const;

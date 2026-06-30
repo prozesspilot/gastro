@@ -37,7 +37,8 @@ die Engine für DSGVO-Auskunft/GoBD-Doku mit langen Freitext-Zellen genutzt wird
       **kein** Text verloren (verifiziert durch Auslesen aller Text-Baselines aus den Content-Streams:
       keine Body-Zeile bei `y < bottomLimit`; Test schlägt gegen den alten Code fehl)
 - [x] Regressions-Test: mehrzeilige Zelle, die noch auf eine Seite passt (`maxLines > 1`), bleibt unverändert korrekt (1 Seite)
-- [x] Bestehende PDF-Tests bleiben grün (jetzt 17 statt 14: +2 Paginierung, +1 C1-Encoding-Nit)
+- [x] **Grenzfall (Review-Fix):** Zeile knapp höher als eine Seite (`maxLines==53`, rowHeight ∈ (696.69, 717.89]) — Branch-Schwelle an Header-bereinigte Kapazität (`maxLines <= linesPerPage`) gekoppelt; reproduziert die y=68.69-Baseline gegen den 1. Fix-Stand, grün mit Korrektur
+- [x] Bestehende PDF-Tests bleiben grün (jetzt 18 statt 14: +3 Paginierung/Grenzfall, +1 C1-Encoding-Nit)
 - [x] `biome check` + build (tsc) sauber
 - [ ] code-reviewer-Agent gibt OK
 

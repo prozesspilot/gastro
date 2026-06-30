@@ -114,6 +114,44 @@ export async function renderMonthlyReportPdf(
     });
   }
 
+  // USt-Übersicht (19 % / 7 % / 0 %) — Kern der Steuerberater-Übergabe (T089,
+  // Spec §17.3). Defensiv für Alt-Snapshots (vor T089) ohne ust_split.
+  if (data.ust_split) {
+    builder.heading('USt-Übersicht', 2);
+    const rows = data.ust_split.by_rate.map((b) => [
+      `${b.rate} %`,
+      String(b.count),
+      formatEur(b.net),
+      formatEur(b.tax),
+      formatEur(b.gross),
+    ]);
+    if (data.ust_split.unassignable.count > 0) {
+      rows.push([
+        'nicht zuordenbar',
+        String(data.ust_split.unassignable.count),
+        '—',
+        '—',
+        formatEur(data.ust_split.unassignable.gross),
+      ]);
+    }
+    builder.table({
+      columns: [
+        { header: 'USt-Satz', width: 2 },
+        { header: 'Belege', width: 1, align: 'right' },
+        { header: 'Netto', width: 2, align: 'right' },
+        { header: 'USt', width: 2, align: 'right' },
+        { header: 'Brutto', width: 2, align: 'right' },
+      ],
+      rows,
+    });
+    if (data.ust_split.unassignable.count > 0) {
+      builder.spacer(4);
+      builder.paragraph(
+        `Hinweis: ${data.ust_split.unassignable.count} Beleg(e) ohne eindeutig erkennbaren USt-Satz sind als „nicht zuordenbar" ausgewiesen und nicht auf die Sätze verteilt.`,
+      );
+    }
+  }
+
   if (data.receipts_without_date > 0) {
     builder.spacer(8);
     builder.paragraph(

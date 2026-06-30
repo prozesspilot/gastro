@@ -42,7 +42,6 @@ backend/src/modules/m01-receipt-intake/
 │   ├── confidence-scorer.ts        # OCR/Field-Gewichtung
 │   ├── claude-extractor.ts         # @anthropic-ai/sdk Tool-Use Wrapper
 │   ├── storage-download.ts         # GetObjectCommand → Buffer
-│   ├── audit.service.ts            # audit_log-Wrapper (best-effort)
 │   └── event-emitter.ts            # pp.receipt.* auf pp:events:receipt
 ├── schemas/
 │   ├── extract.input.ts            # Zod, M01 §5.1

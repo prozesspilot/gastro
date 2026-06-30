@@ -48,6 +48,10 @@ export function extractOcrFields(payload: Record<string, unknown>): BelegCategor
     ?.fields ?? {}) as Record<string, unknown>;
   const taxLinesRaw = (fields.tax_lines as Array<Record<string, unknown>> | undefined) ?? [];
   const lineItemsRaw = (fields.line_items as Array<Record<string, unknown>> | undefined) ?? [];
+  // ⚠️ Datenabhängigkeit: `payload.bewirtung` wird vom OCR-Schritt geschrieben
+  // (m01-receipt-intake/services/ocr.service.ts, analyzeBewirtung) und MUSS vor
+  // der Kategorisierung vorliegen. Bei einer künftigen Entkopplung (T021) die
+  // Reihenfolge OCR → bewirtung → categorize erhalten — sonst ist hier `undefined`.
   const bewirtung = payload.bewirtung as { is_bewirtung?: boolean } | undefined;
 
   return {

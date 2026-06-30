@@ -190,6 +190,15 @@ export async function processBeleg(
   // 7b. T008/M03: Bewirtungs-Detection-Hook nach OCR + Field-Extraction.
   //     Pure-Function-Call, kein I/O — Ergebnis landet in payload.bewirtung,
   //     bei is_bewirtung=true setzen wir zusaetzlich category='bewirtung'.
+  //
+  //     ⚠️ REIHENFOLGE-INVARIANTE (vor T021-Redesign beachten): Dieser Detector
+  //     MUSS VOR der Kategorisierung laufen — die Auto-Kategorisierung (T077,
+  //     direkt nach OCR im ocr-worker) liest `payload.bewirtung` (siehe
+  //     m03-categorization/services/categorize.service.ts). Die in der alten
+  //     T021-Spec vorgesehene ASYNCHRONE Event-Entkopplung würde diese Reihenfolge
+  //     brechen (categorize liefe vor der async-Detection → falsche Kategorie).
+  //     T021 daher nur als Pipeline-Umhängung (OCR → bewirtung → categorize),
+  //     nicht als unabhängiger Parallel-Consumer.
   const bewirtung = analyzeBewirtung({
     rawText: ocr.raw_text,
     supplierName: light.fields.supplier_name ?? null,

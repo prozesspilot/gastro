@@ -31,7 +31,11 @@ import { hashEmailForLog, sendMail } from '../../../core/mail/mail.service';
 import type { MailTransport } from '../../../core/mail/mail.types';
 import { downloadObject } from '../../../core/storage/storage.service';
 import { buildHandoverMail } from './handover-mail.builder';
-import { markDeliveryResult, upsertPendingDelivery } from './report-delivery.repository';
+import {
+  findDeliveryStatus,
+  markDeliveryResult,
+  upsertPendingDelivery,
+} from './report-delivery.repository';
 import { getReportById, getTenantHandoverInfo } from './report.repository';
 
 export interface DeliverReportDeps {
@@ -42,7 +46,7 @@ export interface DeliverReportDeps {
 }
 
 export type DeliverReportResult =
-  | { ok: true; deliveryId: string; dryRun: boolean; messageId?: string }
+  | { ok: true; deliveryId: string; dryRun: boolean; messageId?: string; alreadySent?: boolean }
   | { ok: false; reason: 'report_not_found' }
   | { ok: false; reason: 'no_recipient' }
   | { ok: false; reason: 'pdf_missing'; error: string }
@@ -62,7 +66,7 @@ export async function deliverReport(
   deps: DeliverReportDeps,
   tenantId: string,
   reportId: string,
-  opts: { actor: AuditActor },
+  opts: { actor: AuditActor; skipIfAlreadySent?: boolean },
 ): Promise<DeliverReportResult> {
   const { db, s3, transport } = deps;
 
@@ -71,6 +75,22 @@ export async function deliverReport(
 
   const { tenantName, advisorEmail } = await getTenantHandoverInfo(db, tenantId);
   if (!advisorEmail) return { ok: false, reason: 'no_recipient' };
+
+  const recipientHash = recipientHashFull(advisorEmail);
+  const recipientHashShort = hashEmailForLog(advisorEmail);
+
+  // Re-Run-Schutz (T090): wurde dieser Report an diesen Empfänger bereits
+  // erfolgreich versendet, NICHT erneut senden (verhindert Doppel-Mail bei
+  // systemd-Cron-Retry). Vor dem teuren PDF-Download geprüft. Die Einzeltenant-
+  // Route ruft OHNE diese Option (bleibt bewusst at-least-once).
+  if (opts.skipIfAlreadySent) {
+    const existing = await withTenant(db, tenantId, (client) =>
+      findDeliveryStatus(client, { reportId, channel: 'email', recipientHash }),
+    );
+    if (existing && existing.status === 'sent') {
+      return { ok: true, deliveryId: existing.id, dryRun: false, alreadySent: true };
+    }
+  }
 
   // PDF-Anhang aus MinIO ziehen. Fehlt das Objekt (Report-Row ohne Datei) →
   // pdf_missing, kein Versand.
@@ -86,8 +106,6 @@ export async function deliverReport(
   }
 
   const mail = buildHandoverMail({ tenantName, totals: report.totals });
-  const recipientHash = recipientHashFull(advisorEmail);
-  const recipientHashShort = hashEmailForLog(advisorEmail);
 
   // Tx 1: Delivery-Row auf 'pending' (idempotent).
   const deliveryId = await withTenant(db, tenantId, (client) =>

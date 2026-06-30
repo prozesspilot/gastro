@@ -294,6 +294,43 @@
 - **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/sumup-daily.js` → Exit-Code 0 + Logs zeigen Anzahl gepullter Transaktionen
 - **Monitoring:** Bei Fehler verschickt der Service einen Discord-Alert via `DISCORD_OPS_WEBHOOK_URL` (siehe T017). Optional: `systemctl status gastro-sumup-sync` zeigt Last-Run-Result.
 
+### ⏳ Monats-Übergabe-Cron einrichten (T090)
+- **Priorität:** P2 (manueller Versand via `POST /reports/:id/deliver` möglich; Cron automatisiert die monatliche Steuerberater-Übergabe für alle Tenants)
+- **Dependencies:** T087/T089 deployed · pro Mandant `advisor_email` gesetzt (sonst Skip) · SMTP konfiguriert (sonst Dry-Run)
+- **Was:** Cron am **1. jedes Monats 06:00**, der `node dist/cron/monthly-report.js` ausführt — baut Vormonats-Report + versendet Steuerberater-Mail für alle aktiven Tenants.
+- **Setup (IONOS-systemd-Timer):**
+  ```bash
+  ssh root@87.106.8.111
+  cat > /etc/systemd/system/gastro-monthly-report.service <<'EOF'
+  [Unit]
+  Description=Gastro M08 Monats-Übergabe (Report + Steuerberater-Mail)
+  After=docker.service
+
+  [Service]
+  Type=oneshot
+  WorkingDirectory=/opt/gastro
+  ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml exec -T backend node dist/cron/monthly-report.js
+  EOF
+
+  cat > /etc/systemd/system/gastro-monthly-report.timer <<'EOF'
+  [Unit]
+  Description=Monatliche Steuerberater-Übergabe, 1. um 06:00
+
+  [Timer]
+  OnCalendar=*-*-01 06:00:00
+  Persistent=true
+
+  [Install]
+  WantedBy=timers.target
+  EOF
+
+  systemctl daemon-reload
+  systemctl enable --now gastro-monthly-report.timer
+  systemctl list-timers gastro-monthly-report   # zeigt Next-Run
+  ```
+- **Smoke-Test:** `docker compose -f docker-compose.prod.yml exec backend node dist/cron/monthly-report.js` → Exit 0 + Logs zeigen Summary `{ built, delivered, skipped_empty, skipped_no_recipient, failed }`.
+- **Hinweis:** Re-Run ist sicher (Re-Run-Schutz `skipIfAlreadySent` — kein Doppel-Versand). Leere Monate (0 Belege) werden nicht versendet.
+
 ### ⏳ Migration 110 in Production laufen lassen (T005)
 - **Priorität:** P0 (Sync schlaegt sonst beim ersten INSERT fehl)
 - **Was:** Macht `kasse_transactions.integration_id` nullable (T005 nutzt pos_credentials, nicht kasse_integrations)

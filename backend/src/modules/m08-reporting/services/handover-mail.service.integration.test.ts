@@ -197,6 +197,37 @@ describe('T089 — deliverReport (Integration)', () => {
     expect(count.rows[0].n).toBe(1);
   });
 
+  it('skipIfAlreadySent: zweiter Versand sendet NICHT erneut (Re-Run-Schutz, T090)', async () => {
+    if (!dbAvailable) return;
+    const report = await buildMonthlyReport({ db: pool, s3: fakeS3 }, T, 2026, 5, { actor: ACTOR });
+    // Clean Slate für genau diesen Report, damit der erste Versand wirklich sendet.
+    await pool.query('DELETE FROM report_deliveries WHERE report_id = $1', [report.reportId]);
+
+    const before = sentMails.length;
+    const first = await deliverReport(
+      { db: pool, s3: fakeS3, transport: fakeTransport },
+      T,
+      report.reportId,
+      { actor: ACTOR, skipIfAlreadySent: true },
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.alreadySent ?? false).toBe(false);
+    expect(sentMails.length).toBe(before + 1); // hat gesendet
+
+    const second = await deliverReport(
+      { db: pool, s3: fakeS3, transport: fakeTransport },
+      T,
+      report.reportId,
+      { actor: ACTOR, skipIfAlreadySent: true },
+    );
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadySent).toBe(true);
+    expect(second.deliveryId).toBe(first.deliveryId);
+    expect(sentMails.length).toBe(before + 1); // KEIN zweiter Versand
+  });
+
   it('liefert no_recipient ohne hinterlegte Steuerberater-Mail', async () => {
     if (!dbAvailable) return;
     await seedBeleg(T_NO_ADVISOR, 119.0, 19);

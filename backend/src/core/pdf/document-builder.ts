@@ -349,41 +349,99 @@ export class PdfDocumentBuilder {
 
     drawHeaderRow();
 
+    const headerHeight = lineHeight + 2 * CELL_PAD;
+    // Nutzhöhe einer frischen Seite (oberer Rand bis Fußzeilen-Grenze).
+    const pageContentHeight = A4[1] - MARGIN - this.bottomLimit;
+    // Max. Zeilen, die NACH einer Kopfzeilen-Wiederholung auf eine frische Seite
+    // passen. Jede Seite mit Tabelleninhalt trägt eine Kopfzeile, daher ist DAS die
+    // maßgebliche Kapazität — nicht `pageContentHeight` (das wäre ohne Header).
+    const linesPerPage = Math.max(
+      1,
+      Math.floor((pageContentHeight - headerHeight - 2 * CELL_PAD) / lineHeight),
+    );
+
+    /**
+     * Zeichnet einen Zeilen-Block: die Zellen-Lines `[startLine, startLine+count)`
+     * jeder Spalte, top-aligned, mit Zebra-Hintergrund. Setzt `this.y` an den
+     * Block-Boden. Ein voller Block (startLine=0, count=maxLines) reproduziert
+     * exakt das alte Einseiten-Verhalten.
+     */
+    const drawRowBlock = (
+      wrapped: string[][],
+      startLine: number,
+      count: number,
+      rowIdx: number,
+    ): void => {
+      const blockHeight = count * lineHeight + 2 * CELL_PAD;
+      this.y -= blockHeight;
+      if (zebra && rowIdx % 2 === 1) {
+        this.page.drawRectangle({
+          x: MARGIN,
+          y: this.y,
+          width: this.contentWidth,
+          height: blockHeight,
+          color: ZEBRA_BG,
+        });
+      }
+      columns.forEach((c, idx) => {
+        const lines = wrapped[idx];
+        for (let li = startLine; li < startLine + count; li++) {
+          const line = lines[li];
+          if (line === undefined) continue; // Spalte hat weniger Zeilen als der Block.
+          const local = li - startLine;
+          const lineY =
+            this.y +
+            blockHeight -
+            CELL_PAD -
+            (local + 1) * lineHeight +
+            (lineHeight - FONT_BODY) / 2;
+          const tx =
+            c.align === 'right'
+              ? colX[idx] + colWidths[idx] - CELL_PAD - this.font.widthOfTextAtSize(line, FONT_BODY)
+              : colX[idx] + CELL_PAD;
+          this.drawText(line, tx, lineY, FONT_BODY, this.font);
+        }
+      });
+    };
+
     rows.forEach((row, rowIdx) => {
       // Zeilenhöhe = höchste umgebrochene Zelle.
       const wrapped = columns.map((c, idx) =>
         this.wrap(row[idx] ?? '', this.font, FONT_BODY, colWidths[idx] - 2 * CELL_PAD),
       );
       const maxLines = Math.max(1, ...wrapped.map((w) => w.length));
-      const rowHeight = maxLines * lineHeight + 2 * CELL_PAD;
 
-      if (this.y - rowHeight < this.bottomLimit) {
-        this.addPage();
-        drawHeaderRow();
+      // Normalfall: die Zeile passt — auch nach einer Kopfzeilen-Wiederholung —
+      // komplett auf eine Seite. Bei Platzmangel wandert sie als Ganzes auf die
+      // nächste Seite (unveränderte Semantik: normale Zeilen werden nie zerteilt).
+      if (maxLines <= linesPerPage) {
+        const rowHeight = maxLines * lineHeight + 2 * CELL_PAD;
+        if (this.y - rowHeight < this.bottomLimit) {
+          this.addPage();
+          drawHeaderRow();
+        }
+        drawRowBlock(wrapped, 0, maxLines, rowIdx);
+        return;
       }
 
-      this.y -= rowHeight;
-      if (zebra && rowIdx % 2 === 1) {
-        this.page.drawRectangle({
-          x: MARGIN,
-          y: this.y,
-          width: this.contentWidth,
-          height: rowHeight,
-          color: ZEBRA_BG,
-        });
+      // Überhohe Zeile (höher als eine Seite): blockweise verteilen, damit keine
+      // Line bei y < bottomLimit landet (sonst stiller Inhaltsverlust unter der
+      // Fußzeile / im Negativen). Der erste Block nutzt den Rest der aktuellen
+      // Seite (deren Kopfzeile steht bereits), danach je eine frische Seite mit
+      // wiederholter Kopfzeile. `count` wird so gewählt, dass der Block-Boden nie
+      // unter `bottomLimit` rutscht.
+      let start = 0;
+      while (start < maxLines) {
+        let avail = Math.floor((this.y - this.bottomLimit - 2 * CELL_PAD) / lineHeight);
+        if (avail < 1) {
+          this.addPage();
+          drawHeaderRow();
+          avail = linesPerPage;
+        }
+        const count = Math.min(avail, maxLines - start);
+        drawRowBlock(wrapped, start, count, rowIdx);
+        start += count;
       }
-      columns.forEach((c, idx) => {
-        const lines = wrapped[idx];
-        lines.forEach((line, li) => {
-          const lineY =
-            this.y + rowHeight - CELL_PAD - (li + 1) * lineHeight + (lineHeight - FONT_BODY) / 2;
-          const tx =
-            c.align === 'right'
-              ? colX[idx] + colWidths[idx] - CELL_PAD - this.font.widthOfTextAtSize(line, FONT_BODY)
-              : colX[idx] + CELL_PAD;
-          this.drawText(line, tx, lineY, FONT_BODY, this.font);
-        });
-      });
     });
   }
 

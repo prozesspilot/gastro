@@ -53,6 +53,8 @@ const pdf = await new PdfDocumentBuilder({ title: 'Monatsbericht Mai 2026' })
 - `keyValueRows([{ label, value }])` — Label/Wert-Block (z. B. Kennzahlen).
 - `kpiCards([{ label, value }])` — gerahmte Karten, max. 3 pro Reihe.
 - `table({ columns, rows, zebra? })` — Tabelle mit Auto-Seitenumbruch (Kopfzeile wiederholt sich).
+  Eine einzelne Zeile, die höher als eine Seite ist (z. B. eine Zelle mit sehr langem Freitext),
+  wird blockweise über mehrere Seiten verteilt — kein Inhaltsverlust unter der Fußzeile.
 - `spacer(height)` — vertikaler Abstand.
 - `build()` — rendert + setzt Fußzeile (`Seite X / Y` + Erstellungsdatum) auf jeder Seite.
 

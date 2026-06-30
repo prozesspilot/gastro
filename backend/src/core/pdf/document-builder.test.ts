@@ -6,12 +6,50 @@
  * (gültiger Header, Seitenzahl, Metadata) plus die Robustheits-Garantien
  * (Auto-Seitenumbruch, WinAnsi-Schutz).
  */
+import { inflateSync } from 'node:zlib';
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { PdfDocumentBuilder } from './document-builder';
 import { toWinAnsiSafe } from './text-encoding';
 
 const FIXED_NOW = new Date('2026-05-01T08:00:00Z');
+
+// Layout-Konstanten gespiegelt aus document-builder.ts (dort privat). bottomLimit
+// = MARGIN(50) + 24; die Fußzeile sitzt absichtlich darunter bei MARGIN - 6 = 44.
+const BOTTOM_LIMIT = 50 + 24;
+const FOOTER_Y = 50 - 6;
+
+/**
+ * Liest die y-Baselines aller gezeichneten Texte aus den (Flate-komprimierten)
+ * Content-Streams des PDFs. pdf-lib positioniert per `… Tm`. So lässt sich
+ * direkt prüfen, dass keine Body-Zeile unter die Fußzeilen-Grenze rutscht.
+ */
+function extractTextBaselines(bytes: Buffer): number[] {
+  const buf = Buffer.from(bytes);
+  const ys: number[] = [];
+  let i = 0;
+  while (true) {
+    const s = buf.indexOf('stream', i);
+    if (s < 0) break;
+    let start = s + 'stream'.length;
+    if (buf[start] === 0x0d) start++;
+    if (buf[start] === 0x0a) start++;
+    const e = buf.indexOf('endstream', start);
+    if (e < 0) break;
+    const raw = buf.subarray(start, e);
+    let txt: string;
+    try {
+      txt = inflateSync(raw).toString('latin1');
+    } catch {
+      txt = raw.toString('latin1'); // unkomprimierter Stream (z. B. Font)
+    }
+    for (const m of txt.matchAll(/1 0 0 1 -?[\d.]+ (-?[\d.]+) Tm/g)) {
+      ys.push(Number.parseFloat(m[1]));
+    }
+    i = e + 'endstream'.length;
+  }
+  return ys;
+}
 
 // updateMetadata: false → pdf-lib überschreibt beim Laden NICHT unsere gesetzten
 // Metadaten (Producer steht im XMP-Stream; ein Default-Load würde ihn auf den
@@ -134,6 +172,73 @@ describe('PdfDocumentBuilder.build', () => {
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
   });
 
+  it('paginiert eine überhohe Tabellenzeile über mehrere Seiten ohne Inhaltsverlust (T088)', async () => {
+    // Eine einzelne Zelle, deren umgebrochener Text die Seiten-Nutzhöhe (~717 pt)
+    // weit übersteigt. Der alte Row-Break fügte nur EINE Seite an und zeichnete die
+    // unteren Lines bei y < bottomLimit (unsichtbar) → stiller Inhaltsverlust.
+    const hugeCell = Array.from({ length: 4000 }, (_, i) => `Wort${i % 9}`).join(' ');
+    const bytes = await new PdfDocumentBuilder({ title: 'Überhohe Zeile', now: FIXED_NOW })
+      .table({
+        columns: [{ header: 'Freitext', width: 1 }],
+        rows: [[hugeCell]],
+      })
+      .build();
+
+    const doc = await loadBack(bytes);
+    // Der alte Code erzeugte für die Riesen-Zeile genau 2 Seiten; die Paginierung
+    // muss deutlich mehr Seiten erzeugen.
+    expect(doc.getPageCount()).toBeGreaterThan(2);
+
+    // Kern-Garantie: außer der Fußzeile (y ≈ 44) darf KEIN Text unter die
+    // Fußzeilen-Grenze gezeichnet werden (kein Negativ-/Todeszonen-y).
+    const baselines = extractTextBaselines(bytes);
+    const bodyBelowLimit = baselines.filter((y) => y < BOTTOM_LIMIT && Math.abs(y - FOOTER_Y) > 2);
+    expect(bodyBelowLimit).toEqual([]);
+  });
+
+  it('Grenzfall: Zeile knapp höher als eine Seite (53 Lines) paginiert ohne Überlauf (T088)', async () => {
+    // Genau der schmale Höhenbereich zwischen den anderen beiden Tests: die Zeile
+    // passt rechnerisch in pageContentHeight (~717 pt), aber NICHT mehr, sobald die
+    // wiederholte Kopfzeile (21,2 pt) abgezogen ist. Der erste Fix-Stand zog die
+    // Kopfzeile in der Branch-Schwelle nicht ab → eine Baseline landete bei y ≈ 68.
+    // \n erzwingt exakt 53 (nicht-umgebrochene) Lines.
+    const exact53 = Array.from({ length: 53 }, (_, i) => `Zeile ${i}`).join('\n');
+    const bytes = await new PdfDocumentBuilder({ title: 'Grenzfall 53', now: FIXED_NOW })
+      .table({
+        columns: [{ header: 'Freitext', width: 1 }],
+        rows: [[exact53]],
+      })
+      .build();
+
+    const doc = await loadBack(bytes);
+    expect(doc.getPageCount()).toBeGreaterThan(1);
+
+    const baselines = extractTextBaselines(bytes);
+    const bodyBelowLimit = baselines.filter((y) => y < BOTTOM_LIMIT && Math.abs(y - FOOTER_Y) > 2);
+    expect(bodyBelowLimit).toEqual([]);
+  });
+
+  it('mehrzeilige Zelle, die auf eine Seite passt, bleibt einseitig und korrekt (Regression)', async () => {
+    // ~6 umgebrochene Zeilen — maxLines > 1, aber rowHeight < Seiten-Nutzhöhe.
+    const multiLine = Array.from({ length: 90 }, (_, i) => `Wort${i % 9}`).join(' ');
+    const bytes = await new PdfDocumentBuilder({ title: 'Mehrzeilig', now: FIXED_NOW })
+      .table({
+        columns: [
+          { header: 'Text', width: 4 },
+          { header: 'Wert', width: 1, align: 'right' },
+        ],
+        rows: [[multiLine, '12,00 €']],
+      })
+      .build();
+
+    const doc = await loadBack(bytes);
+    expect(doc.getPageCount()).toBe(1);
+
+    const baselines = extractTextBaselines(bytes);
+    const bodyBelowLimit = baselines.filter((y) => y < BOTTOM_LIMIT && Math.abs(y - FOOTER_Y) > 2);
+    expect(bodyBelowLimit).toEqual([]);
+  });
+
   it('fehlende Zellen (zu kurze Row) werden als leer behandelt, kein Crash', async () => {
     const build = new PdfDocumentBuilder({ title: 'Sparse', now: FIXED_NOW })
       .table({
@@ -165,5 +270,11 @@ describe('toWinAnsiSafe', () => {
 
   it('behält gängige CP-1252-Sonderzeichen (Bullet, En/Em-Dash, Smart-Quotes)', () => {
     expect(toWinAnsiSafe('• – — „hallo“')).toBe('• – — „hallo“');
+  });
+
+  it('ersetzt rohe C1-Steuerzeichen (0x80–0x9F) durch ? (in WinAnsi unbelegt)', () => {
+    // Die CP-1252-Sonderzeichen tragen als Unicode hohe Codepoints (€ = 0x20AC);
+    // ein roher C1-Codepoint wie 0x85/0x9F ist selbst nicht WinAnsi-kodierbar.
+    expect(toWinAnsiSafe('A\x85B\x9FC')).toBe('A?B?C');
   });
 });

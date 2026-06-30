@@ -126,6 +126,50 @@ describe('buildBelegVoucher — Bewirtung', () => {
     expect(v.memo).toContain('Kategorie: bewirtung');
   });
 
+  it('T055: stale Bewirtungs-Felder werden bei Nicht-Bewirtungs-Kategorie NICHT ins Memo gehaengt', () => {
+    // Szenario: T008-Detektor hatte category='bewirtung' + Felder gesetzt, dann
+    // hat eine sichere KI auf 'wareneinkauf_food' ueberschrieben (T053). Die
+    // bewirtung_*-Felder bleiben stale im payload — duerfen aber NICHT mehr ins
+    // Lexoffice-Memo, sonst traegt der Nicht-Bewirtungs-Beleg irrefuehrend
+    // "Anlass/Teilnehmer".
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({
+        category: 'wareneinkauf_food',
+        payload: {
+          extraction: {
+            fields: {
+              bewirtung_anlass: 'Geschaeftsessen Almaz',
+              bewirtung_teilnehmer: 'Max Mueller, Anna Schmidt',
+            },
+          },
+        },
+      }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.memo).not.toContain('Anlass:');
+    expect(v.memo).not.toContain('Teilnehmer:');
+    expect(v.memo).toContain('Kategorie: wareneinkauf_food');
+  });
+
+  it('T055: stale Bewirtungs-Felder ohne Kategorie (null) landen NICHT im Memo', () => {
+    const v = buildBelegVoucher({
+      beleg: makeBeleg({
+        category: null,
+        payload: {
+          extraction: {
+            fields: {
+              bewirtung_anlass: 'Anlass X',
+              bewirtung_teilnehmer: 'Teilnehmer Y',
+            },
+          },
+        },
+      }),
+      lexofficeCategoryId: FAKE_CATEGORY_ID,
+    });
+    expect(v.memo).not.toContain('Anlass:');
+    expect(v.memo).not.toContain('Teilnehmer:');
+  });
+
   it('Memo enthaelt Beleg-ID immer als Praefix', () => {
     const v = buildBelegVoucher({
       beleg: makeBeleg(),

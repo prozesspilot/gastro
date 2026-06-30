@@ -11,6 +11,14 @@
  *
  * Reiner Service ohne HTTP — der Handler mappt das Ergebnis auf den Status-Code.
  * `sendMail` wirft nie (Best-Effort); Dry-Run (kein SMTP) gilt als erfolgreich.
+ *
+ * Zustell-Semantik = **at-least-once**, NICHT exactly-once: SMTP läuft bewusst
+ * außerhalb der DB-Tx (Tx1 pending → senden → Tx2 sent/failed+Audit). Crasht der
+ * Prozess ZWISCHEN erfolgreichem Send und Tx2, bleibt der Row auf `pending`; ein
+ * erneuter Aufruf sendet erneut → der Steuerberater kann die Übergabe-Mail doppelt
+ * erhalten. Die Idempotenz garantiert genau EINEN Delivery-Row, nicht genau EINEN
+ * Versand. Akzeptiert (geringer Schaden); Härtung (z. B. `sending`-Zwischenstatus
+ * + Provider-Idempotency-Key) wäre eine spätere Verfeinerung.
  */
 
 import { createHash } from 'node:crypto';

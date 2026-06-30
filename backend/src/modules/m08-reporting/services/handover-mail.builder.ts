@@ -11,6 +11,7 @@
 
 import type { MonthlyAggregates } from './aggregator';
 import { formatEur, periodLabel } from './report-pdf';
+import { emptyUstSplit } from './ust-split';
 
 export interface HandoverMailInput {
   tenantName: string;
@@ -38,13 +39,17 @@ export function buildHandoverMail(input: HandoverMailInput): HandoverMail {
 
   const subject = `ProzessPilot — Buchhaltungs-Übergabe ${period}, Mandant ${tenantName}`;
 
-  const ustLines = totals.ust_split.by_rate
+  // Defensiv: Alt-Reports (vor T089 gebaut) haben kein `ust_split` im Snapshot —
+  // dann leerer Split statt Crash (analog report-pdf.ts).
+  const ust = totals.ust_split ?? emptyUstSplit();
+
+  const ustLines = ust.by_rate
     .filter((b) => b.count > 0)
     .map((b) => ustLine(b.rate, b.count, b.net, b.tax));
-  if (totals.ust_split.unassignable.count > 0) {
+  if (ust.unassignable.count > 0) {
     ustLines.push(
-      `  - nicht zuordenbar: ${totals.ust_split.unassignable.count} Beleg(e) · Brutto ${formatEur(
-        totals.ust_split.unassignable.gross,
+      `  - nicht zuordenbar: ${ust.unassignable.count} Beleg(e) · Brutto ${formatEur(
+        ust.unassignable.gross,
       )}`,
     );
   }
@@ -75,7 +80,7 @@ export function buildHandoverMail(input: HandoverMailInput): HandoverMail {
     'support@prozesspilot.net',
   ].join('\n');
 
-  const ustHtml = totals.ust_split.by_rate
+  const ustHtml = ust.by_rate
     .filter((b) => b.count > 0)
     .map(
       (b) =>
@@ -83,10 +88,10 @@ export function buildHandoverMail(input: HandoverMailInput): HandoverMail {
           b.tax,
         )}</li>`,
     );
-  if (totals.ust_split.unassignable.count > 0) {
+  if (ust.unassignable.count > 0) {
     ustHtml.push(
-      `<li>nicht zuordenbar: ${totals.ust_split.unassignable.count} Beleg(e) · Brutto ${formatEur(
-        totals.ust_split.unassignable.gross,
+      `<li>nicht zuordenbar: ${ust.unassignable.count} Beleg(e) · Brutto ${formatEur(
+        ust.unassignable.gross,
       )}</li>`,
     );
   }
@@ -118,5 +123,6 @@ function escapeHtml(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

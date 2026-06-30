@@ -64,11 +64,14 @@ export async function getReportById(
   reportId: string,
 ): Promise<ReportRow | null> {
   return withTenant(db, tenantId, async (client) => {
+    // `tenant_id = $2` ist Defense-in-depth ZUSÄTZLICH zur RLS (wie in aggregator.ts):
+    // der Report-Zugriff hängt nicht allein vom Session-GUC ab und ist auch unter
+    // einer RLS-bypassenden Rolle (Superuser im Test) tenant-isoliert.
     const res = await client.query(
       `SELECT id, tenant_id, period_year, period_month, totals, pdf_object_key, created_at
          FROM reports
-        WHERE id = $1`,
-      [reportId],
+        WHERE id = $1 AND tenant_id = $2`,
+      [reportId, tenantId],
     );
     return (res.rows[0] as ReportRow | undefined) ?? null;
   });

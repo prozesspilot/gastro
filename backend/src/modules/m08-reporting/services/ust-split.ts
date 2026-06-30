@@ -50,6 +50,19 @@ export interface UstSplit {
   unassignable: { gross: number; count: number };
 }
 
+/**
+ * Leerer USt-Split (alle Sätze 0, nichts zuordenbar). Default für Konsumenten,
+ * die einen Report-Snapshot lesen, der VOR T089 gebaut wurde und daher kein
+ * `ust_split` im gespeicherten `totals`-JSONB hat (T087/PR #206 ist bereits auf
+ * `main`). Verhindert einen 500 beim Versand solcher Alt-Reports.
+ */
+export function emptyUstSplit(): UstSplit {
+  return {
+    by_rate: STANDARD_VAT_RATES.map((rate) => ({ rate, gross: 0, net: 0, tax: 0, count: 0 })),
+    unassignable: { gross: 0, count: 0 },
+  };
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

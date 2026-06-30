@@ -73,4 +73,18 @@ describe('buildHandoverMail', () => {
     expect(mail.text.length).toBeGreaterThan(0);
     expect(mail.html).toContain('<p>');
   });
+
+  it('crasht NICHT bei einem Alt-Snapshot ohne ust_split (vor T089 gebaut)', () => {
+    // Reports aus T087/PR #206 (bereits auf main) haben kein ust_split im
+    // gespeicherten totals-JSONB. deliverReport übergibt genau dieses totals.
+    const legacy = totals();
+    // Simuliert den persistierten Alt-Snapshot: Feld fehlt zur Laufzeit.
+    (legacy as { ust_split?: unknown }).ust_split = undefined;
+
+    const mail = buildHandoverMail({ tenantName: 'Alt-GmbH', totals: legacy });
+    expect(mail.subject).toContain('Alt-GmbH');
+    // Leerer Split → keine Satz-Zeilen → Fallback-Hinweis.
+    expect(mail.text).toContain('keine verbuchten Belege in diesem Zeitraum');
+    expect(mail.html).toContain('keine verbuchten Belege in diesem Zeitraum');
+  });
 });

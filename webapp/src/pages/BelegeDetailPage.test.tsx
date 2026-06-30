@@ -3,7 +3,7 @@
  * Spec: T014 — Beleg laden, Status-Badge, Image/PDF-Preview, Back-Button
  */
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
@@ -14,6 +14,37 @@ import type { Beleg } from '../api/belege';
 
 // Aktiver Mandant vorausgesetzt (sonst greift der NoTenantHint-Guard).
 vi.mock('../api', () => ({ getActiveTenantId: () => 'tenant-001' }));
+
+// ── Fake EventSource (jsdom hat keins → Hook wäre sonst no-op) ──────────────────
+type SseListener = (ev: MessageEvent) => void;
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  url: string;
+  withCredentials: boolean;
+  private listeners: Record<string, SseListener[]> = {};
+  constructor(url: string, init?: { withCredentials?: boolean }) {
+    this.url = url;
+    this.withCredentials = init?.withCredentials ?? false;
+    FakeEventSource.instances.push(this);
+  }
+  addEventListener(type: string, cb: SseListener): void {
+    (this.listeners[type] ??= []).push(cb);
+  }
+  removeEventListener(type: string, cb: SseListener): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== cb);
+  }
+  close(): void {}
+  emit(type: string, data: unknown): void {
+    for (const cb of this.listeners[type] ?? []) {
+      cb({ data: JSON.stringify(data) } as MessageEvent);
+    }
+  }
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  FakeEventSource.instances = [];
+});
 
 // useAuth liefert die Rolle für das Button-Gating (categorize/export). `mockAuthRole`
 // ist mutable (über Re-Renders stabil; mockReturnValueOnce würde beim 2. Render auf den
@@ -810,5 +841,97 @@ describe('BelegeDetailPage', () => {
     renderDetailPage();
     await waitFor(() => expect(screen.getByTestId('btn-save')).toBeInTheDocument());
     expect(screen.queryByTestId('btn-confirm-review')).not.toBeInTheDocument();
+  });
+
+  // ── T074 — Live-Status via SSE ─────────────────────────────────────────────
+
+  it('T091: lädt den Beleg bei beleg.status-Event neu (keine ungespeicherten Edits)', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    let calls = 0;
+    server.use(
+      http.get(`${BASE}/belege/:id`, () => {
+        calls++;
+        return HttpResponse.json({
+          beleg: makeBeleg({ status: calls === 1 ? 'extracting' : 'categorized' }),
+          download_url: null,
+          download_expires_at: null,
+        });
+      }),
+    );
+
+    renderDetailPage();
+    await waitFor(() =>
+      expect(screen.getByTestId('status-badge')).toHaveTextContent('Extrahierung läuft'),
+    );
+
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+    expect(es?.url).toBe('/api/v1/events?tenant=tenant-001');
+    await act(async () => {
+      es?.emit('beleg.status', { beleg_id: 'b-detail-001', status: 'categorized' });
+    });
+
+    // refreshBeleg() hat neu geladen → Badge zeigt den frischen Status.
+    await waitFor(() =>
+      expect(screen.getByTestId('status-badge')).toHaveTextContent('Kategorisiert'),
+    );
+  });
+
+  it('T091: bei ungespeicherten Edits nur Status-Badge, Formular bleibt erhalten', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    let calls = 0;
+    server.use(
+      http.get(`${BASE}/belege/:id`, () => {
+        calls++;
+        return HttpResponse.json({
+          beleg: makeBeleg({ status: 'extracting' }),
+          download_url: null,
+          download_expires_at: null,
+        });
+      }),
+    );
+
+    renderDetailPage();
+    await waitFor(() => expect(screen.getByTestId('field-supplier_name')).toBeInTheDocument());
+
+    // Edit machen → isDirty.
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('field-supplier_name'), {
+        target: { value: 'Geänderter Lieferant GmbH' },
+      });
+    });
+    const callsBeforeEvent = calls;
+
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+    await act(async () => {
+      es?.emit('beleg.status', { beleg_id: 'b-detail-001', status: 'categorized' });
+    });
+
+    // Badge aktualisiert …
+    await waitFor(() =>
+      expect(screen.getByTestId('status-badge')).toHaveTextContent('Kategorisiert'),
+    );
+    // … aber KEIN Reload (kein erneuter GET) und der Edit bleibt erhalten.
+    expect(calls).toBe(callsBeforeEvent);
+    expect((screen.getByTestId('field-supplier_name') as HTMLInputElement).value).toBe(
+      'Geänderter Lieferant GmbH',
+    );
+  });
+
+  it('T091: ignoriert beleg.status-Events für einen anderen Beleg', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    mockGet(makeBeleg({ status: 'extracting' }));
+
+    renderDetailPage();
+    await waitFor(() =>
+      expect(screen.getByTestId('status-badge')).toHaveTextContent('Extrahierung läuft'),
+    );
+
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+    await act(async () => {
+      es?.emit('beleg.status', { beleg_id: 'fremder-beleg', status: 'categorized' });
+    });
+
+    // Unverändert.
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('Extrahierung läuft');
   });
 });

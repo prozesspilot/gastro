@@ -50,8 +50,11 @@ function isWinAnsiEncodable(code: number): boolean {
   if (code < 0x20) return false;
   // Latin-1 (printable ASCII + Latin-1 Supplement) ist vollständig abgedeckt …
   if (code <= 0xff) {
-    // … außer dem C1-Bereich 0x80–0x9F, der in CP-1252 belegt/teilbelegt ist.
-    if (code >= 0x80 && code <= 0x9f) return WIN1252_EXTRA.has(code);
+    // … außer dem C1-Bereich 0x80–0x9F: dort liegen in CP-1252 die Sonderzeichen,
+    // aber als *Unicode*-Codepoints tragen sie hohe Werte (€ = 0x20AC, … = 0x2026)
+    // — die stehen in WIN1252_EXTRA und werden im Zweig unten getroffen. Ein roher
+    // C1-Codepoint (0x80–0x9F) selbst ist in WinAnsi unbelegt → nicht kodierbar.
+    if (code >= 0x80 && code <= 0x9f) return false;
     return true;
   }
   return WIN1252_EXTRA.has(code);

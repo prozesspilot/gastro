@@ -33,12 +33,19 @@ die Engine für DSGVO-Auskunft/GoBD-Doku mit langen Freitext-Zellen genutzt wird
 ---
 
 ## Akzeptanz-Kriterien
-- [ ] Eine Tabellenzeile mit einer Zelle aus ~1200 Wörtern erzeugt **mehrere Seiten** und es geht
-      **kein** Text verloren (keine Zeile bei `y < bottomLimit` gezeichnet)
-- [ ] Regressions-Test: mehrzeilige Zelle, die noch auf eine Seite passt (`maxLines > 1`), bleibt unverändert korrekt
-- [ ] Bestehende 14 PDF-Tests bleiben grün
-- [ ] `biome check` + typecheck + build sauber
+- [x] Eine Tabellenzeile mit einer Zelle aus ~4000 Wörtern erzeugt **mehrere Seiten** und es geht
+      **kein** Text verloren (verifiziert durch Auslesen aller Text-Baselines aus den Content-Streams:
+      keine Body-Zeile bei `y < bottomLimit`; Test schlägt gegen den alten Code fehl)
+- [x] Regressions-Test: mehrzeilige Zelle, die noch auf eine Seite passt (`maxLines > 1`), bleibt unverändert korrekt (1 Seite)
+- [x] Bestehende PDF-Tests bleiben grün (jetzt 17 statt 14: +2 Paginierung, +1 C1-Encoding-Nit)
+- [x] `biome check` + build (tsc) sauber
 - [ ] code-reviewer-Agent gibt OK
+
+### Mit-Fix (Nit aus PR #204)
+- [x] `text-encoding.ts` C1-Branch (0x80–0x9F) von totem `WIN1252_EXTRA.has(code)` auf `return false;`
+      + erklärender Kommentar (die CP-1252-Sonderzeichen tragen hohe Unicode-Codepoints, der Set
+      enthält keine 0x80–0x9F-Werte → Branch war immer `false`). Mit Test festgeschrieben.
+- [ ] KPI-/keyValue-Werte-Clipping **bewusst ausgelassen** (echte Verhaltensänderung → eigener Scope)
 
 ---
 

@@ -138,10 +138,13 @@ describe('T043 — tenant_exists() unter gastro_app (NOBYPASSRLS)', () => {
     expect(exists).toBe(false);
   });
 
-  it('Bypass leakt NICHT: nach tenant_exists() bleibt der bare query weiter RLS-blockiert', async () => {
+  it('der Aufrufer (gastro_app) bleibt nach tenant_exists() RLS-blockiert (keine Eskalation)', async () => {
     if (!dbAvailable) return;
-    // Beweist, dass set_config('app.bypass_rls','on',true) transaktions-lokal +
-    // am Funktionsende zurückgenommen ist — der Aufrufer bleibt NOBYPASSRLS.
+    // Sicherheits-Eigenschaft: Der Aufrufer kann tenants weiterhin NICHT cross-tenant
+    // lesen. (Hinweis: Das beweist NICHT allein die GUC-Transaktions-Lokalität — selbst
+    // bei einem GUC-Leak bliebe gastro_app blockiert, weil is_rls_bypassed() zuerst die
+    // Rolle prüft [002_helpers.sql] und gastro_app weder Owner noch Superuser ist. Die
+    // Lokalität garantieren set_config(..., true)=LOCAL + der explizite Reset in der Fn.)
     const rowsAfter = await asGastroApp(async (c) => {
       await c.query('SELECT tenant_exists($1::uuid)', [TENANT]);
       const r = await c.query('SELECT 1 FROM tenants WHERE id = $1 AND deleted_at IS NULL', [

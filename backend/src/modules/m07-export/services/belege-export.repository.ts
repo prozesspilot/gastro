@@ -120,6 +120,7 @@ export async function fetchBelegeForMonth(
               received_at, payload
          FROM belege
         WHERE tenant_id = $1
+          AND deleted_at IS NULL
           AND status = ANY($2)
           AND document_date >= $3::date
           AND document_date <  $4::date

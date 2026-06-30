@@ -74,6 +74,34 @@ async function seedBeleg(opts: {
   return beleg.id;
 }
 
+/** Beleg mit rohem payload (extraction.fields/categorization) + Status categorized. */
+async function seedWithPayload(opts: {
+  documentDate: string;
+  payload: Record<string, unknown>;
+  gross?: number;
+}): Promise<string> {
+  counter++;
+  const sha = counter.toString(16).padStart(64, '0');
+  const { beleg } = await insertBeleg(pool, {
+    tenantId: T,
+    sourceChannel: 'manual_upload',
+    fileObjectKey: `test/m07p-${counter}.jpg`,
+    fileMimeType: 'image/jpeg',
+    fileSizeBytes: 100,
+    fileSha256: sha,
+    uploadedByUserId: null,
+    originalFilename: 'm07p.jpg',
+  });
+  await pool.query(
+    `UPDATE belege
+        SET document_date = $2, total_gross = $3, currency = 'EUR',
+            status = 'categorized', payload = $4::jsonb
+      WHERE id = $1`,
+    [beleg.id, opts.documentDate, opts.gross ?? 119, JSON.stringify(opts.payload)],
+  );
+  return beleg.id;
+}
+
 async function cleanup(): Promise<void> {
   await pool.query('DELETE FROM belege WHERE tenant_id = $1', [T]).catch(() => {});
   const c = await pool.connect();
@@ -138,6 +166,47 @@ describe('M07 — fetchBelegeForMonth (echte DB)', () => {
     expect(first.total_gross).toBe(119);
     expect(first.status).toBe('categorized');
     expect(first.currency).toBe('EUR');
+  });
+
+  it('mappt payload.extraction.fields korrekt (document_number, total_net, dominanter tax_rate, Σ tax_amount)', async () => {
+    if (!dbAvailable) return;
+    await seedWithPayload({
+      documentDate: '2026-07-09',
+      gross: 122.5,
+      payload: {
+        extraction: {
+          fields: {
+            document_number: 'RE-9',
+            total_net: 100,
+            // dominanter Satz (nach amount) = 19; Σ amount = 22,5.
+            tax_lines: [
+              { rate: 0.07, amount: 3.5 },
+              { rate: 0.19, amount: 19 },
+            ],
+          },
+        },
+        categorization: { skr_account: '4980' },
+      },
+    });
+
+    const rows = await fetchBelegeForMonth(pool, T, 2026, 7);
+    expect(rows).toHaveLength(1);
+    const r = rows[0];
+    expect(r.document_number).toBe('RE-9');
+    expect(r.total_net).toBe(100);
+    expect(r.tax_rate).toBe(19); // dominanter Satz × 100
+    expect(r.tax_amount).toBe(22.5); // Σ tax_lines.amount
+    expect(r.skr_account).toBe('4980');
+  });
+
+  it('schließt soft-gelöschte Belege aus (deleted_at IS NULL)', async () => {
+    if (!dbAvailable) return;
+    const kept = await seedBeleg({ documentDate: '2026-08-05', categorized: true });
+    const deleted = await seedBeleg({ documentDate: '2026-08-06', categorized: true });
+    await pool.query('UPDATE belege SET deleted_at = now() WHERE id = $1', [deleted]);
+
+    const rows = await fetchBelegeForMonth(pool, T, 2026, 8);
+    expect(rows.map((r) => r.id)).toEqual([kept]);
   });
 
   it('leerer Monat → leeres Array', async () => {

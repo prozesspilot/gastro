@@ -57,11 +57,23 @@ function isoDate(v: string | null): string {
   return /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : '';
 }
 
+/**
+ * Schutz vor CSV-Formel-Injection in Excel/Sheets: beginnt ein FREITEXT-Wert mit
+ * `=`, `+`, `-`, `@` (oder Tab/CR), würde die Tabellenkalkulation ihn als Formel
+ * auswerten. Wir stellen ein `'` voran (Standard-Mitigation). Nur für Freitext aus
+ * OCR/Wirt-Eingabe (Lieferant, Belegnummer, Kategorie-Label) — Beträge/Datum sind
+ * formatkontrolliert und bleiben unangetastet (sonst bräche das Zahlenformat).
+ */
+function txt(value: string | null): string {
+  if (!value) return '';
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 const COLUMNS: Column[] = [
   { header: 'Datum', value: (r) => isoDate(r.document_date) },
-  { header: 'Lieferant', value: (r) => r.supplier_name ?? '' },
-  { header: 'Belegnummer', value: (r) => r.document_number ?? '' },
-  { header: 'Kategorie', value: (r) => r.category_label ?? r.category ?? '' },
+  { header: 'Lieferant', value: (r) => txt(r.supplier_name) },
+  { header: 'Belegnummer', value: (r) => txt(r.document_number) },
+  { header: 'Kategorie', value: (r) => txt(r.category_label ?? r.category) },
   { header: 'SKR-Konto', value: (r) => r.skr_account ?? '' },
   { header: 'Brutto', value: (r) => amount(r.total_gross) },
   { header: 'Netto', value: (r) => amount(r.total_net) },

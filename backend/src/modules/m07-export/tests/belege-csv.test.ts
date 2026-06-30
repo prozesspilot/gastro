@@ -106,6 +106,19 @@ describe('buildBelegeCsv', () => {
     expect(l[3].split(';')[11]).toBe('c');
   });
 
+  it('schützt vor CSV-Formel-Injection: Freitext mit führendem =,+,-,@ bekommt ein "\'"', () => {
+    const csv = buildBelegeCsv([row({ supplier_name: '=SUM(A1:A2)', document_number: '-2026/1' })]);
+    const cols = lines(csv)[1].split(';');
+    expect(cols[1]).toBe("'=SUM(A1:A2)"); // Lieferant: =… → entschärft
+    expect(cols[2]).toBe("'-2026/1"); // Belegnummer: führendes - → entschärft
+  });
+
+  it('Beträge bleiben unangetastet vom Formel-Guard (negativ erlaubt)', () => {
+    const csv = buildBelegeCsv([row({ total_gross: -5 })]);
+    // Brutto-Spalte: -5,00 — KEIN führendes ' (sonst bräche das Zahlenformat).
+    expect(lines(csv)[1].split(';')[5]).toBe('-5,00');
+  });
+
   it('NaN/Infinity-Beträge werden zu leer (defensiv)', () => {
     const csv = buildBelegeCsv([
       row({ total_gross: Number.NaN, total_net: Number.POSITIVE_INFINITY }),

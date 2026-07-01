@@ -257,4 +257,35 @@ describe('POST /api/v1/tenants', () => {
     expect(r.statusCode).toBe(409);
     expect(pool.query).toHaveBeenCalledTimes(1);
   });
+
+  it('422 (INVALID_SLUG), wenn der Name zu keinem gültigen Slug führt', async () => {
+    const { app, pool } = buildAppWithQuery(async () => ({ rows: [] }));
+    current = await readyApp(app);
+    const r = await current.inject({
+      method: 'POST',
+      url: '/api/v1/tenants',
+      cookies: { pp_auth: makeToken('mitarbeiter') },
+      payload: { display_name: '!!!' }, // 3 Zeichen (Zod ok), slugifiziert aber zu ''
+    });
+    expect(r.statusCode).toBe(422);
+    expect(JSON.parse(r.body).error.code).toBe('INVALID_SLUG');
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('409, wenn auch alle 20 Auto-Suffixe kollidieren', async () => {
+    const { app, pool } = buildAppWithQuery(async () => {
+      const err = new Error('duplicate key') as Error & { code: string };
+      err.code = '23505';
+      throw err;
+    });
+    current = await readyApp(app);
+    const r = await current.inject({
+      method: 'POST',
+      url: '/api/v1/tenants',
+      cookies: { pp_auth: makeToken('mitarbeiter') },
+      payload: { display_name: 'Doppelname' },
+    });
+    expect(r.statusCode).toBe(409);
+    expect(pool.query).toHaveBeenCalledTimes(20);
+  });
 });

@@ -13,9 +13,9 @@
  *   await app.register(tenantsRoutes, { prefix: '/api/v1/tenants' });
  */
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { m14StaffAuthHook } from '../core/auth/m14-staff-auth';
+import { getM14Staff, m14StaffAuthHook } from '../core/auth/m14-staff-auth';
 import { apiError, apiOk, zodToApiError } from '../core/schemas/common';
 import { slugifyTenantName } from './tenant-slug';
 import { createTenant, listTenantsForStaff } from './tenants.repository';
@@ -75,11 +75,6 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }
 
-interface StaffContext {
-  userId: string;
-  role: string;
-}
-
 export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', m14StaffAuthHook);
 
@@ -101,15 +96,19 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   // Rollen-Gate: gf/mitarbeiter dürfen; `support` → 403 (read-only). Das passt
   // zum Vertriebsmodell (Sales/Staff legt den Kunden an, der Wirt registriert
   // sich NICHT selbst — Onboarding_Wizard.md §1.2/§1.3). Kein x-pp-tenant-id nötig.
-  app.post('/', RL, async (req: FastifyRequest, reply) => {
-    const staff = (req as FastifyRequest & { m14Staff?: StaffContext }).m14Staff;
+  app.post('/', RL, async (req, reply) => {
+    const staff = getM14Staff(req);
     if (!staff) {
       return reply.code(401).send(apiError('UNAUTHORIZED', 'Nicht angemeldet.'));
     }
-    if (staff.role === 'support') {
+    // Allowlist statt Denylist: nur gf/mitarbeiter dürfen anlegen. Eine künftig
+    // ergänzte, niedrig-privilegierte Rolle erbt so NICHT automatisch Anlage-Rechte.
+    if (staff.role !== 'geschaeftsfuehrer' && staff.role !== 'mitarbeiter') {
       return reply
         .code(403)
-        .send(apiError('FORBIDDEN', 'Support-Rolle darf keine Mandanten anlegen.'));
+        .send(
+          apiError('FORBIDDEN', 'Nur Geschäftsführer oder Mitarbeiter dürfen Mandanten anlegen.'),
+        );
     }
 
     const parsed = createTenantBodySchema.safeParse(req.body ?? {});
@@ -145,7 +144,10 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
     const maxAttempts = explicitSlug ? 1 : 20;
     for (let i = 0; i < maxAttempts; i++) {
       const suffix = i === 0 ? '' : `-${i + 1}`;
-      const candidate = i === 0 ? baseSlug : `${baseSlug.slice(0, 60 - suffix.length)}${suffix}`;
+      // slice() kann mitten in einem Bindestrich-Block enden → vor dem Suffix
+      // trailing '-' entfernen, damit kein '…--2' entsteht (verletzt tenantSlugSchema).
+      const candidate =
+        i === 0 ? baseSlug : `${baseSlug.slice(0, 60 - suffix.length).replace(/-+$/, '')}${suffix}`;
       try {
         const tenant = await createTenant(req.server.db, {
           slug: candidate,

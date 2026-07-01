@@ -3,7 +3,7 @@
 - **Owner:** Steve
 - **Branch:** `steve/T093-tenant-anlage`
 - **Größe:** M
-- **Status:** backlog
+- **Status:** done (PR #236, gemergt 2026-07-01; Folge-Task T094 = Setup-Link aus der Webapp)
 
 ## Anker
 
@@ -52,12 +52,12 @@ Es gibt **heute keinen Weg, einen neuen Kunden (Tenant) anzulegen** — außer p
 
 ## Akzeptanzkriterien
 
-- [ ] `npm run build` + `npm test` grün (Backend + Webapp); DB-Integrationstests mit frischer Test-DB (Memory `backend-db-test-fresh-db`).
-- [ ] Migration 131 + Rollback laufen sauber; Rollback entfernt die Funktion.
-- [ ] `POST /api/v1/tenants` legt einen Tenant an (verifiziert per Folge-`GET /api/v1/tenants` in Liste) — Integrationstest gegen echte DB (RLS-Definer-Pfad, nicht gemockt; Memory `legacy-welt-schema-drift`).
-- [ ] `support`-Rolle → 403; fehlende Auth → 401; ungültiger Body → 422; slug-Kollision → 409.
-- [ ] Webapp: „Neuer Kunde" anlegen zeigt den Tenant sofort in der Liste; Tests für Formular (Happy + Fehlerpfad).
-- [ ] Kein `x-pp-tenant-id` nötig/erwartet für die POST-Route.
+- [x] `npm run build` + `npm test` grün (Backend + Webapp); DB-Integrationstests mit frischer Test-DB (Memory `backend-db-test-fresh-db`).
+- [x] Migration 131 + Rollback laufen sauber; Rollback entfernt die Funktion.
+- [x] `POST /api/v1/tenants` legt einen Tenant an (verifiziert per Folge-`GET /api/v1/tenants` in Liste) — Integrationstest gegen echte DB (RLS-Definer-Pfad, nicht gemockt; Memory `legacy-welt-schema-drift`).
+- [x] `support`-Rolle → 403; fehlende Auth → 401; ungültiger Body → 422; slug-Kollision → 409.
+- [x] Webapp: „Neuer Kunde" anlegen zeigt den Tenant sofort in der Liste; Tests für Formular (Happy + Fehlerpfad).
+- [x] Kein `x-pp-tenant-id` nötig/erwartet für die POST-Route.
 
 ## Testplan
 

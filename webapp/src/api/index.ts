@@ -13,8 +13,8 @@ export type { RequestOptions } from './_client';
 
 export { getCategories } from './categories';
 
-export { getTenants } from './tenants';
-export type { TenantListItem } from './tenants';
+export { getTenants, createTenant } from './tenants';
+export type { TenantListItem, CreateTenantInput, TenantPackage } from './tenants';
 
 export { fetchHealth, fetchReady, pingUrl } from './health';
 export type { HealthResponse, ReadyResponse } from './health';

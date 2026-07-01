@@ -37,6 +37,7 @@
 | 128 | `128_reports.sql` | `reports` | ✓ |
 | 129 | `129_report_deliveries.sql` | `report_deliveries` | ✓ |
 | 130 | `130_tenant_exists_fn.sql` | SECURITY-DEFINER `tenant_exists(uuid)` (RLS-sicherer Existenz-Check) | — (Fn-Grant) |
+| 131 | `131_create_tenant_fn.sql` | SECURITY-DEFINER `create_tenant_for_staff(...)` (RLS-sichere Mandanten-Anlage, T093) | — (Fn-Grant) |
 
 Migrationen sind **rückwärts-kompatibel** und **idempotent durch den Runner** (`schema_migrations` Tabelle trackt angewandte Versionen). Jede Migration läuft in einer eigenen Transaktion — Fehler → Rollback.
 

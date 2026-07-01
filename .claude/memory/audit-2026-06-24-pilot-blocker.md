@@ -1,11 +1,13 @@
 ---
 name: audit-2026-06-24-pilot-blocker
-description: "Projekt-Audit 2026-06-24 (status/AUDIT.html) — Gesamtampel GELB + 3 verdeckte Pilot-Blocker, die NICHT als Backlog-Task existieren"
+description: "Projekt-Audit 2026-06-24 (status/AUDIT.html) — GELB + 3 verdeckte Blocker (SSE/Webapp-categorize-export/Web-Chat). ⚠️ ÜBERHOLT: alle 3 gelöst (Stand 2026-07-01), nur noch als Historie; Ist-Stand siehe buildout-phase-status."
 metadata: 
   node_type: memory
   type: project
   originSessionId: ef071eaa-cf99-4cd6-b601-7ee35b873fd1
 ---
+
+> **⚠️ ÜBERHOLT (Stand 2026-07-01, code-verifiziert per 4 Read-only-Agenten):** Alle 3 verdeckten Blocker sind gelöst — (1) **SSE verdrahtet** (T069/T074/T091: `emitBelegStatus` an 6 Writern, Live-Status Liste+Detail), (2) **Webapp categorize/export gebaut** (T076/T078), (3) **Web-Chat-Widget komplett live** (Phase C, T068–T073, chat.* auf Prod). Zusätzlich ist der Onboarding-Ketten-Erstschritt **Tenant-Anlage (T093)** gebaut. Diese Notiz bleibt als Historie. Ist-Stand: [[buildout-phase-status]]. **Verbleibende echte Blocker = NUR noch manuelle Config/Secrets** (Vision/Discord/Lexware/Claude/SMTP/MinIO) **+ ein echter Prod-Durchstich — kein Modul-Bau mehr.**
 
 Audit am 2026-06-24 erstellt als `status/AUDIT.html` (single-file, 3 parallele Survey-Agenten + eigene grep-Cross-Checks). Gesamtampel **GELB**: Verarbeitungs-Mitte (Upload→OCR→Kategorisieren→Lexware-Export) ist echt live & sauber, aber der Self-Service-Pilotflow ist unterbrochen.
 

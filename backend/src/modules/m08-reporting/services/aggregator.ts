@@ -116,6 +116,7 @@ export async function computeMonthlyAggregates(
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date >= $3::date
           AND document_date <  $4::date`,
       [tenantId, statusList, start, end],
@@ -128,6 +129,7 @@ export async function computeMonthlyAggregates(
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date >= $3::date
           AND document_date <  $4::date
         GROUP BY category
@@ -142,6 +144,7 @@ export async function computeMonthlyAggregates(
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date >= $3::date
           AND document_date <  $4::date
         GROUP BY COALESCE(supplier_name, 'Unbekannt')
@@ -155,6 +158,7 @@ export async function computeMonthlyAggregates(
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date >= $3::date
           AND document_date <  $4::date`,
       [tenantId, statusList, prevStart, prevEnd],
@@ -165,19 +169,21 @@ export async function computeMonthlyAggregates(
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date IS NULL`,
       [tenantId, statusList],
     );
 
     // USt-Split: braucht den `payload` je Beleg (Satz aus extraction.fields).
     // Eigene Query (nicht in den Aggregat-Queries oben, die nur denormalisierte
-    // Spalten lesen) — selber Monats-/Status-Filter wie `gross_sum`, damit
-    // Σ(Split) == gross_sum reconciled.
+    // Spalten lesen) — selber Monats-/Status-/`deleted_at`-Filter wie `gross_sum`,
+    // damit Σ(Split) == gross_sum reconciled (soft-gelöschte Belege raus, T092).
     const ustRowsRes = await client.query(
       `SELECT total_gross, payload
          FROM belege
         WHERE tenant_id = $1
           AND status = ANY($2)
+          AND deleted_at IS NULL
           AND document_date >= $3::date
           AND document_date <  $4::date`,
       [tenantId, statusList, start, end],

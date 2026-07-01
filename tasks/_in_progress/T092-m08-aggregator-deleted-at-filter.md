@@ -36,10 +36,10 @@ beide dieselbe (korrekte) Beleg-Menge sehen.
   auftauchen (Σ unverändert).
 
 ## Akzeptanz-Kriterien
-- [ ] Alle Aggregat-Queries filtern `deleted_at IS NULL`.
-- [ ] USt-Split rechnet ohne gelöschte Belege (Σ-Reconcile bleibt gültig).
-- [ ] Integrationstest: soft-gelöschter Beleg → nicht in totals/by_category/ust_split.
-- [ ] CI grün.
+- [x] Alle Aggregat-Queries filtern `deleted_at IS NULL`. (6/6 Queries in `computeMonthlyAggregates`: totals, by_category, top_suppliers, Vormonat, no-date, USt-Rows)
+- [x] USt-Split rechnet ohne gelöschte Belege (Σ-Reconcile bleibt gültig). (USt-Rows-Query filtert `deleted_at IS NULL`; Test prüft Σ(Split)+unassignable == totals.gross_sum)
+- [x] Integrationstest: soft-gelöschter Beleg → nicht in totals/by_category/ust_split. (`aggregator.integration.test.ts` — 777-€-Beleg soft-gelöscht, Σ bleibt 180 €)
+- [x] CI grün. (lokal: typecheck + biome + build + 982 Tests grün; DB-Integrationstest verifiziert CI — lokal kein Postgres/Docker)
 
 ## Spec-Referenzen
 - `backend/src/modules/m08-reporting/services/aggregator.ts` (`computeMonthlyAggregates`)

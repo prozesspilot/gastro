@@ -31,6 +31,8 @@ interface SeedOpts {
   supplier?: string | null;
   date?: string | null;
   gross?: number | null;
+  /** Soft-Delete: setzt `deleted_at` (Beleg darf NICHT in Aggregate fließen). */
+  deleted?: boolean;
 }
 
 async function seedBeleg(o: SeedOpts = {}): Promise<void> {
@@ -39,8 +41,9 @@ async function seedBeleg(o: SeedOpts = {}): Promise<void> {
   await pool.query(
     `INSERT INTO belege
        (tenant_id, source_channel, file_object_key, file_mime_type, file_size_bytes,
-        file_sha256, status, category, supplier_name, document_date, total_gross)
-     VALUES ($1, 'manual_upload', $2, 'image/jpeg', 1234, $3, $4, $5, $6, $7, $8)`,
+        file_sha256, status, category, supplier_name, document_date, total_gross, deleted_at)
+     VALUES ($1, 'manual_upload', $2, 'image/jpeg', 1234, $3, $4, $5, $6, $7, $8,
+             CASE WHEN $9::boolean THEN now() ELSE NULL END)`,
     [
       o.tenant ?? T_A,
       `s3://t/${sha}.jpg`,
@@ -50,6 +53,7 @@ async function seedBeleg(o: SeedOpts = {}): Promise<void> {
       o.supplier ?? null,
       o.date ?? null,
       o.gross ?? null,
+      o.deleted ?? false,
     ],
   );
 }
@@ -111,6 +115,15 @@ beforeAll(async () => {
     supplier: null,
     date: null,
     gross: 12.0,
+  });
+  // verbucht, im Mai, aber SOFT-GELÖSCHT → darf in KEIN Aggregat fließen (T092):
+  await seedBeleg({
+    status: 'categorized',
+    category: 'wareneinkauf_food',
+    supplier: 'Metro AG',
+    date: '2026-05-25',
+    gross: 777.0,
+    deleted: true,
   });
   // Vormonat April 2026:
   await seedBeleg({
@@ -189,6 +202,28 @@ describe('T087 — computeMonthlyAggregates (Integration)', () => {
     const aggB = await computeMonthlyAggregates(pool, T_B, 2026, 5);
     expect(aggB.totals.gross_sum).toBeCloseTo(5000.0, 2);
     expect(aggB.totals.receipts_count).toBe(1);
+  });
+
+  it('T092: soft-gelöschter Beleg fließt NICHT in totals/by_category/ust_split', async () => {
+    if (!dbAvailable) return;
+    const agg = await computeMonthlyAggregates(pool, T_A, 2026, 5);
+    // Der soft-gelöschte 777-€-Beleg (Metro AG, wareneinkauf_food, 25.05.) darf
+    // die verbuchte Menge (180 € / 3 Belege) nicht berühren.
+    expect(agg.totals.receipts_count).toBe(3);
+    expect(agg.totals.gross_sum).toBeCloseTo(180.0, 2);
+    expect(agg.totals.largest_single).toBeCloseTo(100.0, 2);
+    // by_category: wareneinkauf_food bleibt bei 150 € / 2 (nicht 927 € / 3).
+    const food = agg.by_category.find((c) => c.category === 'wareneinkauf_food');
+    expect(food?.gross_sum).toBeCloseTo(150.0, 2);
+    expect(food?.count).toBe(2);
+    // top_suppliers: Metro AG bleibt bei 150 € / 2 (nicht 927 € / 3).
+    const metro = agg.top_suppliers.find((s) => s.supplier === 'Metro AG');
+    expect(metro?.gross_sum).toBeCloseTo(150.0, 2);
+    expect(metro?.count).toBe(2);
+    // USt-Split reconciled auf die verbuchte Σ (Split-Brutto + nicht zuordenbar).
+    const splitGross =
+      agg.ust_split.by_rate.reduce((s, b) => s + b.gross, 0) + agg.ust_split.unassignable.gross;
+    expect(splitGross).toBeCloseTo(agg.totals.gross_sum, 2);
   });
 
   it('leerer Monat → alles 0, leere Listen, Delta null', async () => {

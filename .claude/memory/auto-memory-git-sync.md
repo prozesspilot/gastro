@@ -11,8 +11,19 @@ Das file-basierte Claude-Code-Memory liegt seit PR #185 (2026-06-26) **im Repo**
 
 **Auto-Sync-Mechanismus (PR folgt #185):** Versionierter pre-commit Hook in `.githooks/pre-commit` staged `.claude/memory/` bei **jedem** Commit automatisch mit → Memory geht ohne manuelles `git add` im Push mit raus.
 
+**⚠️ KORREKTUR 2026-08-06 (T094 / PR #245) — `.githooks` ist NICHT mehr der richtige Pfad:**
+Git unterstützt nur **EINEN** `core.hooksPath`. Auf Andreas' Gerät stand er auf `.husky`
+(Lint-/Typecheck-/Test-Hooks) — dadurch war `.githooks/pre-commit` und damit der
+**Auto-Memory-Sync stillgelegt**. Die beiden Hook-Verzeichnisse schließen sich gegenseitig aus.
+Gelöst in PR #245: Die Memory-Staging-Logik ist nach **`.husky/pre-commit`** gezogen,
+das jetzt **beides** macht (Memory-Sync + Lint + Typecheck). `.githooks/README.md` ist als
+abgelöst markiert.
+➡️ **Richtige Aktivierung ab sofort:** `git config core.hooksPath .husky`
+(prüfen: `git config --get core.hooksPath` → `.husky`). **Nicht** `.githooks` setzen —
+das schaltet Lint + Typecheck ab. Auf **allen vier** Geräten einmal prüfen.
+
 **How to apply:**
-- **Aktivierung pro Rechner einmalig:** `git config core.hooksPath .githooks` (auf Mac UND Windows je einmal). Prüfen: `git config --get core.hooksPath` → `.githooks`.
+- **Aktivierung pro Rechner einmalig:** `git config core.hooksPath .husky` (siehe Korrektur oben; auf Mac UND Windows je einmal).
 - **`autoMemoryDirectory` greift erst nach Session-Neustart + Workspace-Trust-Dialog.** Eine laufende Session, die vor PR #185 gestartet wurde, liest/schreibt noch den ALTEN user-lokalen Pfad → vor weiterem Memory-Schreiben Session neu starten, sonst divergieren Repo-Ordner und alter Ordner.
 - **Memory immer nur auf einem Rechner gleichzeitig ändern**, sonst Merge-Konflikte in den `.md`-Dateien. Vor Geräte-Wechsel erst pushen, dann drüben pullen.
 - **Nur-Memory-Sync (kein Code-Commit):** `git add .claude/memory && git commit -m "chore: Memory-Sync" && git push` — aber auf `main` scheitert der direkte Push an der Branch-Protection, also auf einem Branch machen + per PR mergen. Im Coding-Alltag bist du eh auf einem Feature-Branch, wo der Hook das Memory automatisch mitzieht.

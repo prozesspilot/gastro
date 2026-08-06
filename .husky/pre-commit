@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# Gastro pre-commit hook — Auto-Memory-Sync + Lint + Typecheck vor jedem Commit.
+# Aktiviert via: git config core.hooksPath .husky
+# Bei Fehler (Lint/Typecheck) bricht der Commit ab (set -e).
+#
+# WICHTIG: Git unterstützt nur EINEN core.hooksPath. Der Auto-Memory-Sync stand
+# früher separat in .githooks/pre-commit — sobald hooksPath auf .husky zeigte,
+# war er stillgelegt. Deshalb ist er hier mit eingezogen (T094). Es gibt genau
+# einen aktiven Hook-Pfad: .husky.
+set -e
+
+# --- Auto-Memory-Sync (aus .githooks/pre-commit übernommen) ---------------
+# Nimmt .claude/memory/ bei jedem Commit automatisch mit, damit Memory-Änderungen
+# via git zwischen allen Rechnern synchronisieren. Blockiert NIE einen Commit.
+MEMORY_DIR=".claude/memory"
+if [ -d "$MEMORY_DIR" ]; then
+  if [ -n "$(git status --porcelain -- "$MEMORY_DIR" 2>/dev/null)" ]; then
+    git add "$MEMORY_DIR" || true
+    echo "  [pre-commit] .claude/memory/ automatisch mit-committet (Auto-Memory-Sync)"
+  fi
+fi
+
+echo "▶ backend: lint"
+( cd backend && npm run lint )
+
+echo "▶ backend: typecheck"
+( cd backend && npm run typecheck )
+
+echo "▶ webapp: typecheck"
+( cd webapp && npm run typecheck )
+
+echo "✓ pre-commit checks passed"

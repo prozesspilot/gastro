@@ -1,24 +1,33 @@
 # Git-Hooks (versioniert)
 
+> ## ⚠️ ABGELÖST seit T094 — nutze `.husky/`
+>
+> Git unterstützt nur **einen** `core.hooksPath`. Solange er auf `.githooks`
+> zeigte, waren die Lint-/Typecheck-/Test-Hooks aus `.husky/` stillgelegt — und
+> umgekehrt. Der Auto-Memory-Sync von hier ist deshalb **nach `.husky/pre-commit`
+> umgezogen**. Dieses Verzeichnis bleibt nur als Referenz bestehen.
+>
+> **Richtige Aktivierung (einmalig pro Rechner):**
+>
+> ```sh
+> git config core.hooksPath .husky
+> git config --get core.hooksPath   # muss ".husky" ausgeben
+> ```
+>
+> `.husky/pre-commit` macht jetzt **beides**: Auto-Memory-Sync **und**
+> Lint + Typecheck. `.husky/pre-push` fährt zusätzlich die Tests.
+> Setze `core.hooksPath` **nicht** auf `.githooks` — das schaltet Lint/Typecheck ab.
+
 Dieses Verzeichnis enthält **geteilte Git-Hooks**, die via Git an alle Rechner
 verteilt werden (Steve-Mac, Steve-Windows, Andreas, IONOS). Anders als
 `.git/hooks/` (lokal, nicht versioniert) liegt das hier im Repo.
 
-## Aktivierung (einmalig pro Rechner)
+## Aktivierung (historisch — nicht mehr verwenden)
 
 Git nutzt versionierte Hooks erst, wenn `core.hooksPath` darauf zeigt:
 
 ```sh
-git config core.hooksPath .githooks
-```
-
-Das gilt **einmal pro Klon** — auf Mac **und** auf Windows je einmal ausführen.
-(Auf Windows im Git-Bash- oder normalen Terminal im Repo-Ordner.)
-
-Prüfen, ob aktiv:
-
-```sh
-git config --get core.hooksPath   # muss ".githooks" ausgeben
+git config core.hooksPath .githooks   # ⚠️ VERALTET — siehe Kasten oben
 ```
 
 ## Vorhandene Hooks

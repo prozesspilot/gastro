@@ -34,6 +34,8 @@ die `.husky/`-Git-Hooks, und die fehlenden `.gitignore`-Einträge für lokale Ar
 - [ ] `.gitignore` ergänzt um: `.claude/settings.local.json`, `.claude/launch.json`, `webapp/playwright-report/`, `webapp/test-results/`
 - [ ] `typecheck`-Script in `backend/package.json` + `webapp/package.json` committet (lag uncommitted vor)
 - [ ] `.husky/` (pre-commit, pre-push) committet (lag seit 2026-06-02 uncommitted vor)
+- [ ] **Hook-Konflikt aufgelöst:** Auto-Memory-Sync aus `.githooks/pre-commit` nach `.husky/pre-commit` gezogen — Git kennt nur **einen** `core.hooksPath`, dieser stand auf `.husky`, wodurch der Memory-Sync auf dem Gerät stillgelegt war
+- [ ] `.githooks/README.md` als abgelöst markiert; Anleitung zeigt auf `core.hooksPath .husky`
 - [ ] `npm run build` im Backend grün
 - [ ] `npm test` im Backend grün — mit `PP_E2E=1`, sonst skippen DB-Tests still (CLAUDE.md §3.7)
 - [ ] `npm run typecheck` in Backend **und** Webapp grün
@@ -68,6 +70,13 @@ verwenden. Das 114-MB-Monolith enthält Clients für *sämtliche* Google-Dienste
 **Fund am Rande (nicht Teil dieser Task):** `tasks/_in_progress/T092-*.md` liegt noch in
 `_in_progress`, obwohl PR #240 gemergt ist (Commit `86b1f91`). Gehört per Mini-PR nach
 `_done` — separat, nicht hier mitnehmen.
+
+**Zweiter Fund (eigene Task nötig, P1):** Die CI (`.github/workflows/ci-backend.yml`)
+startet zwar `postgres:16` + `redis:7`, führt Migrations aus und setzt `DATABASE_URL` —
+setzt aber **nirgends `PP_E2E=1`**. Die DB-Tests skippen daher auch in der CI still,
+obwohl die Infrastruktur bereitsteht. Das ist exakt das Risiko aus CLAUDE.md §3.5
+(„grün verbirgt toten Code"), und zwar unbemerkt bezahlt. Nicht Teil von T094
+(§3.7: eine Aufgabe zur Zeit) — gehört als eigene Task ins Backlog.
 
 ---
 

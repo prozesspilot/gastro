@@ -47,7 +47,7 @@ jobs:
   detect-and-notify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Wir vergleichen den kompletten Push-Range (vor → nach),
           # nicht nur den letzten Commit. fetch-depth: 0 lädt alle Commits,

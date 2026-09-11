@@ -12,6 +12,7 @@
 # IONOS 4 GB RAM Budget (Phase 4):
 #   postgres 1G, backend 768M, redis 256M, minio 256M, webapp 128M,
 #   onboarding-wizard 128M, web-chat-widget 128M (T072, ersetzt den 32M-chat-Stub).
+#   akquise 768M (Cockpit + Versand; die Messung mit Chromium lokal fahren).
 #   n8n per `profiles` deaktiviert (T064, spart 800M). 4G Swap als Notfall-Puffer.
 
 networks:
@@ -260,3 +261,81 @@ services:
       - external
     mem_limit: 800m
     mem_reservation: 512m
+
+  # ── Akquise-System ─────────────────────────────────────────────────────────
+  # Cockpit, Versand und Posteingang des Akquise-Systems (Repo ../akquise).
+  # Eigenes Schema `akquise` in derselben Postgres, eigener Bucket in MinIO.
+  # Der Versand startet ausgeschaltet und wird im Cockpit scharfgeschaltet.
+  akquise:
+    image: ghcr.io/prozesspilot/gastro/akquise:latest
+    build:
+      context: ../akquise
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 8085
+      LOG_LEVEL: info
+
+      DATABASE_URL: ${AKQUISE_DATABASE_URL}
+      DATABASE_URL_MIGRATE: ${AKQUISE_DATABASE_URL_MIGRATE:-}
+      REDIS_URL: redis://redis:6379
+
+      MINIO_ENDPOINT: http://minio:9000
+      # Dieselben Variablen wie der minio-Dienst in docker-compose.prod.yml —
+      # dort heißen sie PP_S3_*, nicht MINIO_ROOT_*. Weichen sie voneinander ab,
+      # startet der Container, kommt aber an keinen Screenshot heran.
+      MINIO_ACCESS_KEY: ${PP_S3_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${PP_S3_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: akquise
+
+      CLAUDE_API_KEY: ${AKQUISE_CLAUDE_API_KEY}
+      CLAUDE_MODEL: claude-opus-5
+      CLAUDE_BATCH: "1"
+
+      SMTP_HOST: smtp.ionos.de
+      SMTP_PORT: "587"
+      SMTP_USER: ${AKQUISE_SMTP_USER}
+      SMTP_PASSWORD: ${AKQUISE_SMTP_PASSWORD}
+      MAIL_ABSENDER: ${AKQUISE_MAIL_ABSENDER}
+      MAIL_ABSENDER_NAME: ${AKQUISE_MAIL_ABSENDER_NAME:-Prozesspilot}
+      IMAP_HOST: imap.ionos.de
+      IMAP_PORT: "993"
+      IMAP_USER: ${AKQUISE_IMAP_USER}
+      IMAP_PASSWORD: ${AKQUISE_IMAP_PASSWORD}
+      IMPRESSUM_ZEILEN: ${AKQUISE_IMPRESSUM_ZEILEN}
+
+      DEMO_BASIS_URL: https://demo.prozesspilot.net
+      DEMO_VERZEICHNIS: /srv/demos
+      DEMO_LEBENSDAUER_TAGE: "30"
+
+      COCKPIT_SESSION_SECRET: ${AKQUISE_SESSION_SECRET}
+      COCKPIT_BASIS_URL: https://akquise.prozesspilot.net
+
+      # Der Versand startet ausgeschaltet. Einschalten passiert bewusst im
+      # Cockpit, nicht durch einen Deploy.
+      START_VERSAND_AKTIV: "0"
+      START_MAX_PRO_TAG: "50"
+      START_WARMUP_TAGE: "10"
+      START_VERSAND_PERSONENBEZOGEN: "0"
+    ports:
+      # Nur auf localhost — nach außen geht ausschließlich Caddy.
+      - "127.0.0.1:8085:8085"
+    volumes:
+      # Denselben Pfad muss Caddy als `root * /srv/demos` ausliefern.
+      - /srv/demos:/srv/demos
+    networks:
+      - internal
+      - external
+    # Der Host hat 4 GB und einen bereits ausgereizten Speicherplan (siehe Kopf
+    # von docker-compose.prod.yml). Für Cockpit, Versand und Posteingang reicht
+    # das hier bequem. Die Messung startet dagegen Chromium pro Website — diese
+    # Stufe gehört auf einen Rechner mit Luft, nicht auf den Server:
+    #   npm run job -- audit   lokal fahren, das Ergebnis liegt in derselben DB.
+    mem_limit: 768m
+    mem_reservation: 256m

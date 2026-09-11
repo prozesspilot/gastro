@@ -111,3 +111,59 @@ chat.prozesspilot.net {
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 }
+
+# ── Cockpit ──────────────────────────────────────────────────────────────────
+akquise.prozesspilot.net {
+	encode gzip
+	reverse_proxy localhost:8085
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Das Cockpit zeigt die erzeugten Demos in einem iframe an — deshalb
+		# hier KEIN X-Frame-Options DENY wie bei admin., sondern eine CSP, die
+		# genau demo.prozesspilot.net als Rahmenquelle zulässt.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src https://demo.prozesspilot.net; frame-ancestors 'none'"
+		# Die Lead-Datenbank enthält personenbezogene Daten fremder Betriebe.
+		# Nichts davon gehört in einen Suchindex.
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
+}
+
+# ── Demo-Entwürfe ────────────────────────────────────────────────────────────
+#
+# Statische Dateien, die der demo-Job nach /srv/demos schreibt. Auf diesen
+# Seiten liegen Logo und Fotos fremder Betriebe — sie dürfen unter keinen
+# Umständen indexiert werden. Der Header hier ist die zentrale Absicherung;
+# jede Demo bringt zusätzlich eine eigene robots.txt und ein noindex-Meta mit.
+demo.prozesspilot.net {
+	encode gzip
+	root * /srv/demos
+	file_server {
+		index index.html
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+		# Die Demos laden ausschließlich eigene Dateien — keine Schriften, keine
+		# Skripte, keine Zählpixel von außen. Genau das ist der Punkt, den wir
+		# den Empfängern gegenüber machen; die CSP erzwingt ihn.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'none'; frame-ancestors https://akquise.prozesspilot.net"
+	}
+
+	# Sicherheitsnetz: eine Fehlkonfiguration im Dateisystem soll keine
+	# Verzeichnisauflistung freigeben.
+	@ordner path_regexp ^/[^/]+/$
+	handle @ordner {
+		file_server {
+			index index.html
+		}
+	}
+
+	handle_errors {
+		respond "Dieser Entwurf ist nicht mehr verfügbar." 404
+	}
+}

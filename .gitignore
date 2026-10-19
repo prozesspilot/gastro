@@ -29,6 +29,10 @@ logs/
 coverage/
 .nyc_output/
 
+# Playwright-Artefakte (lokal bei jedem E2E-Lauf neu erzeugt)
+webapp/playwright-report/
+webapp/test-results/
+
 # Refactor-Backups (lokal, nicht im Repo)
 .refactor_backup_*/
 
@@ -36,5 +40,8 @@ coverage/
 *.bak-*/
 prozesspilot.bak-*/
 
-# Claude Code lokale State-Daten (Agent-Memory)
+# Claude Code lokale State-Daten (geräte-lokal, NICHT teilen)
+# Achtung: .claude/memory/ ist das geteilte Team-Memory und bleibt getrackt.
 .claude/agent-memory/
+.claude/settings.local.json
+.claude/launch.json

@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Gastro pre-push hook — Tests vor jedem Push.
+# Aktiviert via: git config core.hooksPath .husky
+# Bei Fehler bricht der Push ab (set -e).
+set -e
+
+echo "▶ backend: test"
+( cd backend && npm test )
+
+echo "▶ webapp: test"
+( cd webapp && npm test )
+
+echo "✓ pre-push tests passed"
